@@ -1,16 +1,76 @@
-from fastapi import FastAPI, Depends, HTTPException
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import List, Optional
+
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
-import models
+
 import database
+import models
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup - create tables and initial data
+    try:
+        models.Base.metadata.create_all(bind=database.engine)
+        # Create initial user if not exists
+        db = database.SessionLocal()
+        try:
+            user = db.query(models.User).filter(models.User.id == 1).first()
+            if user is None:
+                user = models.User(
+                    id=1,
+                    name="wei",
+                    email="wei@gmail.com",
+                    password="password",
+                    uid="UID-20260419",
+                    points=10000,
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+                print("Initial user created")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Error during startup: {e}")
+    yield
 
-@app.on_event("startup")
-def startup():
-    # 啟動時自動建立資料表 (生產環境建議改用 Alembic 做遷移)
-    models.Base.metadata.create_all(bind=database.engine)
+    # Shutdown
+    # Add any cleanup code here if needed
 
-@app.get("/users/{user_id}")
+app = FastAPI(lifespan=lifespan)
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    name: str
+    uid: str
+    points: int
+
+    class Config:
+        from_attributes = True
+
+class UserUpdate(BaseModel):
+    name: str
+    email: str
+    password: Optional[str] = None
+
+class RechargeRequest(BaseModel):
+    points: int
+    price: int
+
+class RechargeRecordResponse(BaseModel):
+    date: str
+    order_id: str
+    amount: int
+
+    class Config:
+        from_attributes = True
+
+@app.get("/users/{user_id}", response_model=UserResponse)
 def read_user(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
