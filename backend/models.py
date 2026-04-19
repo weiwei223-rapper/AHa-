@@ -28,3 +28,10 @@ class RechargeRecord(Base):
     amount = Column(Integer)
 
     user = relationship("User", back_populates="recharge_records")
+
+class Video(Base):
+    __tablename__ = "videos"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    video_link = Column(String, nullable=False)
+    title = Column(String, nullable=True)

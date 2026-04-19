@@ -1,72 +1,16 @@
-from datetime import datetime
-from typing import List, Optional
-
-from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.exc import ProgrammingError
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-
-import database
 import models
+import database
 
 app = FastAPI()
 
-class UserResponse(BaseModel):
-    id: int
-    email: str
-    name: str
-    uid: str
-    points: int
-
-    class Config:
-        orm_mode = True
-
-class UserUpdate(BaseModel):
-    name: str
-    email: str
-    password: Optional[str] = None
-
-class RechargeRequest(BaseModel):
-    points: int
-    price: int
-
-class RechargeRecordResponse(BaseModel):
-    date: str
-    order_id: str
-    amount: int
-
-    class Config:
-        orm_mode = True
-
 @app.on_event("startup")
 def startup():
+    # 啟動時自動建立資料表 (生產環境建議改用 Alembic 做遷移)
     models.Base.metadata.create_all(bind=database.engine)
-    db = database.SessionLocal()
-    try:
-        try:
-            user = db.query(models.User).filter(models.User.id == 1).first()
-        except ProgrammingError:
-            db.rollback()
-            models.Base.metadata.drop_all(bind=database.engine)
-            models.Base.metadata.create_all(bind=database.engine)
-            user = None
 
-        if user is None:
-            user = models.User(
-                id=1,
-                name="wei",
-                email="wei@gmail.com",
-                password="password",
-                uid="UID-20260419",
-                points=10000,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-    finally:
-        db.close()
-
-@app.get("/users/{user_id}", response_model=UserResponse)
+@app.get("/users/{user_id}")
 def read_user(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
