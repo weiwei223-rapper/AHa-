@@ -71,6 +71,29 @@ const Video = (props: VideoStausProps) => {
     }
   };
 
+  const handleDelete = async (videoId: number) => {
+    if (!confirm("確定要刪除這個影片嗎？")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:8000/api/videos/${videoId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        throw new Error("刪除失敗");
+      }
+
+      // 即時更新頁面
+      setVideos((prev) => prev.filter(video => video.id !== videoId));
+      alert("✅ 影片已刪除！");
+    } catch (err: any) {
+      console.error(err);
+      alert("刪除失敗，請稍後再試");
+    }
+  };
+
   return (
     <div className="main">
       <div>
@@ -93,7 +116,7 @@ const Video = (props: VideoStausProps) => {
 
       {error && <p className="error">{error}</p>}
 
-      <div className="container">
+      <div className="video-container">
         {videos.length === 0 ? (
           <p className="no-video">目前還沒有上傳任何影片</p>
         ) : (
@@ -108,17 +131,20 @@ const Video = (props: VideoStausProps) => {
                 {video.title || video.video_link}
               </a>
               <p className="video-time">
-                上傳時間：{new Date(video.created_at).toLocaleString("zh-TW")}
+                上傳時間：{new Date(video.created_at + 'Z').toLocaleString("zh-TW")}
               </p>
+              <button 
+                onClick={() => handleDelete(video.id)} 
+                className="delete-btn"
+              >
+                刪除
+              </button>
             </div>
           ))
         )}
       </div>
 
-      {/* 保留原本的 props 顯示（可自行移除） */}
-      <div style={{ marginTop: "30px", opacity: 0.5 }}>
-        <small>原本的 prop 測試：{props.VideoName}</small>
-      </div>
+      
     </div>
   );
 };

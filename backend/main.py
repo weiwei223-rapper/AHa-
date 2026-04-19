@@ -145,3 +145,12 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
     db.commit()
     db.refresh(video)
     return video
+
+@app.delete("/api/videos/{video_id}")
+def delete_video(video_id: int, db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if video is None:
+        raise HTTPException(status_code=404, detail="找不到該影片")
+    db.delete(video)
+    db.commit()
+    return {"message": "影片已刪除"}
