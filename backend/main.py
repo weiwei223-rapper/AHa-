@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 import database
 import models
+import schema
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -120,3 +121,17 @@ def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(
     db.refresh(record)
     db.refresh(user)
     return record
+
+# Videos API
+@app.get("/api/videos", response_model=List[schema.VideoResponse])
+def get_videos(db: Session = Depends(database.get_db)):
+    videos = db.query(models.Video).order_by(models.Video.id.desc()).all()
+    return videos
+
+@app.post("/api/videos", response_model=schema.VideoResponse)
+def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get_db)):
+    video = models.Video(video_link=payload.video_link)
+    db.add(video)
+    db.commit()
+    db.refresh(video)
+    return video
