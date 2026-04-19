@@ -13,7 +13,7 @@ function App (){
                 <Route element={<Layout />}>
                 <Route path="/" element={<Home name={"wei"}/>} />
                 <Route path="/Video" element={<Video VideoName={"python"}/>} />
-                <Route path="/Profile" element={<Profile name={"wei"} email={"...@gmail.com"} point={10000}/>} />
+                <Route path="/Profile" element={<Profile />} />
               </Route>
             </Routes>
         </>

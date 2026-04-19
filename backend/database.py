@@ -1,9 +1,12 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# 資料庫連線字串格式: postgresql://用戶名:密碼@主機:埠號/資料庫名
-# 格式：postgresql://帳號:密碼@主機位置/資料庫名稱
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:Wayne48763@localhost/postgres"
+# 先嘗試從環境變數讀取 Database URL，沒有則使用本機 Postgres
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:Wayne48763@localhost/postgres"
+)
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
