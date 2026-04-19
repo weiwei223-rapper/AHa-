@@ -1,9 +1,9 @@
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 資料庫連線字串格式: postgresql://用戶名:密碼@主機:埠號/資料庫名
-SQLALCHEMY_DATABASE_URL = "postgresql://user:password@localhost/dbname"
+# 格式：postgresql://帳號:密碼@主機位置/資料庫名稱
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres:Wayne48763@localhost/postgres"
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

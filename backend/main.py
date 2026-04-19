@@ -1,11 +1,14 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-from . import models, database
+import models
+import database
 
 app = FastAPI()
 
-# 啟動時自動建立資料表 (生產環境建議改用 Alembic 做遷移)
-models.Base.metadata.create_all(bind=database.engine)
+@app.on_event("startup")
+def startup():
+    # 啟動時自動建立資料表 (生產環境建議改用 Alembic 做遷移)
+    models.Base.metadata.create_all(bind=database.engine)
 
 @app.get("/users/{user_id}")
 def read_user(user_id: int, db: Session = Depends(database.get_db)):
