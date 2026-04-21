@@ -24,3 +24,25 @@ class QuizResponse(BaseModel):
     video_id: int
     video_title: str
     questions: List[QuizQuestion]
+
+class QuizResultCreate(BaseModel):
+    video_id: int
+    score: int
+    total_questions: int = 5
+
+class QuizResultResponse(BaseModel):
+    id: int
+    user_id: int
+    video_id: int
+    score: int
+    total_questions: int
+    completed_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class UserStatsResponse(BaseModel):
+    video_count: int
+    remaining_points: int
+    completed_quizzes: int
+    average_accuracy: float
