@@ -59,6 +59,14 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    text-decoration: none;
+    color: white;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.home-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(43, 193, 241, 0.16);
+    border-color: #67d5f5;
 }
 .home-stat-label {
     color: #94a3b8;
@@ -69,6 +77,10 @@
     font-size: 40px;
     font-weight: 700;
     line-height: 1;
+}
+.home-stat-hint {
+    color: #94a3b8;
+    font-size: 14px;
 }
 /* Video.tsx */
 .upload-section {
