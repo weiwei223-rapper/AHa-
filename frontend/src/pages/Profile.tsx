@@ -37,7 +37,6 @@ const Profile = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
-  const [userId, setUserId] = useState<number | null>(null)
 
   const loadUser = async (id: number) => {
     try {
@@ -65,7 +64,6 @@ const Profile = () => {
     const storedUserId = localStorage.getItem('userId');
     if (storedUserId) {
       const id = parseInt(storedUserId, 10);
-      setUserId(id);
       void loadUser(id);
     }
   }, [])

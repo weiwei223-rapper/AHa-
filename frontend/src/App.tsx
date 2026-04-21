@@ -7,7 +7,7 @@ import Layout from "./component/Layout.tsx";
 import Profile from "./pages/Profile.tsx"
 import Quiz from "./pages/Quiz.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
-import {Route,Routes, Navigate} from "react-router-dom";
+import {Route,Routes} from "react-router-dom";
 
 function App (){
     const [isAuthenticated, setIsAuthenticated] = useState(false);

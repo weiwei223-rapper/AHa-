@@ -12,7 +12,7 @@ type VideoStausProps = {
   VideoName: string;   // 你原本傳的 prop，暫時保留（之後可移除）
 };
 
-const Video = (props: VideoStausProps) => {
+const Video = (_props: VideoStausProps) => {
   const [videoLink, setVideoLink] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);

@@ -42,6 +42,33 @@
     flex-wrap: wrap;
     gap: 20px;
 }
+.home-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    padding: 20px 0;
+}
+.home-stat-card {
+    background: #0f1623;
+    border: 1px solid #2bc1f1;
+    border-radius: 18px;
+    min-height: 150px;
+    padding: 22px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.home-stat-label {
+    color: #94a3b8;
+    font-size: 18px;
+}
+.home-stat-value {
+    color: #2bc1f1;
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1;
+}
 /* Video.tsx */
 .upload-section {
     display: flex;
@@ -765,6 +792,11 @@ body {
   .main {
     margin-left: 0;
     padding: 15px;
+  }
+
+  .home-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
   }
 
   .video-container {

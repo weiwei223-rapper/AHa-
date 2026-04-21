@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../api';
 import './AuthPage.css';
 
 export default function AuthPage() {
-  const navigate = useNavigate();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

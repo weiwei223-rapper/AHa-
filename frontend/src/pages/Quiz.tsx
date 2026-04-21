@@ -11,7 +11,7 @@ type Video = {
 type QuizQuestion = {
   question: string;
   options: string[];
-  correct_answer: int;
+  correct_answer: number;
 };
 
 type Quiz = {
@@ -20,15 +20,25 @@ type Quiz = {
   questions: QuizQuestion[];
 };
 
+type QuizResult = {
+  videoId: number;
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  completedAt: string;
+};
+
+const QUIZ_RESULTS_KEY = "quizResults";
+
 const Quiz = () => {
   const [videos, setVideos] = useState<Video[]>([]);
-  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resultSaved, setResultSaved] = useState(false);
 
   // 載入影片列表
   useEffect(() => {
@@ -55,10 +65,10 @@ const Quiz = () => {
       if (!res.ok) throw new Error("無法產生測驗題目");
       const data: Quiz = await res.json();
       setQuiz(data);
-      setSelectedVideo(video);
       setCurrentQuestionIndex(0);
       setSelectedAnswers(new Array(data.questions.length).fill(-1));
       setShowResults(false);
+      setResultSaved(false);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "產生測驗失敗");
@@ -98,12 +108,39 @@ const Quiz = () => {
     return correct;
   };
 
+  useEffect(() => {
+    if (!showResults || !quiz || resultSaved) {
+      return;
+    }
+
+    const score = calculateScore();
+    const totalQuestions = quiz.questions.length;
+    const percentage = Math.round((score / totalQuestions) * 100);
+    const nextResult: QuizResult = {
+      videoId: quiz.video_id,
+      score,
+      totalQuestions,
+      percentage,
+      completedAt: new Date().toISOString(),
+    };
+
+    try {
+      const raw = localStorage.getItem(QUIZ_RESULTS_KEY);
+      const existingResults: QuizResult[] = raw ? JSON.parse(raw) : [];
+      const safeResults = Array.isArray(existingResults) ? existingResults : [];
+      localStorage.setItem(QUIZ_RESULTS_KEY, JSON.stringify([nextResult, ...safeResults]));
+      setResultSaved(true);
+    } catch (storageError) {
+      console.error("Failed to save quiz result:", storageError);
+    }
+  }, [showResults, quiz, resultSaved, selectedAnswers]);
+
   const resetQuiz = () => {
     setQuiz(null);
-    setSelectedVideo(null);
     setCurrentQuestionIndex(0);
     setSelectedAnswers([]);
     setShowResults(false);
+    setResultSaved(false);
   };
 
   if (showResults && quiz) {
