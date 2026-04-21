@@ -1,5 +1,6 @@
 import "./PageIndex.css";
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 type Video = {
   id: number;
@@ -13,10 +14,12 @@ type VideoStausProps = {
 };
 
 const Video = (_props: VideoStausProps) => {
+  const navigate = useNavigate();
   const [videoLink, setVideoLink] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generatingQuizId, setGeneratingQuizId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   // 載入時取得已上傳的影片列表
@@ -99,6 +102,19 @@ const Video = (_props: VideoStausProps) => {
     }
   };
 
+  const handleGenerateQuiz = async (videoId: number) => {
+    setGeneratingQuizId(videoId);
+    try {
+      // Navigate to Quiz page with the video ID
+      navigate(`/Quiz?videoId=${videoId}`);
+    } catch (err: any) {
+      console.error(err);
+      alert("無法生成測驗，請稍後再試");
+    } finally {
+      setGeneratingQuizId(null);
+    }
+  };
+
   return (
     <div className="main">
       <div>
@@ -145,12 +161,30 @@ const Video = (_props: VideoStausProps) => {
               <p className="video-time">
                 上傳時間：{new Date(video.created_at + 'Z').toLocaleString("zh-TW")}
               </p>
-              <button 
-                onClick={() => handleDelete(video.id)} 
-                className="delete-btn"
-              >
-                刪除
-              </button>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button 
+                  onClick={() => handleGenerateQuiz(video.id)}
+                  disabled={generatingQuizId === video.id}
+                  className="quiz-btn"
+                  style={{
+                    backgroundColor: "#4CAF50",
+                    color: "white",
+                    padding: "8px 16px",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: generatingQuizId === video.id ? "not-allowed" : "pointer",
+                    opacity: generatingQuizId === video.id ? 0.6 : 1,
+                  }}
+                >
+                  {generatingQuizId === video.id ? "⏳ 生成中..." : "📝 生成測驗"}
+                </button>
+                <button 
+                  onClick={() => handleDelete(video.id)} 
+                  className="delete-btn"
+                >
+                  刪除
+                </button>
+              </div>
             </div>
           ))
         )}
