@@ -83,10 +83,37 @@ const Quiz = () => {
     setSelectedAnswers(newAnswers);
   };
 
+  const saveQuizResult = async (score: number, totalQuestions: number) => {
+    if (!quiz) return;
+
+    try {
+      const res = await fetch("http://localhost:8000/api/quiz-results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          video_id: quiz.video_id,
+          score: score,
+          total_questions: totalQuestions
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("Failed to save quiz result");
+      }
+    } catch (err) {
+      console.error("Error saving quiz result:", err);
+    }
+  };
+
   const handleNext = () => {
     if (currentQuestionIndex < (quiz?.questions.length || 0) - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     } else {
+      // Quiz completed - save result
+      const score = calculateScore();
+      if (quiz) {
+        saveQuizResult(score, quiz.questions.length);
+      }
       setShowResults(true);
     }
   };
@@ -165,10 +192,10 @@ const Quiz = () => {
             {quiz.questions.map((question, index) => (
               <div key={index} className="question-review">
                 <p><strong>問題 {index + 1}：</strong> {question.question}</p>
-                <p>你的答案：{question.options[selectedAnswers[index]] || "未作答"}</p>
+                <p>你的答案：{selectedAnswers[index] !== undefined && selectedAnswers[index] !== -1 ? question.options[selectedAnswers[index]] : "未作答"}</p>
                 <p>正確答案：{question.options[question.correct_answer]}</p>
                 <p className={selectedAnswers[index] === question.correct_answer ? "correct" : "incorrect"}>
-                  {selectedAnswers[index] === question.correct_answer ? "✓ 正確" : "✗ 錯誤"}
+                  {selectedAnswers[index] === question.correct_answer ? "✓ 正確" : selectedAnswers[index] !== undefined && selectedAnswers[index] !== -1 ? "✗ 錯誤" : "未作答"}
                 </p>
               </div>
             ))}

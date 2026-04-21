@@ -399,3 +399,49 @@ def generate_content_based_questions(title: str, video_link: str) -> List[schema
         ]
 
     return questions
+
+# Quiz Results API
+@app.post("/api/quiz-results", response_model=schema.QuizResultResponse)
+def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(database.get_db)):
+    # For now, assume user_id is 1 (default user)
+    user_id = 1
+
+    quiz_result = models.QuizResult(
+        user_id=user_id,
+        video_id=payload.video_id,
+        score=payload.score,
+        total_questions=payload.total_questions
+    )
+    db.add(quiz_result)
+    db.commit()
+    db.refresh(quiz_result)
+    return quiz_result
+
+@app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)
+def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
+    # Get video count
+    video_count = db.query(models.Video).count()
+
+    # Get user points
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="找不到該用戶")
+    remaining_points = user.points
+
+    # Get completed quizzes count
+    completed_quizzes = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).count()
+
+    # Calculate average accuracy
+    quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).all()
+    if quiz_results:
+        total_accuracy = sum(result.score / result.total_questions * 100 for result in quiz_results)
+        average_accuracy = total_accuracy / len(quiz_results)
+    else:
+        average_accuracy = 0.0
+
+    return schema.UserStatsResponse(
+        video_count=video_count,
+        remaining_points=remaining_points,
+        completed_quizzes=completed_quizzes,
+        average_accuracy=round(average_accuracy, 1)
+    )
