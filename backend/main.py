@@ -12,6 +12,26 @@ import database
 import models
 import schema
 
+def extract_youtube_title(url: str) -> str:
+    """Extract a meaningful title from YouTube URL"""
+    try:
+        if "youtube.com/watch?v=" in url:
+            # Extract video ID from standard YouTube URL
+            video_id = url.split("v=")[1].split("&")[0]
+            return f"YouTube 影片 - {video_id}"
+        elif "youtu.be/" in url:
+            # Extract video ID from short YouTube URL
+            video_id = url.split("youtu.be/")[1].split("?")[0]
+            return f"YouTube 影片 - {video_id}"
+        elif "youtube.com/playlist?list=" in url:
+            # Handle playlist URLs
+            playlist_id = url.split("list=")[1].split("&")[0]
+            return f"YouTube 播放清單 - {playlist_id}"
+        else:
+            return "YouTube 影片"
+    except:
+        return "YouTube 影片"
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup - create tables and initial data
@@ -140,7 +160,16 @@ def get_videos(db: Session = Depends(database.get_db)):
 
 @app.post("/api/videos", response_model=schema.VideoResponse)
 def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get_db)):
-    video = models.Video(video_link=payload.video_link)
+    # Extract title from URL if not provided
+    title = payload.title
+    if not title:
+        # Try to extract a meaningful title from YouTube URL
+        if "youtube.com" in payload.video_link or "youtu.be" in payload.video_link:
+            title = extract_youtube_title(payload.video_link)
+        else:
+            title = "未命名影片"
+
+    video = models.Video(video_link=payload.video_link, title=title)
     db.add(video)
     db.commit()
     db.refresh(video)

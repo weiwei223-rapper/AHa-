@@ -4,6 +4,7 @@ from typing import Optional
 
 class VideoCreate(BaseModel):
     video_link: str
+    title: Optional[str] = None
 
 class VideoResponse(BaseModel):
     id: int

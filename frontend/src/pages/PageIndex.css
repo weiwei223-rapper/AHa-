@@ -49,6 +49,12 @@
     margin-bottom: 30px;
     align-items: center;
     flex-wrap: wrap;
+    max-width: 800px;
+}
+
+.upload-section .video-input {
+    flex: 1;
+    min-width: 200px;
 }
 
 input{
@@ -155,6 +161,11 @@ button:hover span:after {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 16px;
+}
+
+.video-link:hover {
+    text-decoration: underline;
 }
 
 .video-link:hover {
