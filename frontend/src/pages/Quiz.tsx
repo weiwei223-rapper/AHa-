@@ -1,5 +1,6 @@
 import "./PageIndex.css";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 
 type Video = {
   id: number;
@@ -31,6 +32,9 @@ type QuizResult = {
 const QUIZ_RESULTS_KEY = "quizResults";
 
 const Quiz = () => {
+  const [searchParams] = useSearchParams();
+  const videoIdFromUrl = searchParams.get('videoId');
+  
   const [videos, setVideos] = useState<Video[]>([]);
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -44,6 +48,16 @@ const Quiz = () => {
   useEffect(() => {
     fetchVideos();
   }, []);
+
+  // 如果 URL 中有 videoId，自動生成該影片的測驗
+  useEffect(() => {
+    if (videoIdFromUrl && videos.length > 0) {
+      const video = videos.find(v => v.id === parseInt(videoIdFromUrl));
+      if (video) {
+        generateQuiz(video);
+      }
+    }
+  }, [videoIdFromUrl, videos]);
 
   const fetchVideos = async () => {
     try {
