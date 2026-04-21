@@ -1,6 +1,18 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 
-const Layout = () => {
+interface LayoutProps {
+    onLogout?: () => void;
+}
+
+const Layout = ({ onLogout }: LayoutProps) => {
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        onLogout?.();
+        navigate('/');
+        window.location.reload();
+    };
+
     return(
         <div>
             <nav className="sidenav">
@@ -38,6 +50,12 @@ const Layout = () => {
                 }
             >Quiz</NavLink>
 
+            <button
+                onClick={handleLogout}
+                className="w-full text-left px-4 py-3 rounded-lg hover:bg-red-600 transition-colors text-red-400 hover:text-white font-semibold mt-4"
+            >
+                登出
+            </button>
         </nav>
             <main className="flex-1 ml-64 p-8 overflow-auto">
                 <Outlet />

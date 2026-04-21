@@ -37,11 +37,12 @@ const Profile = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
+  const [userId, setUserId] = useState<number | null>(null)
 
-  const loadUser = async () => {
+  const loadUser = async (id: number) => {
     try {
       setLoading(true)
-      const userResp = await api.get("/users/1")
+      const userResp = await api.get(`/users/${id}`)
       const data: UserData = userResp.data
       setUser(data)
       setFormValues({
@@ -50,7 +51,7 @@ const Profile = () => {
         email: data.email,
         uid: data.uid,
       })
-      const historyResp = await api.get("/users/1/recharge-records")
+      const historyResp = await api.get(`/users/${id}/recharge-records`)
       setHistory(historyResp.data)
       setMessage("")
     } catch (error) {
@@ -61,7 +62,12 @@ const Profile = () => {
   }
 
   useEffect(() => {
-    void loadUser()
+    const storedUserId = localStorage.getItem('userId');
+    if (storedUserId) {
+      const id = parseInt(storedUserId, 10);
+      setUserId(id);
+      void loadUser(id);
+    }
   }, [])
 
   const handleFieldChange = (field: string, value: string) => {
@@ -109,7 +115,7 @@ const Profile = () => {
         points: plan.points,
         price: plan.price,
       })
-      await loadUser()
+      await loadUser(user.id)
       setMessage(`已新增 ${plan.points} 點儲值紀錄。`)
     } catch (error) {
       setMessage("儲值失敗，請稍後重試。")
