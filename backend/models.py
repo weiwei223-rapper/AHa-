@@ -37,3 +37,16 @@ class Video(Base):
     video_link = Column(String, nullable=False)
     title = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class QuizResult(Base):
+    __tablename__ = "quiz_results"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    video_id = Column(Integer, ForeignKey("videos.id"))
+    score = Column(Integer)  # Score out of total questions (e.g., 3 out of 5)
+    total_questions = Column(Integer, default=5)
+    completed_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    video = relationship("Video")

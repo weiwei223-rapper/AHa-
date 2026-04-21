@@ -36,11 +36,12 @@
     margin: 0;
 }
 .container{
-    display: flex;
-    justify-content: space-between;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 200px;
+    padding: 20px;
+    max-width: 1000px;
+    margin: 0 auto;
 }
 /* Video.tsx */
 .upload-section {
@@ -136,8 +137,8 @@ button:hover span:after {
 .box{
     background-color: #0f1623;
     color: white;
-    min-height: 120px;
-    padding: 15px;
+    min-height: 140px;
+    padding: 20px;
     border: 1px solid lightblue;
     border-radius: 15px;
     font-size: 16px;
@@ -145,11 +146,32 @@ button:hover span:after {
     flex-direction: column;
     justify-content: space-between;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    width: 100%;
 }
 
 .box:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(43, 193, 241, 0.2);
+}
+
+.box h3 {
+    margin: 0 0 10px 0;
+    color: #2bc1f1;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.box .stat-value {
+    font-size: 40px;
+    font-weight: bold;
+    color: #ffffff;
+    margin: 0;
+    text-align: center;
+}
+
+.box p {
+    margin: 5px 0;
+    text-align: center;
 }
 
 .video-link {
