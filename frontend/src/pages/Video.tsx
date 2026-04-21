@@ -14,6 +14,7 @@ type VideoStausProps = {
 
 const Video = (props: VideoStausProps) => {
   const [videoLink, setVideoLink] = useState("");
+  const [videoTitle, setVideoTitle] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -48,7 +49,10 @@ const Video = (props: VideoStausProps) => {
       const res = await fetch("http://localhost:8000/api/videos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video_link: videoLink }),   // ← 後端 schema 的欄位名稱
+        body: JSON.stringify({ 
+          video_link: videoLink,
+          title: videoTitle.trim() || null
+        }),
       });
 
       if (!res.ok) {
@@ -61,6 +65,7 @@ const Video = (props: VideoStausProps) => {
       // 即時更新頁面
       setVideos((prev) => [newVideo, ...prev]);
       setVideoLink("");           // 清空輸入框
+      setVideoTitle("");          // 清空標題輸入框
       alert("✅ 影片連結上傳成功！");
     } catch (err: any) {
       console.error(err);
@@ -68,6 +73,29 @@ const Video = (props: VideoStausProps) => {
       alert(err.message || "上傳失敗，請稍後再試");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (videoId: number) => {
+    if (!confirm("確定要刪除這個影片嗎？")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:8000/api/videos/${videoId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        throw new Error("刪除失敗");
+      }
+
+      // 即時更新頁面
+      setVideos((prev) => prev.filter(video => video.id !== videoId));
+      alert("✅ 影片已刪除！");
+    } catch (err: any) {
+      console.error(err);
+      alert("刪除失敗，請稍後再試");
     }
   };
 
@@ -80,10 +108,17 @@ const Video = (props: VideoStausProps) => {
       <div className="upload-section">
         <input
           type="text"
+          value={videoTitle}
+          onChange={(e) => setVideoTitle(e.target.value)}
+          placeholder="影片標題 (選填)"
+          className="video-input"
+        />
+        <input
+          type="text"
           id="VideoID"
           value={videoLink}
           onChange={(e) => setVideoLink(e.target.value)}
-          placeholder="影片連結[](https://...)"
+          placeholder="影片連結 (https://...)"
           className="video-input"
         />
         <button onClick={handleUpload} disabled={loading}>
@@ -93,7 +128,7 @@ const Video = (props: VideoStausProps) => {
 
       {error && <p className="error">{error}</p>}
 
-      <div className="container">
+      <div className="video-container">
         {videos.length === 0 ? (
           <p className="no-video">目前還沒有上傳任何影片</p>
         ) : (
@@ -105,20 +140,23 @@ const Video = (props: VideoStausProps) => {
                 rel="noopener noreferrer"
                 className="video-link"
               >
-                {video.title || video.video_link}
+                {video.title || "未命名影片"}
               </a>
               <p className="video-time">
-                上傳時間：{new Date(video.created_at).toLocaleString("zh-TW")}
+                上傳時間：{new Date(video.created_at + 'Z').toLocaleString("zh-TW")}
               </p>
+              <button 
+                onClick={() => handleDelete(video.id)} 
+                className="delete-btn"
+              >
+                刪除
+              </button>
             </div>
           ))
         )}
       </div>
 
-      {/* 保留原本的 props 顯示（可自行移除） */}
-      <div style={{ marginTop: "30px", opacity: 0.5 }}>
-        <small>原本的 prop 測試：{props.VideoName}</small>
-      </div>
+      
     </div>
   );
 };
