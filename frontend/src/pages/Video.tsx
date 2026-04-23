@@ -1,6 +1,7 @@
 import "./PageIndex.css";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../api";
 
 type Video = {
   id: number;
@@ -29,7 +30,7 @@ const Video = (_props: VideoStausProps) => {
 
   const fetchVideos = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/videos");
+      const res = await fetch(`${API_BASE_URL}/api/videos`);
       if (!res.ok) throw new Error("無法取得影片列表");
       const data: Video[] = await res.json();
       setVideos(data);
@@ -49,7 +50,7 @@ const Video = (_props: VideoStausProps) => {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:8000/api/videos", {
+      const res = await fetch(`${API_BASE_URL}/api/videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -85,7 +86,7 @@ const Video = (_props: VideoStausProps) => {
     }
 
     try {
-      const res = await fetch(`http://localhost:8000/api/videos/${videoId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/videos/${videoId}`, {
         method: "DELETE",
       });
 

@@ -9,10 +9,13 @@ from pydantic import BaseModel
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
-import database
-import models
-import schema
-import ai_analyzer
+try:
+    from . import ai_analyzer, database, models, schema
+except ImportError:
+    import ai_analyzer
+    import database
+    import models
+    import schema
 
 def extract_youtube_title(url: str) -> str:
     """Extract a meaningful title from YouTube URL"""
@@ -128,6 +131,17 @@ class LoginResponse(BaseModel):
     user: UserResponse
     message: str
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[ChatMessage] = []
+
+class ChatResponse(BaseModel):
+    reply: str
+
 @app.post("/auth/register", response_model=UserResponse)
 def register_user(payload: RegisterRequest, db: Session = Depends(database.get_db)):
     # Check if email already exists
@@ -168,6 +182,38 @@ def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
         "user": user,
         "message": f"歡迎回來，{user.name}！"
     }
+
+@app.post("/api/chat", response_model=ChatResponse)
+def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
+    user_message = payload.message.strip()
+    if not user_message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    recent_videos = (
+        db.query(models.Video)
+        .order_by(models.Video.created_at.desc())
+        .limit(3)
+        .all()
+    )
+    video_context = [
+        {
+            "title": video.title,
+            "video_link": video.video_link,
+        }
+        for video in recent_videos
+    ]
+
+    try:
+        reply = ai_analyzer.generate_chat_reply(
+            user_message,
+            [{"role": item.role, "content": item.content} for item in payload.history],
+            video_context,
+        )
+        return ChatResponse(reply=reply)
+    except Exception as e:
+        print(f"Error chatting with Gemini: {e}")
+        reply = ai_analyzer.generate_transcript_fallback_reply(user_message, video_context)
+        return ChatResponse(reply=reply)
 
 @app.get("/users/{user_id}", response_model=UserResponse)
 def read_user(user_id: int, db: Session = Depends(database.get_db)):

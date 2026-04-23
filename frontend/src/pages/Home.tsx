@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { userAPI } from "../api";
+import { API_BASE_URL, userAPI } from "../api";
 import "./PageIndex.css";
 
 type UserStatusProps = {
@@ -63,7 +63,7 @@ const Home = ({ name }: UserStatusProps) => {
 
   const getVideoCount = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/videos");
+      const response = await fetch(`${API_BASE_URL}/api/videos`);
       if (!response.ok) {
         return 0;
       }

@@ -1,6 +1,7 @@
 import "./PageIndex.css";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { API_BASE_URL } from "../api";
 
 type Video = {
   id: number;
@@ -61,7 +62,7 @@ const Quiz = () => {
 
   const fetchVideos = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/videos");
+      const res = await fetch(`${API_BASE_URL}/api/videos`);
       if (!res.ok) throw new Error("無法取得影片列表");
       const data: Video[] = await res.json();
       setVideos(data);
@@ -75,7 +76,7 @@ const Quiz = () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`http://localhost:8000/api/videos/${video.id}/quiz`);
+      const res = await fetch(`${API_BASE_URL}/api/videos/${video.id}/quiz`);
       if (!res.ok) throw new Error("無法產生測驗題目");
       const data: Quiz = await res.json();
       setQuiz(data);
@@ -101,7 +102,7 @@ const Quiz = () => {
     if (!quiz) return;
 
     try {
-      const res = await fetch("http://localhost:8000/api/quiz-results", {
+      const res = await fetch(`${API_BASE_URL}/api/quiz-results`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
