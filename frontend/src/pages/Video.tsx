@@ -23,6 +23,11 @@ const Video = (_props: VideoStausProps) => {
   const [generatingQuizId, setGeneratingQuizId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
+  // Debug: Log API base URL
+  useEffect(() => {
+    console.log("API_BASE_URL:", API_BASE_URL);
+  }, []);
+
   // 載入時取得已上傳的影片列表
   useEffect(() => {
     fetchVideos();
@@ -30,13 +35,17 @@ const Video = (_props: VideoStausProps) => {
 
   const fetchVideos = async () => {
     try {
+      console.log("Fetching videos from:", `${API_BASE_URL}/api/videos`);
       const res = await fetch(`${API_BASE_URL}/api/videos`);
-      if (!res.ok) throw new Error("無法取得影片列表");
+      console.log("Response status:", res.status);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: 無法取得影片列表`);
       const data: Video[] = await res.json();
+      console.log("Received data:", data);
       setVideos(data);
+      setError(""); // Clear error on success
     } catch (err: any) {
-      console.error(err);
-      setError("載入影片失敗");
+      console.error("Error fetching videos:", err);
+      setError(`載入影片失敗: ${err.message}`);
     }
   };
 

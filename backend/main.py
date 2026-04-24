@@ -1,13 +1,18 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
+import os
 
 import bcrypt
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
+
+# Load environment variables
+load_dotenv()
 
 try:
     from . import ai_analyzer, database, models, schema
