@@ -1,82 +1,73 @@
-import { useState } from "react";
-import { chatAPI } from "../api";
-import "./PageIndex.css";
+import React, { useState } from 'react';
+import { chatAPI } from '../api';
 
-type ChatMessage = {
-  role: string;
+interface Message {
+  role: 'user' | 'assistant';
   content: string;
-};
+}
 
-const Chat = () => {
-  const [message, setMessage] = useState("");
-  const [history, setHistory] = useState<ChatMessage[]>([]);
+const Chat: React.FC = () => {
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'assistant', content: 'Hello! I\'m your AI assistant. How can I help you today?' }
+  ]);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleSend = async () => {
-    if (!message.trim()) return;
+    if (!input.trim()) return;
 
-    const newUserMessage: ChatMessage = { role: "user", content: message.trim() };
-    const nextHistory = [...history, newUserMessage];
-    setHistory(nextHistory);
-    setMessage("");
+    const userMessage: Message = { role: 'user', content: input };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
     setLoading(true);
-    setError(null);
 
     try {
       const response = await chatAPI.sendMessage({
-        message: newUserMessage.content,
-        history: nextHistory,
+        message: input,
+        history: messages,
       });
-
-      const reply = response.data.reply;
-      setHistory((prev) => [...prev, { role: "assistant", content: reply }]);
-    } catch (err) {
-      console.error("Chat API error", err);
-      setError("無法連線到聊天服務，請稍後再試。");
+      const assistantMessage: Message = { role: 'assistant', content: response.data.reply };
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMessage: Message = { role: 'assistant', content: 'Sorry, something went wrong.' };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSend();
+    }
+  };
+
   return (
-    <div className="chat-shell">
-      <div className="chat-header">
-        <div className="chat-eyebrow">AI 聊天</div>
-        <h1>與學習助手對話</h1>
-        <p className="chat-subtitle">輸入你的問題，系統將根據最近影片與聊天紀錄回應。</p>
+    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+      <h1>AI Chat</h1>
+      <div style={{ border: '1px solid #ccc', height: '400px', overflowY: 'auto', padding: '10px', marginBottom: '10px' }}>
+        {messages.map((msg, index) => (
+          <div key={index} style={{ marginBottom: '10px' }}>
+            <strong>{msg.role === 'user' ? 'You' : 'AI'}:</strong> {msg.content}
+          </div>
+        ))}
+        {loading && <div>AI is typing...</div>}
       </div>
-
-      <div className="chat-messages">
-        {history.length === 0 ? (
-          <div className="chat-bubble assistant">還沒有訊息，開始問一個問題吧。</div>
-        ) : (
-          history.map((item, index) => (
-            <div
-              key={index}
-              className={`chat-bubble ${item.role === "assistant" ? "assistant" : "user"}`}
-            >
-              <div className="chat-role">{item.role === "assistant" ? "Assistant" : "You"}</div>
-              <p>{item.content}</p>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="chat-form">
-        <textarea
-          className="chat-textarea"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="輸入你的問題..."
-          rows={4}
+      <div>
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Type your message..."
+          style={{ width: '70%', padding: '10px' }}
+          disabled={loading}
         />
-        <button className="chat-send" onClick={handleSend} disabled={loading}>
-          {loading ? "傳送中..." : "傳送"}
+        <button onClick={handleSend} disabled={loading} style={{ padding: '10px', marginLeft: '10px' }}>
+          Send
         </button>
       </div>
-
-      {error && <div className="text-red-400 mt-3">{error}</div>}
     </div>
   );
 };
