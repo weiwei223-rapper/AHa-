@@ -44,7 +44,7 @@ const Layout = ({ onLogout }: LayoutProps) => {
           Logout
         </button>
       </nav>
-      <main className="flex-1 ml-64 p-8 overflow-auto">
+      <main className="main">
         <Outlet />
       </main>
     </div>
