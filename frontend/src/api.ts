@@ -1,7 +1,10 @@
 import axios, { type AxiosInstance } from 'axios';
 
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL?.trim() || 'http://127.0.0.1:8000';
+
 const api: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: API_BASE_URL,
 });
 
 // Auth APIs
@@ -22,6 +25,13 @@ export const userAPI = {
     api.get(`/users/${userId}/recharge-records`),
   recharge: (userId: number, data: { points: number; price: number }) =>
     api.post(`/users/${userId}/recharge`, data),
+};
+
+export const chatAPI = {
+  sendMessage: (data: {
+    message: string;
+    history: Array<{ role: string; content: string }>;
+  }) => api.post('/api/chat', data),
 };
 
 export default api;

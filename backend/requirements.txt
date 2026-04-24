@@ -8,3 +8,6 @@ python-multipart
 google-generativeai
 python-dotenv
 requests
+youtube-transcript-api
+yt-dlp
+faster-whisper
