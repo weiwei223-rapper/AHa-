@@ -1,5 +1,5 @@
 import "./PageIndex.css";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../api";
 
@@ -14,11 +14,13 @@ type QuizQuestion = {
   question: string;
   options: string[];
   correct_answer: number;
+  explanation?: string | null;
 };
 
-type Quiz = {
+type QuizData = {
   video_id: number;
   video_title: string;
+  quiz_type?: string;
   questions: QuizQuestion[];
 };
 
@@ -34,10 +36,10 @@ const QUIZ_RESULTS_KEY = "quizResults";
 
 const Quiz = () => {
   const [searchParams] = useSearchParams();
-  const videoIdFromUrl = searchParams.get('videoId');
-  
+  const videoIdFromUrl = searchParams.get("videoId");
+
   const [videos, setVideos] = useState<Video[]>([]);
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -45,17 +47,15 @@ const Quiz = () => {
   const [error, setError] = useState("");
   const [resultSaved, setResultSaved] = useState(false);
 
-  // 載入影片列表
   useEffect(() => {
-    fetchVideos();
+    void fetchVideos();
   }, []);
 
-  // 如果 URL 中有 videoId，自動生成該影片的測驗
   useEffect(() => {
     if (videoIdFromUrl && videos.length > 0) {
-      const video = videos.find(v => v.id === parseInt(videoIdFromUrl));
+      const video = videos.find((item) => item.id === Number(videoIdFromUrl));
       if (video) {
-        generateQuiz(video);
+        void generateQuiz(video);
       }
     }
   }, [videoIdFromUrl, videos]);
@@ -63,12 +63,15 @@ const Quiz = () => {
   const fetchVideos = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/videos`);
-      if (!res.ok) throw new Error("無法取得影片列表");
+      if (!res.ok) {
+        throw new Error("無法載入影片清單");
+      }
+
       const data: Video[] = await res.json();
       setVideos(data);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError("載入影片失敗");
+      setError("載入影片失敗。");
     }
   };
 
@@ -77,8 +80,11 @@ const Quiz = () => {
     setError("");
     try {
       const res = await fetch(`${API_BASE_URL}/api/videos/${video.id}/quiz`);
-      if (!res.ok) throw new Error("無法產生測驗題目");
-      const data: Quiz = await res.json();
+      if (!res.ok) {
+        throw new Error("AI 測驗生成失敗");
+      }
+
+      const data: QuizData = await res.json();
       setQuiz(data);
       setCurrentQuestionIndex(0);
       setSelectedAnswers(new Array(data.questions.length).fill(-1));
@@ -86,7 +92,7 @@ const Quiz = () => {
       setResultSaved(false);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "產生測驗失敗");
+      setError(err.message || "無法生成測驗");
     } finally {
       setLoading(false);
     }
@@ -98,56 +104,55 @@ const Quiz = () => {
     setSelectedAnswers(newAnswers);
   };
 
+  const calculateScore = () => {
+    if (!quiz) {
+      return 0;
+    }
+
+    return selectedAnswers.reduce((correct, answer, index) => {
+      return answer === quiz.questions[index].correct_answer ? correct + 1 : correct;
+    }, 0);
+  };
+
   const saveQuizResult = async (score: number, totalQuestions: number) => {
-    if (!quiz) return;
+    if (!quiz) {
+      return;
+    }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/quiz-results`, {
+      await fetch(`${API_BASE_URL}/api/quiz-results`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           video_id: quiz.video_id,
-          score: score,
-          total_questions: totalQuestions
+          score,
+          total_questions: totalQuestions,
         }),
       });
-
-      if (!res.ok) {
-        console.error("Failed to save quiz result");
-      }
     } catch (err) {
       console.error("Error saving quiz result:", err);
     }
   };
 
-  const handleNext = () => {
-    if (currentQuestionIndex < (quiz?.questions.length || 0) - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    } else {
-      // Quiz completed - save result
-      const score = calculateScore();
-      if (quiz) {
-        saveQuizResult(score, quiz.questions.length);
-      }
-      setShowResults(true);
+  const handleNext = async () => {
+    if (!quiz) {
+      return;
     }
+
+    if (currentQuestionIndex < quiz.questions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+      return;
+    }
+
+    const score = calculateScore();
+    await saveQuizResult(score, quiz.questions.length);
+    setShowResults(true);
   };
 
   const handlePrevious = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
     }
-  };
-
-  const calculateScore = () => {
-    if (!quiz) return 0;
-    let correct = 0;
-    selectedAnswers.forEach((answer, index) => {
-      if (answer === quiz.questions[index].correct_answer) {
-        correct++;
-      }
-    });
-    return correct;
   };
 
   useEffect(() => {
@@ -191,33 +196,50 @@ const Quiz = () => {
     const percentage = Math.round((score / totalQuestions) * 100);
 
     return (
-      <div className="main">
-        <div className="quiz-container">
-          <h1>測驗結果</h1>
-          <h2>影片：{quiz.video_title}</h2>
-          <div className="score-display">
-            <h3>得分：{score}/{totalQuestions} ({percentage}%)</h3>
-            {percentage >= 80 && <p>🎉 優秀！</p>}
-            {percentage >= 60 && percentage < 80 && <p>👍 不錯！</p>}
-            {percentage < 60 && <p>💪 繼續努力！</p>}
+      <div className="page-shell">
+        <section className="page-hero">
+          <div>
+            <div className="page-eyebrow">AI Coding Quiz</div>
+            <h1>測驗結果</h1>
+            <p>這份題目是 AI 根據完整影片內容優先生成的程式理解題。</p>
+          </div>
+          <div className="page-hero-metric">
+            <span>Score</span>
+            <strong>{percentage}%</strong>
+            <p>{score} / {totalQuestions}</p>
+          </div>
+        </section>
+
+        <section className="panel-card">
+          <div className="quiz-score-band">
+            <h2>{quiz.video_title}</h2>
+            <p>
+              {percentage >= 80 && "表現很好，對影片中的程式概念已經有不錯掌握。"}
+              {percentage >= 60 && percentage < 80 && "基礎理解到位，但還有幾題需要補強推理細節。"}
+              {percentage < 60 && "建議回看影片中的程式流程與除錯段落，再做一次測驗。"}
+            </p>
           </div>
 
-          <div className="results-review">
-            <h3>答案回顧：</h3>
-            {quiz.questions.map((question, index) => (
-              <div key={index} className="question-review">
-                <p><strong>問題 {index + 1}：</strong> {question.question}</p>
-                <p>你的答案：{selectedAnswers[index] !== undefined && selectedAnswers[index] !== -1 ? question.options[selectedAnswers[index]] : "未作答"}</p>
-                <p>正確答案：{question.options[question.correct_answer]}</p>
-                <p className={selectedAnswers[index] === question.correct_answer ? "correct" : "incorrect"}>
-                  {selectedAnswers[index] === question.correct_answer ? "✓ 正確" : selectedAnswers[index] !== undefined && selectedAnswers[index] !== -1 ? "✗ 錯誤" : "未作答"}
-                </p>
-              </div>
-            ))}
+          <div className="quiz-review-list">
+            {quiz.questions.map((question, index) => {
+              const selectedIndex = selectedAnswers[index];
+              const isCorrect = selectedIndex === question.correct_answer;
+              return (
+                <article key={index} className="quiz-review-card">
+                  <div className="quiz-review-status">{isCorrect ? "Correct" : "Review"}</div>
+                  <h3>{index + 1}. {question.question}</h3>
+                  <p>你的答案：{selectedIndex >= 0 ? question.options[selectedIndex] : "未作答"}</p>
+                  <p>正確答案：{question.options[question.correct_answer]}</p>
+                  {question.explanation && <p>解析：{question.explanation}</p>}
+                </article>
+              );
+            })}
           </div>
 
-          <button onClick={resetQuiz} className="reset-btn">重新選擇影片</button>
-        </div>
+          <div className="quiz-nav-row">
+            <button onClick={resetQuiz} className="page-primary-button">重新選擇影片</button>
+          </div>
+        </section>
       </div>
     );
   }
@@ -226,19 +248,30 @@ const Quiz = () => {
     const currentQuestion = quiz.questions[currentQuestionIndex];
 
     return (
-      <div className="main">
-        <div className="quiz-container">
-          <h1>影片測驗</h1>
-          <h2>{quiz.video_title}</h2>
-          <div className="progress">
-            問題 {currentQuestionIndex + 1} / {quiz.questions.length}
+      <div className="page-shell">
+        <section className="page-hero">
+          <div>
+            <div className="page-eyebrow">AI Coding Quiz</div>
+            <h1>{quiz.video_title}</h1>
+            <p>這組題目會優先檢查你是否理解影片中的程式流程、觀念與除錯判斷。</p>
           </div>
+          <div className="page-hero-metric">
+            <span>Progress</span>
+            <strong>{currentQuestionIndex + 1}/{quiz.questions.length}</strong>
+            <p>{quiz.quiz_type || "ai-coding"}</p>
+          </div>
+        </section>
 
-          <div className="question">
-            <h3>{currentQuestion.question}</h3>
-            <div className="options">
+        <section className="panel-card">
+          <div className="quiz-question-card">
+            <div className="quiz-question-number">Question {currentQuestionIndex + 1}</div>
+            <h2>{currentQuestion.question}</h2>
+            <div className="quiz-options-grid">
               {currentQuestion.options.map((option, index) => (
-                <label key={index} className="option">
+                <label
+                  key={index}
+                  className={`quiz-option-tile ${selectedAnswers[currentQuestionIndex] === index ? "selected" : ""}`}
+                >
                   <input
                     type="radio"
                     name={`question-${currentQuestionIndex}`}
@@ -246,63 +279,72 @@ const Quiz = () => {
                     checked={selectedAnswers[currentQuestionIndex] === index}
                     onChange={() => handleAnswerSelect(currentQuestionIndex, index)}
                   />
-                  {option}
+                  <span>{option}</span>
                 </label>
               ))}
             </div>
           </div>
 
-          <div className="navigation">
-            <button
-              onClick={handlePrevious}
-              disabled={currentQuestionIndex === 0}
-              className="nav-btn"
-            >
-              上一題
+          <div className="quiz-nav-row">
+            <button onClick={handlePrevious} disabled={currentQuestionIndex === 0} className="page-secondary-button">
+              Previous
             </button>
             <button
-              onClick={handleNext}
+              onClick={() => void handleNext()}
               disabled={selectedAnswers[currentQuestionIndex] === -1}
-              className="nav-btn"
+              className="page-primary-button"
             >
-              {currentQuestionIndex === quiz.questions.length - 1 ? "完成測驗" : "下一題"}
+              {currentQuestionIndex === quiz.questions.length - 1 ? "Finish Quiz" : "Next"}
             </button>
           </div>
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="main">
-      <div className="quiz-container">
-        <h1>影片測驗</h1>
-        <p>選擇一個影片來開始測驗：</p>
+    <div className="page-shell">
+      <section className="page-hero">
+        <div>
+          <div className="page-eyebrow">AI Coding Quiz</div>
+          <h1>選擇影片並生成測驗</h1>
+          <p>AI 會優先根據整支影片的逐字稿與內容脈絡，產生偏程式理解、除錯與實作決策的題目。</p>
+        </div>
+        <div className="page-hero-metric">
+          <span>Quiz Sources</span>
+          <strong>{videos.length}</strong>
+          <p>支影片可生成新題目</p>
+        </div>
+      </section>
 
-        {error && <div className="error">{error}</div>}
+      {error && <div className="page-error">{error}</div>}
+      {loading && <div className="page-loading">AI 正在讀取影片並生成程式題...</div>}
 
-        {loading && <div className="loading">載入中...</div>}
-
-        <div className="video-list">
-          {videos.length === 0 ? (
-            <p>目前沒有影片，請先上傳影片。</p>
-          ) : (
-            videos.map((video) => (
-              <div key={video.id} className="video-item">
-                <h3>{video.title || "未命名影片"}</h3>
-                <p>上傳時間：{new Date(video.created_at).toLocaleString()}</p>
-                <button
-                  onClick={() => generateQuiz(video)}
-                  disabled={loading}
-                  className="quiz-btn"
-                >
-                  開始測驗
+      <section className="video-library-grid">
+        {videos.length === 0 ? (
+          <div className="empty-state-card">
+            <h3>還沒有影片可出題</h3>
+            <p>先到 Video 頁面加入影片，Quiz 才能依影片內容生成 AI 程式題。</p>
+          </div>
+        ) : (
+          videos.map((video) => (
+            <article key={video.id} className="video-library-card">
+              <div className="video-library-top">
+                <div className="video-library-badge">Coding Source</div>
+                <h3>{video.title || "Untitled Video"}</h3>
+                <p className="video-library-description">
+                  上傳時間：{new Date(video.created_at).toLocaleString("zh-TW")}
+                </p>
+              </div>
+              <div className="video-library-actions">
+                <button onClick={() => void generateQuiz(video)} disabled={loading} className="page-primary-button">
+                  Generate AI Coding Quiz
                 </button>
               </div>
-            ))
-          )}
-        </div>
-      </div>
+            </article>
+          ))
+        )}
+      </section>
     </div>
   );
 };

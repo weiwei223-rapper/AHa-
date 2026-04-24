@@ -1,303 +1,267 @@
-import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
-import api from "../api"
-import "./PageIndex.css"
+import { useEffect, useState } from "react";
+import api from "../api";
+import "./PageIndex.css";
 
 type UserData = {
-  id: number
-  name: string
-  email: string
-  uid: string
-  points: number
-}
+  id: number;
+  name: string;
+  email: string;
+  uid: string;
+  points: number;
+};
 
 type RechargeRecord = {
-  date: string
-  order_id: string
-  amount: number
-}
+  date: string;
+  order_id: string;
+  amount: number;
+};
 
 const rechargePlans = [
-  { title: "NT$ 299", points: 300, price: 299, caption: "最受歡迎" },
-  { title: "NT$ 599", points: 650, price: 599, caption: "超值加倍" },
-  { title: "NT$ 999", points: 1100, price: 999, caption: "高額回饋" },
-]
+  { title: "NT$ 299", points: 300, price: 299, caption: "適合短期密集練習" },
+  { title: "NT$ 599", points: 650, price: 599, caption: "常用方案，額外多送一些" },
+  { title: "NT$ 999", points: 1100, price: 999, caption: "給長期學習與大量生成使用" },
+];
 
 const Profile = () => {
-  const [activeTab, setActiveTab] = useState<"basic" | "records">("basic")
-  const [showTopup, setShowTopup] = useState(false)
-  const [user, setUser] = useState<UserData | null>(null)
+  const [activeTab, setActiveTab] = useState<"basic" | "records">("basic");
+  const [showTopup, setShowTopup] = useState(false);
+  const [user, setUser] = useState<UserData | null>(null);
   const [formValues, setFormValues] = useState({
     name: "",
     password: "",
     email: "",
     uid: "",
-  })
-  const [history, setHistory] = useState<RechargeRecord[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState("")
+  });
+  const [history, setHistory] = useState<RechargeRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
 
   const loadUser = async (id: number) => {
     try {
-      setLoading(true)
-      const userResp = await api.get(`/users/${id}`)
-      const data: UserData = userResp.data
-      setUser(data)
+      setLoading(true);
+      const userResp = await api.get(`/users/${id}`);
+      const data: UserData = userResp.data;
+      setUser(data);
       setFormValues({
         name: data.name,
         password: "",
         email: data.email,
         uid: data.uid,
-      })
-      const historyResp = await api.get(`/users/${id}/recharge-records`)
-      setHistory(historyResp.data)
-      setMessage("")
+      });
+      const historyResp = await api.get(`/users/${id}/recharge-records`);
+      setHistory(historyResp.data);
+      setMessage("");
     } catch (error) {
-      setMessage("無法連線到使用者資料，請確認後端服務是否已啟動。")
+      console.error(error);
+      setMessage("無法讀取使用者資料，請稍後再試。");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    const storedUserId = localStorage.getItem('userId');
+    const storedUserId = localStorage.getItem("userId");
     if (storedUserId) {
-      const id = parseInt(storedUserId, 10);
-      void loadUser(id);
+      void loadUser(Number(storedUserId));
     }
-  }, [])
+  }, []);
 
   const handleFieldChange = (field: string, value: string) => {
-    setFormValues((prev) => ({ ...prev, [field]: value }))
-  }
+    setFormValues((prev) => ({ ...prev, [field]: value }));
+  };
 
   const resetForm = () => {
-    if (user) {
-      setFormValues({ name: user.name, password: "", email: user.email, uid: user.uid })
+    if (!user) {
+      return;
     }
-  }
+
+    setFormValues({
+      name: user.name,
+      password: "",
+      email: user.email,
+      uid: user.uid,
+    });
+  };
 
   const handleSave = async () => {
     if (!user) {
-      return
+      return;
     }
 
     try {
-      setSaving(true)
+      setSaving(true);
       const payload: { name: string; email: string; password?: string } = {
         name: formValues.name,
         email: formValues.email,
-      }
+      };
+
       if (formValues.password.trim()) {
-        payload.password = formValues.password
+        payload.password = formValues.password;
       }
-      const resp = await api.put(`/users/${user.id}`, payload)
-      const updated = resp.data as UserData
-      setUser(updated)
-      setFormValues((prev) => ({ ...prev, password: "", name: updated.name, email: updated.email, uid: updated.uid }))
-      setMessage("個人資料已儲存。")
+
+      const resp = await api.put(`/users/${user.id}`, payload);
+      const updated = resp.data as UserData;
+      setUser(updated);
+      setFormValues({
+        name: updated.name,
+        password: "",
+        email: updated.email,
+        uid: updated.uid,
+      });
+      setMessage("個人資料已更新。");
     } catch (error) {
-      setMessage("儲存失敗，請稍後再試。")
+      console.error(error);
+      setMessage("儲存失敗，請稍後再試。");
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleRecharge = async (plan: { points: number; price: number }) => {
     if (!user) {
-      return
+      return;
     }
+
     try {
       await api.post(`/users/${user.id}/recharge`, {
         points: plan.points,
         price: plan.price,
-      })
-      await loadUser(user.id)
-      setMessage(`已新增 ${plan.points} 點儲值紀錄。`)
+      });
+      await loadUser(user.id);
+      setMessage(`已完成 ${plan.points} 點充值。`);
     } catch (error) {
-      setMessage("儲值失敗，請稍後重試。")
+      console.error(error);
+      setMessage("充值失敗，請稍後再試。");
     }
-  }
-
-  const handleBack = () => {
-    setShowTopup(false)
-    setActiveTab("basic")
-  }
+  };
 
   if (loading) {
-    return (
-      <div className="profile-page">
-        <div className="profile-loading">載入中...</div>
-      </div>
-    )
+    return <div className="page-loading">正在讀取個人資料...</div>;
   }
 
   return (
-    <div className="profile-page">
-      <div className="profile-header-row">
-        <Link to="/" className="back-button">
-          ◀ 返回首頁
-        </Link>
+    <div className="page-shell">
+      <section className="page-hero">
         <div>
-          <h2 className="profile-title">個人資料管理</h2>
-          <div className="profile-tabs">
+          <div className="page-eyebrow">Account Center</div>
+          <h1>個人資料與點數中心</h1>
+          <p>管理帳戶資訊、可用點數與充值紀錄。整體介面已與 Chat 工作台使用同一套視覺語言。</p>
+        </div>
+        <div className="page-hero-metric">
+          <span>Current Points</span>
+          <strong>{user?.points ?? 0}</strong>
+          <p>可用於 AI 聊天與學習流程</p>
+        </div>
+      </section>
+
+      {message ? <div className="page-info-banner">{message}</div> : null}
+
+      <section className="panel-card">
+        <div className="profile-toolbar">
+          <div className="profile-tab-row">
             <button
               type="button"
-              className={`tab-button ${activeTab === "basic" ? "active" : ""}`}
+              className={`profile-tab-button ${activeTab === "basic" && !showTopup ? "active" : ""}`}
               onClick={() => {
-                setActiveTab("basic")
-                setShowTopup(false)
+                setActiveTab("basic");
+                setShowTopup(false);
               }}
             >
-              基本資料
+              Basic Info
             </button>
             <button
               type="button"
-              className={`tab-button ${activeTab === "records" ? "active" : ""}`}
+              className={`profile-tab-button ${activeTab === "records" && !showTopup ? "active" : ""}`}
               onClick={() => {
-                setActiveTab("records")
-                setShowTopup(false)
+                setActiveTab("records");
+                setShowTopup(false);
               }}
             >
-              儲值紀錄
+              Recharge Records
+            </button>
+            <button
+              type="button"
+              className={`profile-tab-button ${showTopup ? "active" : ""}`}
+              onClick={() => setShowTopup(true)}
+            >
+              Top Up
             </button>
           </div>
         </div>
-      </div>
 
-      {message ? <div className="message-bar">{message}</div> : null}
+        {showTopup ? (
+          <div className="profile-topup-layout">
+            <div className="profile-balance-card">
+              <span>Available Balance</span>
+              <strong>{user?.points ?? 0}</strong>
+              <p>選擇方案後會立即更新到帳戶。</p>
+            </div>
 
-      {showTopup ? (
-        <div className="topup-view">
-          <div className="topup-banner">
-            <div className="banner-label">目前點數餘額</div>
-            <div className="banner-value">{user?.points ?? 0}</div>
-          </div>
-
-          <section className="topup-section">
-            <h3>儲值方案</h3>
-            <div className="plan-cards">
+            <div className="profile-plan-grid">
               {rechargePlans.map((plan) => (
-                <div key={plan.title} className="plan-card">
-                  <div className="plan-copy">
-                    <strong>{plan.points} 點</strong>
-                    <span>{plan.title}</span>
-                    <small>{plan.caption}</small>
+                <article key={plan.title} className="profile-plan-card">
+                  <div>
+                    <div className="profile-plan-points">{plan.points} points</div>
+                    <h3>{plan.title}</h3>
+                    <p>{plan.caption}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="action-button blue"
-                    onClick={() => handleRecharge(plan)}
-                  >
-                    立即儲值
+                  <button className="page-primary-button" onClick={() => void handleRecharge(plan)}>
+                    Recharge
                   </button>
-                </div>
+                </article>
               ))}
             </div>
-          </section>
-
-          <section className="history-section">
-            <h3>儲值紀錄</h3>
-            <div className="history-table-wrap">
-              <table className="history-table">
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th>訂單編號</th>
-                    <th>交易金額</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((record) => (
-                    <tr key={record.order_id}>
-                      <td>{record.date}</td>
-                      <td>{record.order_id}</td>
-                      <td>{record.amount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <div className="bottom-actions">
-            <button type="button" className="secondary-btn" onClick={handleBack}>
-              返回基本資料
-            </button>
           </div>
-        </div>
-      ) : activeTab === "basic" ? (
-        <div className="basic-section">
-          <div className="profile-card">
-            <div className="profile-summary">
-              <div className="avatar">{user?.name.charAt(0).toUpperCase()}</div>
-              <div className="account-info">
-                <div className="account-name">{user?.name}</div>
-                <div className="account-email">{user?.email}</div>
+        ) : activeTab === "basic" ? (
+          <div className="profile-content-grid">
+            <div className="profile-summary-card">
+              <div className="profile-avatar">{user?.name?.charAt(0).toUpperCase() || "U"}</div>
+              <div>
+                <h2>{user?.name}</h2>
+                <p>{user?.email}</p>
+                <span>UID: {user?.uid}</span>
               </div>
             </div>
 
-            <div className="profile-form">
+            <div className="profile-form-grid">
               <label>
-                姓名
-                <input
-                  value={formValues.name}
-                  onChange={(e) => handleFieldChange("name", e.target.value)}
-                />
+                Name
+                <input value={formValues.name} onChange={(e) => handleFieldChange("name", e.target.value)} />
               </label>
               <label>
-                密碼
+                Email
+                <input type="email" value={formValues.email} onChange={(e) => handleFieldChange("email", e.target.value)} />
+              </label>
+              <label>
+                New Password
                 <input
                   type="password"
                   value={formValues.password}
                   onChange={(e) => handleFieldChange("password", e.target.value)}
-                  placeholder="留空則維持原密碼"
-                />
-              </label>
-              <label>
-                電子郵件
-                <input
-                  type="email"
-                  value={formValues.email}
-                  onChange={(e) => handleFieldChange("email", e.target.value)}
+                  placeholder="留空則不更新密碼"
                 />
               </label>
               <label>
                 UID
                 <input value={formValues.uid} readOnly />
               </label>
-              <div className="points-row">
-                <div>
-                  <span className="field-label">目前點數</span>
-                  <div className="points-value-small">{user?.points ?? 0}</div>
-                </div>
-                <button type="button" className="topup-button" onClick={() => setShowTopup(true)}>
-                  儲值點數
+              <div className="profile-action-row">
+                <button className="page-primary-button" onClick={() => void handleSave()} disabled={saving}>
+                  {saving ? "Saving..." : "Save Changes"}
                 </button>
+                <button className="page-secondary-button" onClick={resetForm}>Reset</button>
               </div>
             </div>
           </div>
-
-          <div className="action-row">
-            <button type="button" className="primary-btn" onClick={handleSave} disabled={saving}>
-              {saving ? "儲存中..." : "儲存變更"}
-            </button>
-            <button type="button" className="secondary-btn" onClick={resetForm}>
-              取消
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="record-section">
-          <h3>儲值紀錄</h3>
-          <div className="history-table-wrap">
-            <table className="history-table">
+        ) : (
+          <div className="profile-record-table-wrap">
+            <table className="profile-record-table">
               <thead>
                 <tr>
-                  <th>日期</th>
-                  <th>訂單編號</th>
-                  <th>交易金額</th>
+                  <th>Date</th>
+                  <th>Order ID</th>
+                  <th>Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -311,10 +275,10 @@ const Profile = () => {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </section>
     </div>
-  )
-}
+  );
+};
 
-export default Profile
+export default Profile;

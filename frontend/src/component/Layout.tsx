@@ -5,9 +5,7 @@ interface LayoutProps {
 }
 
 const navClassName = ({ isActive }: { isActive: boolean }) =>
-  `block px-4 py-3 rounded-lg hover:bg-gray-800 transition-colors ${
-    isActive ? "bg-gray-800 font-semibold" : ""
-  }`;
+  `workspace-nav-link ${isActive ? "active" : ""}`;
 
 const Layout = ({ onLogout }: LayoutProps) => {
   const navigate = useNavigate();
@@ -19,32 +17,30 @@ const Layout = ({ onLogout }: LayoutProps) => {
   };
 
   return (
-    <div>
-      <nav className="sidenav">
-        <NavLink to="./" className={navClassName}>
-          Home
-        </NavLink>
-        <NavLink to="./Video" className={navClassName}>
-          Video
-        </NavLink>
-        <NavLink to="./Profile" className={navClassName}>
-          Profile
-        </NavLink>
-        <NavLink to="./Quiz" className={navClassName}>
-          Quiz
-        </NavLink>
-        <NavLink to="./Chat" className={navClassName}>
-          Chat
-        </NavLink>
+    <div className="workspace-shell">
+      <nav className="workspace-sidebar">
+        <div className="workspace-brand">
+          <div className="workspace-brand-mark">A</div>
+          <div>
+            <strong>AHa</strong>
+            <span>AI Learning Hub</span>
+          </div>
+        </div>
 
-        <button
-          onClick={handleLogout}
-          className="w-full text-left px-4 py-3 rounded-lg hover:bg-red-600 transition-colors text-red-400 hover:text-white font-semibold mt-4"
-        >
+        <div className="workspace-nav-group">
+          <NavLink to="./" className={navClassName}>Home</NavLink>
+          <NavLink to="./Video" className={navClassName}>Video</NavLink>
+          <NavLink to="./Profile" className={navClassName}>Profile</NavLink>
+          <NavLink to="./Quiz" className={navClassName}>Quiz</NavLink>
+          <NavLink to="./Chat" className={navClassName}>Chat</NavLink>
+        </div>
+
+        <button onClick={handleLogout} className="workspace-logout-button">
           Logout
         </button>
       </nav>
-      <main className="main">
+
+      <main className="workspace-main">
         <Outlet />
       </main>
     </div>

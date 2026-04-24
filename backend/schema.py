@@ -19,10 +19,12 @@ class QuizQuestion(BaseModel):
     question: str
     options: List[str]
     correct_answer: int  # Index of correct option
+    explanation: Optional[str] = None
 
 class QuizResponse(BaseModel):
     video_id: int
     video_title: str
+    quiz_type: str = "ai-coding"
     questions: List[QuizQuestion]
 
 class QuizResultCreate(BaseModel):

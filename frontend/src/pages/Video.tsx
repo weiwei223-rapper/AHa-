@@ -1,5 +1,5 @@
 import "./PageIndex.css";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../api";
 
@@ -10,11 +10,11 @@ type Video = {
   created_at: string;
 };
 
-type VideoStausProps = {
-  VideoName: string;   // 你原本傳的 prop，暫時保留（之後可移除）
+type VideoStatusProps = {
+  VideoName: string;
 };
 
-const Video = (_props: VideoStausProps) => {
+const Video = (_props: VideoStatusProps) => {
   const navigate = useNavigate();
   const [videoLink, setVideoLink] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
@@ -23,35 +23,29 @@ const Video = (_props: VideoStausProps) => {
   const [generatingQuizId, setGeneratingQuizId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
-  // Debug: Log API base URL
   useEffect(() => {
-    console.log("API_BASE_URL:", API_BASE_URL);
-  }, []);
-
-  // 載入時取得已上傳的影片列表
-  useEffect(() => {
-    fetchVideos();
+    void fetchVideos();
   }, []);
 
   const fetchVideos = async () => {
     try {
-      console.log("Fetching videos from:", `${API_BASE_URL}/api/videos`);
       const res = await fetch(`${API_BASE_URL}/api/videos`);
-      console.log("Response status:", res.status);
-      if (!res.ok) throw new Error(`HTTP ${res.status}: 無法取得影片列表`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
       const data: Video[] = await res.json();
-      console.log("Received data:", data);
       setVideos(data);
-      setError(""); // Clear error on success
+      setError("");
     } catch (err: any) {
       console.error("Error fetching videos:", err);
-      setError(`載入影片失敗: ${err.message}`);
+      setError(`載入影片失敗：${err.message}`);
     }
   };
 
   const handleUpload = async () => {
     if (!videoLink.trim()) {
-      alert("請輸入影片連結！");
+      setError("請先輸入影片連結。");
       return;
     }
 
@@ -62,35 +56,31 @@ const Video = (_props: VideoStausProps) => {
       const res = await fetch(`${API_BASE_URL}/api/videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           video_link: videoLink,
-          title: videoTitle.trim() || null
+          title: videoTitle.trim() || null,
         }),
       });
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.detail || "上傳失敗");
+        throw new Error(err.detail || "新增影片失敗");
       }
 
       const newVideo: Video = await res.json();
-
-      // 即時更新頁面
       setVideos((prev) => [newVideo, ...prev]);
-      setVideoLink("");           // 清空輸入框
-      setVideoTitle("");          // 清空標題輸入框
-      alert("✅ 影片連結上傳成功！");
+      setVideoLink("");
+      setVideoTitle("");
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "上傳發生錯誤");
-      alert(err.message || "上傳失敗，請稍後再試");
+      setError(err.message || "新增影片時發生錯誤");
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (videoId: number) => {
-    if (!confirm("確定要刪除這個影片嗎？")) {
+    if (!confirm("確定要刪除這支影片嗎？")) {
       return;
     }
 
@@ -100,107 +90,104 @@ const Video = (_props: VideoStausProps) => {
       });
 
       if (!res.ok) {
-        throw new Error("刪除失敗");
+        throw new Error("刪除影片失敗");
       }
 
-      // 即時更新頁面
-      setVideos((prev) => prev.filter(video => video.id !== videoId));
-      alert("✅ 影片已刪除！");
-    } catch (err: any) {
+      setVideos((prev) => prev.filter((video) => video.id !== videoId));
+    } catch (err) {
       console.error(err);
-      alert("刪除失敗，請稍後再試");
+      setError("刪除影片時發生錯誤。");
     }
   };
 
   const handleGenerateQuiz = async (videoId: number) => {
     setGeneratingQuizId(videoId);
-    try {
-      // Navigate to Quiz page with the video ID
-      navigate(`/Quiz?videoId=${videoId}`);
-    } catch (err: any) {
-      console.error(err);
-      alert("無法生成測驗，請稍後再試");
-    } finally {
-      setGeneratingQuizId(null);
-    }
+    navigate(`/Quiz?videoId=${videoId}`);
+    setGeneratingQuizId(null);
   };
 
   return (
-    <div className="main">
-      <div>
-        <h1>Learning Material</h1>
-      </div>
+    <div className="page-shell">
+      <section className="page-hero">
+        <div>
+          <div className="page-eyebrow">Video Library</div>
+          <h1>影片素材工作台</h1>
+          <p>上傳 YouTube 影片後，Chat 可使用影片內容回答問題，Quiz 也會依完整影片內容生成 AI 程式題。</p>
+        </div>
+        <div className="page-hero-metric">
+          <span>Library Size</span>
+          <strong>{videos.length}</strong>
+          <p>支影片可供 AI 分析</p>
+        </div>
+      </section>
 
-      <div className="upload-section">
-        <input
-          type="text"
-          value={videoTitle}
-          onChange={(e) => setVideoTitle(e.target.value)}
-          placeholder="影片標題 (選填)"
-          className="video-input"
-        />
-        <input
-          type="text"
-          id="VideoID"
-          value={videoLink}
-          onChange={(e) => setVideoLink(e.target.value)}
-          placeholder="影片連結 (https://...)"
-          className="video-input"
-        />
-        <button onClick={handleUpload} disabled={loading}>
-          <span>{loading ? "上傳中..." : "上傳影片連結"}</span>
-        </button>
-      </div>
+      <section className="panel-card">
+        <div className="panel-header">
+          <div>
+            <div className="page-eyebrow">Upload Source</div>
+            <h2>新增學習影片</h2>
+          </div>
+        </div>
+        <div className="video-upload-grid">
+          <input
+            type="text"
+            value={videoTitle}
+            onChange={(e) => setVideoTitle(e.target.value)}
+            placeholder="影片標題（可選）"
+          />
+          <input
+            type="text"
+            value={videoLink}
+            onChange={(e) => setVideoLink(e.target.value)}
+            placeholder="YouTube 影片連結"
+          />
+          <button onClick={handleUpload} disabled={loading} className="page-primary-button">
+            {loading ? "Uploading..." : "Add Video"}
+          </button>
+        </div>
+        {error && <div className="page-error">{error}</div>}
+      </section>
 
-      {error && <p className="error">{error}</p>}
-
-      <div className="video-container">
+      <section className="video-library-grid">
         {videos.length === 0 ? (
-          <p className="no-video">目前還沒有上傳任何影片</p>
+          <div className="empty-state-card">
+            <h3>目前還沒有影片</h3>
+            <p>先加入一支 YouTube 影片，系統才能生成聊天上下文與 AI 程式測驗。</p>
+          </div>
         ) : (
           videos.map((video) => (
-            <div key={video.id} className="box">
-              <a
-                href={video.video_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="video-link"
-              >
-                {video.title || "未命名影片"}
-              </a>
-              <p className="video-time">
-                上傳時間：{new Date(video.created_at + 'Z').toLocaleString("zh-TW")}
-              </p>
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button 
+            <article key={video.id} className="video-library-card">
+              <div className="video-library-top">
+                <div className="video-library-badge">AI Source</div>
+                <h3>{video.title || "Untitled Video"}</h3>
+                <a
+                  href={video.video_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="video-library-link"
+                >
+                  {video.video_link}
+                </a>
+              </div>
+              <div className="video-library-meta">
+                Added at {new Date(`${video.created_at}Z`).toLocaleString("zh-TW")}
+              </div>
+              <div className="video-library-actions">
+                <button
                   onClick={() => handleGenerateQuiz(video.id)}
                   disabled={generatingQuizId === video.id}
-                  className="quiz-btn"
-                  style={{
-                    backgroundColor: "#4CAF50",
-                    color: "white",
-                    padding: "8px 16px",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: generatingQuizId === video.id ? "not-allowed" : "pointer",
-                    opacity: generatingQuizId === video.id ? 0.6 : 1,
-                  }}
+                  className="page-primary-button"
                 >
-                  {generatingQuizId === video.id ? "⏳ 生成中..." : "📝 生成測驗"}
+                  {generatingQuizId === video.id ? "Opening..." : "Generate AI Quiz"}
                 </button>
-                <button 
-                  onClick={() => handleDelete(video.id)} 
-                  className="delete-btn"
-                >
-                  刪除
+                <button onClick={() => handleDelete(video.id)} className="page-danger-button">
+                  Delete
                 </button>
               </div>
-            </div>
+            </article>
           ))
         )}
-      </div>
-
-      
+      </section>
     </div>
   );
 };

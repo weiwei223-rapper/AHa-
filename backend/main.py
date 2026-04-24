@@ -322,6 +322,7 @@ def generate_quiz(video_id: int, db: Session = Depends(database.get_db)):
         return schema.QuizResponse(
             video_id=video.id,
             video_title=title,
+            quiz_type="ai-coding",
             questions=questions
         )
     except Exception as e:
@@ -331,6 +332,7 @@ def generate_quiz(video_id: int, db: Session = Depends(database.get_db)):
         return schema.QuizResponse(
             video_id=video.id,
             video_title=title,
+            quiz_type="ai-coding",
             questions=questions
         )
 

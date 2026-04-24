@@ -9,17 +9,12 @@ type UserStatusProps = {
 
 type Video = {
   id: number;
-  video_link: string;
-  title?: string | null;
-  created_at: string;
 };
 
 type QuizResult = {
   videoId: number;
   score: number;
   totalQuestions: number;
-  percentage: number;
-  completedAt: string;
 };
 
 type HomeStats = {
@@ -78,7 +73,6 @@ const Home = ({ name }: UserStatusProps) => {
 
   const getPoints = async () => {
     const userId = localStorage.getItem("userId");
-
     if (!userId) {
       return readStoredUserPoints();
     }
@@ -125,46 +119,69 @@ const Home = ({ name }: UserStatusProps) => {
 
   const cards = [
     {
-      label: "學習影片",
+      label: "Uploaded Videos",
       value: stats.videoCount.toString(),
-      hint: "參照 Video 頁面的影片列表",
+      hint: "管理已上傳的學習影片與教材來源",
       to: "/Video",
     },
     {
-      label: "剩餘點數",
+      label: "Available Points",
       value: stats.points.toString(),
-      hint: "參照 Profile 頁面的點數資料",
+      hint: "查看帳戶點數與充值紀錄",
       to: "/Profile",
     },
     {
-      label: "完成測驗",
+      label: "Quiz Completed",
       value: stats.completedQuizCount.toString(),
-      hint: "參照 Quiz 頁面的作答紀錄",
+      hint: "回看完成的 AI 程式測驗次數",
       to: "/Quiz",
     },
     {
-      label: "平均正確率",
+      label: "Average Accuracy",
       value: `${stats.averageAccuracy}%`,
-      hint: "參照 Quiz 頁面的歷次成績",
+      hint: "追蹤最近作答的正確率變化",
       to: "/Quiz",
     },
   ];
 
   return (
-    <div className="main">
-      <div className="Welcome">
-        <h1>Welcome Back, {name}!</h1>
-      </div>
+    <div className="dashboard-page">
+      <section className="dashboard-hero">
+        <div className="dashboard-hero-copy">
+          <div className="page-eyebrow">AHa Learning Workspace</div>
+          <h1>Welcome back, {name}</h1>
+          <p>
+            從影片、聊天到 AI 程式測驗，這裡是你目前的學習總覽。先看進度，再決定下一步要補哪一段。
+          </p>
+        </div>
+        <div className="dashboard-highlight-card">
+          <span>Study Snapshot</span>
+          <strong>{stats.videoCount}</strong>
+          <p>支影片已可用來生成聊天上下文與 AI 程式題。</p>
+        </div>
+      </section>
 
-      <div className="home-stats-grid">
+      <section className="dashboard-grid">
         {cards.map((card) => (
-          <Link key={card.label} to={card.to} className="home-stat-card">
-            <span className="home-stat-label">{card.label}</span>
-            <span className="home-stat-value">{card.value}</span>
-            <span className="home-stat-hint">{card.hint}</span>
+          <Link key={card.label} to={card.to} className="dashboard-stat-card">
+            <span className="dashboard-stat-label">{card.label}</span>
+            <strong className="dashboard-stat-value">{card.value}</strong>
+            <span className="dashboard-stat-hint">{card.hint}</span>
           </Link>
         ))}
-      </div>
+      </section>
+
+      <section className="dashboard-action-band">
+        <div className="dashboard-action-copy">
+          <div className="page-eyebrow">Next Move</div>
+          <h2>先上傳影片，再讓 AI 依完整內容出題</h2>
+          <p>新的 Quiz 流程會優先根據影片逐字稿，生成偏程式理解、除錯與流程推理的題目。</p>
+        </div>
+        <div className="dashboard-action-links">
+          <Link to="/Video" className="dashboard-primary-link">Upload Video</Link>
+          <Link to="/Quiz" className="dashboard-secondary-link">Open Quiz</Link>
+        </div>
+      </section>
     </div>
   );
 };
