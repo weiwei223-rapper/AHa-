@@ -1,13 +1,18 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
+import os
 
 import bcrypt
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
+
+# Load environment variables
+load_dotenv()
 
 try:
     from . import ai_analyzer, database, models, schema
@@ -16,6 +21,7 @@ except ImportError:
     import database
     import models
     import schema
+
 
 def extract_youtube_title(url: str) -> str:
     """Extract a meaningful title from YouTube URL"""
@@ -37,6 +43,7 @@ def extract_youtube_title(url: str) -> str:
     except:
         return "YouTube 影片"
 
+
 # Password hashing functions - define early so they can be used in startup
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""
@@ -44,9 +51,11 @@ def hash_password(password: str) -> str:
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
 
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password"""
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -80,16 +89,20 @@ async def lifespan(app: FastAPI):
     # Shutdown
     # Add any cleanup code here if needed
 
+
 app = FastAPI(lifespan=lifespan)
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176", "http://localhost:3000"],  # Frontend URLs
+    allow_origins=["http://localhost:5173", "http://localhost:5173/", "http://localhost:5174", "http://localhost:5174/",
+                   "http://localhost:5175", "http://localhost:5175/", "http://localhost:5176", "http://localhost:5176/",
+                   "http://localhost:3000", "http://localhost:3000/"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 class UserResponse(BaseModel):
     id: int
@@ -101,14 +114,17 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class UserUpdate(BaseModel):
     name: str
     email: str
     password: Optional[str] = None
 
+
 class RechargeRequest(BaseModel):
     points: int
     price: int
+
 
 class RechargeRecordResponse(BaseModel):
     date: str
@@ -118,29 +134,36 @@ class RechargeRecordResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
 
+
 class LoginRequest(BaseModel):
     email: str
     password: str
+
 
 class LoginResponse(BaseModel):
     user: UserResponse
     message: str
 
+
 class ChatMessage(BaseModel):
     role: str
     content: str
+
 
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
 
+
 class ChatResponse(BaseModel):
     reply: str
+
 
 @app.post("/auth/register", response_model=UserResponse)
 def register_user(payload: RegisterRequest, db: Session = Depends(database.get_db)):
@@ -148,13 +171,13 @@ def register_user(payload: RegisterRequest, db: Session = Depends(database.get_d
     existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="該電子郵件已被使用")
-    
+
     # Generate UID with current date
     uid = f"UID-{datetime.utcnow():%Y%m%d%H%M}"
-    
+
     # Hash the password
     hashed_password = hash_password(payload.password)
-    
+
     new_user = models.User(
         name=payload.name,
         email=payload.email,
@@ -167,21 +190,23 @@ def register_user(payload: RegisterRequest, db: Session = Depends(database.get_d
     db.refresh(new_user)
     return new_user
 
+
 @app.post("/auth/login", response_model=LoginResponse)
 def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
-    
+
     if not user:
         raise HTTPException(status_code=401, detail="電子郵件或密碼錯誤")
-    
+
     # Verify the password using bcrypt
     if not verify_password(payload.password, user.password):
         raise HTTPException(status_code=401, detail="電子郵件或密碼錯誤")
-    
+
     return {
         "user": user,
         "message": f"歡迎回來，{user.name}！"
     }
+
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
@@ -215,12 +240,14 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
         reply = ai_analyzer.generate_transcript_fallback_reply(user_message, video_context)
         return ChatResponse(reply=reply)
 
+
 @app.get("/users/{user_id}", response_model=UserResponse)
 def read_user(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="找不到該用戶")
     return user
+
 
 @app.put("/users/{user_id}", response_model=UserResponse)
 def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(database.get_db)):
@@ -237,6 +264,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(databas
     db.refresh(user)
     return user
 
+
 @app.get("/users/{user_id}/recharge-records", response_model=List[RechargeRecordResponse])
 def read_recharge_records(user_id: int, db: Session = Depends(database.get_db)):
     records = (
@@ -246,6 +274,7 @@ def read_recharge_records(user_id: int, db: Session = Depends(database.get_db)):
         .all()
     )
     return records
+
 
 @app.post("/users/{user_id}/recharge", response_model=RechargeRecordResponse)
 def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(database.get_db)):
@@ -267,11 +296,13 @@ def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(
     db.refresh(user)
     return record
 
+
 # Videos API
 @app.get("/api/videos", response_model=List[schema.VideoResponse])
 def get_videos(db: Session = Depends(database.get_db)):
     videos = db.query(models.Video).order_by(models.Video.id.desc()).all()
     return videos
+
 
 @app.post("/api/videos", response_model=schema.VideoResponse)
 def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get_db)):
@@ -290,6 +321,7 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
     db.refresh(video)
     return video
 
+
 @app.delete("/api/videos/{video_id}")
 def delete_video(video_id: int, db: Session = Depends(database.get_db)):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
@@ -298,6 +330,7 @@ def delete_video(video_id: int, db: Session = Depends(database.get_db)):
     db.delete(video)
     db.commit()
     return {"message": "影片已刪除"}
+
 
 # Quiz API
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
@@ -310,10 +343,10 @@ def generate_quiz(video_id: int, db: Session = Depends(database.get_db)):
     try:
         title = video.title or "未命名影片"
         video_link = video.video_link
-        
+
         # Use AI analyzer to generate quiz questions based on video content
         questions = ai_analyzer.analyze_video_content_with_ai(video_link, title)
-        
+
         return schema.QuizResponse(
             video_id=video.id,
             video_title=title,
@@ -346,6 +379,7 @@ def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(d
     db.commit()
     db.refresh(quiz_result)
     return quiz_result
+
 
 @app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)
 def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
