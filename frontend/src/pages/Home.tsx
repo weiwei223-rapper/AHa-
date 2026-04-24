@@ -166,7 +166,6 @@ const Home = ({ name }: UserStatusProps) => {
           <Link key={card.label} to={card.to} className="dashboard-stat-card">
             <span className="dashboard-stat-label">{card.label}</span>
             <strong className="dashboard-stat-value">{card.value}</strong>
-            <span className="dashboard-stat-hint">{card.hint}</span>
           </Link>
         ))}
       </section>
