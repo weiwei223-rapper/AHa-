@@ -10,7 +10,7 @@ load_dotenv()
 # 請設置環境變數 DATABASE_URL，例如: postgresql://user:password@localhost:5432/yourdb
 SQLALCHEMY_DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:mars940223@localhost:5432/AHaSQL"
+    "postgresql://postgres:postgres@localhost:5432/postgres"
 )
 
 # PostgreSQL 和 SQLite 使用不同的連接參數
