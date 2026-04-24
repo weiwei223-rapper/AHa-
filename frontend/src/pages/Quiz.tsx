@@ -1,7 +1,8 @@
 import "./PageIndex.css";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { API_BASE_URL } from "../api";
+import { API_BASE_URL, codeAPI } from "../api";
+import Editor from "@monaco-editor/react";
 
 type Video = {
   id: number;
@@ -46,6 +47,12 @@ const Quiz = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resultSaved, setResultSaved] = useState(false);
+
+  // Code editor state
+  const [code, setCode] = useState("# Write your Python code here\nprint('Hello, World!')");
+  const [codeOutput, setCodeOutput] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [codeLoading, setCodeLoading] = useState(false);
 
   useEffect(() => {
     void fetchVideos();
@@ -190,6 +197,23 @@ const Quiz = () => {
     setResultSaved(false);
   };
 
+  const executeCode = async () => {
+    setCodeLoading(true);
+    setCodeOutput("");
+    setCodeError("");
+
+    try {
+      const response = await codeAPI.executeCode({ code });
+      setCodeOutput(response.data.output);
+      setCodeError(response.data.error);
+    } catch (error: any) {
+      console.error('Error executing code:', error);
+      setCodeError(error.response?.data?.detail || 'Failed to execute code');
+    } finally {
+      setCodeLoading(false);
+    }
+  };
+
   if (showResults && quiz) {
     const score = calculateScore();
     const totalQuestions = quiz.questions.length;
@@ -270,7 +294,7 @@ const Quiz = () => {
               {currentQuestion.options.map((option, index) => (
                 <label
                   key={index}
-                  className={`quiz-option-tile ${selectedAnswers[currentQuestionIndex] === index ? "selected" : ""}`}
+                  className={`quiz-option-tile code-option ${selectedAnswers[currentQuestionIndex] === index ? "selected" : ""}`}
                 >
                   <input
                     type="radio"
@@ -279,7 +303,7 @@ const Quiz = () => {
                     checked={selectedAnswers[currentQuestionIndex] === index}
                     onChange={() => handleAnswerSelect(currentQuestionIndex, index)}
                   />
-                  <span>{option}</span>
+                  <pre className="code-snippet">{option}</pre>
                 </label>
               ))}
             </div>
@@ -319,6 +343,49 @@ const Quiz = () => {
 
       {error && <div className="page-error">{error}</div>}
       {loading && <div className="page-loading">AI 正在讀取影片並生成程式題...</div>}
+
+      {/* Code Editor Section - Always visible */}
+      <section className="panel-card">
+        <h3>程式碼編輯器</h3>
+        <p>在這裡寫並執行 Python 程式碼來練習程式設計。</p>
+        <div style={{ height: '300px', border: '1px solid #ccc', marginBottom: '10px' }}>
+          <Editor
+            height="100%"
+            language="python"
+            value={code}
+            onChange={(value) => setCode(value || "")}
+            theme="vs-light"
+            options={{
+              minimap: { enabled: false },
+              fontSize: 14,
+              lineNumbers: 'on',
+              roundedSelection: false,
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+            }}
+          />
+        </div>
+        <div className="quiz-nav-row">
+          <button onClick={executeCode} disabled={codeLoading} className="page-primary-button">
+            {codeLoading ? "執行中..." : "執行程式碼"}
+          </button>
+        </div>
+        {(codeOutput || codeError) && (
+          <div style={{ marginTop: '10px' }}>
+            <h4>輸出結果：</h4>
+            {codeOutput && (
+              <pre style={{ backgroundColor: '#f0f0f0', padding: '10px', borderRadius: '4px', marginBottom: '10px', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                {codeOutput}
+              </pre>
+            )}
+            {codeError && (
+              <pre style={{ backgroundColor: '#ffe6e6', color: '#d32f2f', padding: '10px', borderRadius: '4px', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                {codeError}
+              </pre>
+            )}
+          </div>
+        )}
+      </section>
 
       <section className="video-library-grid">
         {videos.length === 0 ? (

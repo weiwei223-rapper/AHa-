@@ -27,11 +27,14 @@ export const userAPI = {
     api.post(`/users/${userId}/recharge`, data),
 };
 
+export const codeAPI = {
+  executeCode: (data: { code: string }) =>
+    api.post('/api/execute-code', data),
+};
+
 export const chatAPI = {
-  sendMessage: (data: {
-    message: string;
-    history: Array<{ role: string; content: string }>;
-  }) => api.post('/api/chat', data),
+  sendMessage: (data: { message: string; history: { role: string; content: string }[] }) =>
+    api.post('/api/chat', data),
 };
 
 export default api;

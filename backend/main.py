@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
+import subprocess
+import sys
+import tempfile
 import os
 
 import bcrypt
@@ -147,6 +150,13 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
 
+class CodeExecutionRequest(BaseModel):
+    code: str
+
+class CodeExecutionResponse(BaseModel):
+    output: str
+    error: str
+
 @app.post("/auth/register", response_model=UserResponse)
 def register_user(payload: RegisterRequest, db: Session = Depends(database.get_db)):
     # Check if email already exists
@@ -219,6 +229,38 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
         print(f"Error chatting with Gemini: {e}")
         reply = ai_analyzer.generate_transcript_fallback_reply(user_message, video_context)
         return ChatResponse(reply=reply)
+
+@app.post("/api/execute-code", response_model=CodeExecutionResponse)
+def execute_code(payload: CodeExecutionRequest):
+    """Execute Python code and return output"""
+    try:
+        # Create a temporary file for the code
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(payload.code)
+            temp_file = f.name
+
+        try:
+            # Execute the code
+            result = subprocess.run(
+                [sys.executable, temp_file],
+                capture_output=True,
+                text=True,
+                timeout=10,  # 10 second timeout
+                cwd=os.path.dirname(temp_file)
+            )
+
+            output = result.stdout
+            error = result.stderr
+
+            return CodeExecutionResponse(output=output, error=error)
+        finally:
+            # Clean up the temporary file
+            os.unlink(temp_file)
+
+    except subprocess.TimeoutExpired:
+        return CodeExecutionResponse(output="", error="Code execution timed out")
+    except Exception as e:
+        return CodeExecutionResponse(output="", error=f"Execution error: {str(e)}")
 
 @app.get("/users/{user_id}", response_model=UserResponse)
 def read_user(user_id: int, db: Session = Depends(database.get_db)):

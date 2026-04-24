@@ -1519,6 +1519,31 @@ body {
   margin-top: 4px;
 }
 
+.code-snippet {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #e6f3ff;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(43, 193, 241, 0.2);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  flex: 1;
+  margin: 0;
+}
+
+.code-option {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.code-option input {
+  align-self: flex-start;
+  margin-bottom: 8px;
+}
+
 .quiz-score-band {
   display: grid;
   gap: 8px;

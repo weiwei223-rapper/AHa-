@@ -321,6 +321,7 @@ def analyze_video_content_with_ai(video_link: str, title: str) -> list[schema.Qu
     transcript = fetch_video_transcript(video_link)
     prompt = f"""
 You are generating a programming quiz in Traditional Chinese for a learner who watched a full video.
+Reference the MBPP (Mostly Basic Python Problems) dataset format, but adapt questions to the video content.
 
 Video Title: {title}
 Video Link: {video_link}
@@ -328,18 +329,32 @@ Full Transcript:
 {transcript or "Transcript unavailable."}
 
 Output requirements:
-1. Generate exactly 5 multiple-choice questions.
-2. Every question must be about programming concepts, code reasoning, debugging, execution flow, syntax, APIs, tools, or practical development decisions mentioned or implied by the transcript.
-3. Do not generate generic opinion or surface-level video questions.
-4. At least 3 questions must require reasoning about code behavior, debugging, or implementation choices.
-5. Each question must have exactly 4 options.
+1. Generate exactly 5 multiple-choice questions in MBPP style.
+2. Each question should be about implementing a small Python function or solving a coding problem mentioned or implied in the video.
+3. Questions should test understanding of programming concepts, algorithms, data structures, or code patterns from the video.
+4. Each question must have exactly 4 options, where one option is the correct Python code solution.
+5. The other 3 options should be plausible but incorrect variations (common mistakes, syntax errors, logic errors).
 6. Include these fields in every item:
-   - question: string
-   - options: array of 4 strings
-   - correct_answer: integer 0-3
-   - explanation: short Traditional Chinese explanation grounded in the video
-7. If the transcript is unavailable, infer likely beginner programming topics from the title and still generate coding-related questions.
-8. Return ONLY a valid JSON array. No markdown. No extra prose.
+   - question: string describing the coding task (e.g., "Write a function that...")
+   - options: array of 4 strings, each being a complete Python code snippet
+   - correct_answer: integer 0-3 pointing to the correct code
+   - explanation: short Traditional Chinese explanation of why the correct answer is right and others are wrong
+7. Focus on practical coding problems that would be covered in programming tutorials.
+8. If transcript is unavailable, generate basic Python problems that beginners might encounter.
+9. Return ONLY a valid JSON array. No markdown. No extra prose.
+
+Example question format:
+{{
+  "question": "寫一個函數來計算列表中所有正數的總和",
+  "options": [
+    "def sum_positive(numbers):\\n    return sum(x for x in numbers if x > 0)",
+    "def sum_positive(numbers):\\n    total = 0\\n    for x in numbers:\\n        if x > 0:\\n            total += x\\n    return total",
+    "def sum_positive(numbers):\\n    return sum(numbers)",
+    "def sum_positive(numbers):\\n    return max(numbers)"
+  ],
+  "correct_answer": 1,
+  "explanation": "正確答案使用了迴圈來檢查每個數字是否為正數並累加，這是標準的過濾和求和方法。"
+}}
 """
     try:
         response_text = generate_text_with_gemini(
@@ -383,33 +398,58 @@ def parse_ai_response(response_text: str) -> list[dict]:
 def generate_fallback_questions(title: str) -> list[schema.QuizQuestion]:
     return [
         schema.QuizQuestion(
-            question=f"在影片《{title}》介紹的程式開發流程中，第一步最合理的是哪一個？",
-            options=["先理解需求與預期輸出，再開始撰寫程式", "先把全部錯誤忽略", "先刪掉所有變數名稱", "先背完語法但不執行"],
+            question="寫一個函數來檢查字串是否為迴文（從前往後讀和從後往前讀都一樣）",
+            options=[
+                "def is_palindrome(s):\n    return s == s[::-1]",
+                "def is_palindrome(s):\n    return s == s.reverse()",
+                "def is_palindrome(s):\n    return s.lower() == s.upper()",
+                "def is_palindrome(s):\n    return len(s) > 0"
+            ],
             correct_answer=0,
-            explanation="程式實作通常先確認需求、輸入與輸出，再進入設計與撰寫階段。",
+            explanation="正確答案使用了字串切片s[::-1]來反轉字串並比較，這是檢查迴文的標準方法。",
         ),
         schema.QuizQuestion(
-            question="若一段教學中的程式碼執行失敗，最適合的除錯順序是什麼？",
-            options=["先看錯誤訊息，再檢查變數、語法與邏輯流程", "直接重灌作業系統", "先改檔名再說", "先把所有縮排刪掉"],
+            question="寫一個函數來計算列表中所有偶數的總和",
+            options=[
+                "def sum_even(numbers):\n    return sum(x for x in numbers if x % 2 == 0)",
+                "def sum_even(numbers):\n    return sum(numbers) // 2",
+                "def sum_even(numbers):\n    return max(numbers) * 2",
+                "def sum_even(numbers):\n    return len(numbers)"
+            ],
             correct_answer=0,
-            explanation="除錯的重點是利用錯誤訊息與程式流程一步步定位問題。",
+            explanation="正確答案使用了生成器表達式過濾偶數（x % 2 == 0）然後求和。",
         ),
         schema.QuizQuestion(
-            question="以下哪一種最符合 AI 根據完整影片內容生成的程式題？",
-            options=["提供程式片段，要求判斷輸出或錯誤原因", "詢問影片背景顏色", "詢問講者心情", "詢問縮圖設計風格"],
-            correct_answer=0,
-            explanation="好的程式題應該聚焦在程式行為、語法、邏輯與除錯，而不是影片表面資訊。",
+            question="寫一個函數來移除字串中所有的空白字元",
+            options=[
+                "def remove_spaces(s):\n    return ''.join(s.split())",
+                "def remove_spaces(s):\n    return s.replace(' ', '')",
+                "def remove_spaces(s):\n    return s.strip()",
+                "def remove_spaces(s):\n    return s.upper()"
+            ],
+            correct_answer=1,
+            explanation="正確答案使用了replace()方法將所有空格替換為空字串。",
         ),
         schema.QuizQuestion(
-            question="如果影片示範了變數、條件判斷與迴圈，AI 最適合如何出題？",
-            options=["結合這些概念，讓學習者判斷程式結果", "只問影片長度", "只問字幕顏色", "完全不碰程式邏輯"],
+            question="寫一個函數來找出列表中的最大值",
+            options=[
+                "def find_max(numbers):\n    return max(numbers)",
+                "def find_max(numbers):\n    return numbers[0]",
+                "def find_max(numbers):\n    return sum(numbers)",
+                "def find_max(numbers):\n    return len(numbers)"
+            ],
             correct_answer=0,
-            explanation="把多個概念放進同一題情境中，才能檢驗是否真正理解程式流程。",
+            explanation="正確答案使用了內建的max()函數來找出列表中的最大值。",
         ),
         schema.QuizQuestion(
-            question="對於影片型 AI 程式測驗，下列哪個敘述最合理？",
-            options=["題目應該反映影片中的實際觀念、步驟與技術細節", "題目可以完全與影片無關", "題目不需要正確答案", "題目只能問標題文字"],
+            question="寫一個函數來反轉列表的順序",
+            options=[
+                "def reverse_list(items):\n    return items[::-1]",
+                "def reverse_list(items):\n    return items.reverse()",
+                "def reverse_list(items):\n    return sorted(items)",
+                "def reverse_list(items):\n    return items * -1"
+            ],
             correct_answer=0,
-            explanation="題目品質取決於是否能對應影片內真正教過的觀念與操作脈絡。",
+            explanation="正確答案使用了切片語法[::-1]來反轉列表，這會返回新列表而不修改原列表。",
         ),
     ]

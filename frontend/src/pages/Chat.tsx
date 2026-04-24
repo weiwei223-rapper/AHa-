@@ -219,7 +219,7 @@ const Chat: React.FC = () => {
         <div className="chat-hero">
           <div className="chat-hero-copy">
             <div className="chat-hero-label">AI Study Assistant</div>
-            <h1>更清楚的聊天工作台</h1>
+            <h1>聊天工作台</h1>
             <p>
               用側欄管理歷史紀錄，在主畫面專注追問影片內容、測驗重點與學習摘要。
             </p>
