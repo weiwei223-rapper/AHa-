@@ -3,6 +3,27 @@ import axios, { type AxiosInstance } from 'axios';
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || '';
 
+export async function parseResponseBody<T>(response: Response): Promise<T | null> {
+  const raw = await response.text();
+  if (!raw.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function getErrorMessage(response: Response, fallback: string): Promise<string> {
+  if (response.status === 502 || response.status === 503 || response.status === 504) {
+    return "後端服務目前無法連線，請確認 API 伺服器已啟動（http://127.0.0.1:8000）。";
+  }
+  const body = await parseResponseBody<{ detail?: string; message?: string }>(response);
+  return body?.detail || body?.message || fallback;
+}
+
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
 });

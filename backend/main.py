@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 # Load environment variables
@@ -322,20 +322,33 @@ def get_videos(db: Session = Depends(database.get_db)):
 
 @app.post("/api/videos", response_model=schema.VideoResponse)
 def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get_db)):
+    raw_link = (payload.video_link or "").strip()
+    if not raw_link:
+        raise HTTPException(status_code=400, detail="請輸入影片連結")
+
     # Extract title from URL if not provided
-    title = payload.title
+    title = (payload.title or "").strip() or None
     if not title:
         # Try to extract a meaningful title from YouTube URL
-        if "youtube.com" in payload.video_link or "youtu.be" in payload.video_link:
-            title = extract_youtube_title(payload.video_link)
+        if "youtube.com" in raw_link or "youtu.be" in raw_link:
+            title = extract_youtube_title(raw_link)
         else:
             title = "未命名影片"
 
-    video = models.Video(video_link=payload.video_link, title=title)
-    db.add(video)
-    db.commit()
-    db.refresh(video)
-    return video
+    try:
+        video = models.Video(video_link=raw_link, title=title)
+        db.add(video)
+        db.commit()
+        db.refresh(video)
+        return video
+    except SQLAlchemyError as e:
+        db.rollback()
+        print(f"Database error creating video: {e}")
+        raise HTTPException(status_code=500, detail="資料庫寫入失敗，請稍後再試")
+    except Exception as e:
+        db.rollback()
+        print(f"Unexpected error creating video: {e}")
+        raise HTTPException(status_code=500, detail="新增影片時發生未預期錯誤")
 
 @app.delete("/api/videos/{video_id}")
 def delete_video(video_id: int, db: Session = Depends(database.get_db)):

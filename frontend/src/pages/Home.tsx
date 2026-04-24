@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { API_BASE_URL, userAPI } from "../api";
+import { API_BASE_URL, parseResponseBody, userAPI } from "../api";
 import "./PageIndex.css";
 
 type UserStatusProps = {
@@ -63,7 +63,10 @@ const Home = ({ name }: UserStatusProps) => {
         return 0;
       }
 
-      const videos: Video[] = await response.json();
+      const videos = await parseResponseBody<Video[]>(response);
+      if (!videos) {
+        return 0;
+      }
       return videos.length;
     } catch (error) {
       console.error("Failed to load videos:", error);

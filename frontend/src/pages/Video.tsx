@@ -1,7 +1,7 @@
 import "./PageIndex.css";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { API_BASE_URL } from "../api";
+import { API_BASE_URL, getErrorMessage, parseResponseBody } from "../api";
 
 type Video = {
   id: number;
@@ -31,10 +31,13 @@ const Video = (_props: VideoStatusProps) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/videos`);
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        throw new Error(await getErrorMessage(res, `HTTP ${res.status}`));
       }
 
-      const data: Video[] = await res.json();
+      const data = await parseResponseBody<Video[]>(res);
+      if (!data) {
+        throw new Error("載入影片失敗：伺服器未回傳有效資料");
+      }
       setVideos(data);
       setError("");
     } catch (err: any) {
@@ -63,17 +66,23 @@ const Video = (_props: VideoStatusProps) => {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "新增影片失敗");
+        throw new Error(await getErrorMessage(res, "新增影片失敗"));
       }
 
-      const newVideo: Video = await res.json();
+      const newVideo = await parseResponseBody<Video>(res);
+      if (!newVideo) {
+        throw new Error("新增影片失敗：伺服器回應格式錯誤");
+      }
       setVideos((prev) => [newVideo, ...prev]);
       setVideoLink("");
       setVideoTitle("");
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "新增影片時發生錯誤");
+      if (err instanceof TypeError) {
+        setError("無法連線到後端服務，請確認後端 API 已啟動（http://127.0.0.1:8000）。");
+      } else {
+        setError(err.message || "新增影片時發生錯誤");
+      }
     } finally {
       setLoading(false);
     }

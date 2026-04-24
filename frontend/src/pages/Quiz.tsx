@@ -1,7 +1,7 @@
 import "./PageIndex.css";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { API_BASE_URL, codeAPI } from "../api";
+import { API_BASE_URL, codeAPI, getErrorMessage, parseResponseBody } from "../api";
 import Editor from "@monaco-editor/react";
 
 type Video = {
@@ -71,10 +71,13 @@ const Quiz = () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/videos`);
       if (!res.ok) {
-        throw new Error("無法載入影片清單");
+        throw new Error(await getErrorMessage(res, "無法載入影片清單"));
       }
 
-      const data: Video[] = await res.json();
+      const data = await parseResponseBody<Video[]>(res);
+      if (!data) {
+        throw new Error("無法載入影片清單：伺服器未回傳有效資料");
+      }
       setVideos(data);
     } catch (err) {
       console.error(err);
@@ -88,10 +91,13 @@ const Quiz = () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/videos/${video.id}/quiz`);
       if (!res.ok) {
-        throw new Error("AI 測驗生成失敗");
+        throw new Error(await getErrorMessage(res, "AI 測驗生成失敗"));
       }
 
-      const data: QuizData = await res.json();
+      const data = await parseResponseBody<QuizData>(res);
+      if (!data) {
+        throw new Error("AI 測驗生成失敗：伺服器未回傳有效資料");
+      }
       setQuiz(data);
       setCurrentQuestionIndex(0);
       setSelectedAnswers(new Array(data.questions.length).fill(-1));
