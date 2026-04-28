@@ -81,6 +81,8 @@ const Video = (_props: VideoStatusProps) => {
         throw new Error("新增影片失敗：伺服器回應格式錯誤");
       }
       setVideos((prev) => [newVideo, ...prev]);
+      localStorage.setItem("video-updated-at", Date.now().toString());
+      window.dispatchEvent(new Event("video-updated"));
       setVideoLink("");
       setVideoTitle("");
     } catch (err: any) {

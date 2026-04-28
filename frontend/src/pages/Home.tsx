@@ -38,6 +38,28 @@ const Home = ({ name }: UserStatusProps) => {
     void loadStats();
   }, []);
 
+  useEffect(() => {
+    const handleVideoUpdated = () => {
+      void loadStats();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadStats();
+      }
+    };
+
+    window.addEventListener("video-updated", handleVideoUpdated);
+    window.addEventListener("focus", handleVideoUpdated);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("video-updated", handleVideoUpdated);
+      window.removeEventListener("focus", handleVideoUpdated);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   const loadStats = async () => {
     const [videoCount, points, quizResults] = await Promise.all([
       getVideoCount(),
@@ -57,8 +79,13 @@ const Home = ({ name }: UserStatusProps) => {
   };
 
   const getVideoCount = async () => {
+    const userId = Number(localStorage.getItem("userId") || 0);
+    if (!userId) {
+      return 0;
+    }
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/videos`);
+      const response = await fetch(`${API_BASE_URL}/api/videos?user_id=${userId}`);
       if (!response.ok) {
         return 0;
       }
