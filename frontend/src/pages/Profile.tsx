@@ -14,6 +14,9 @@ type RechargeRecord = {
   date: string;
   order_id: string;
   amount: number;
+  points?: number;
+  payment_method?: string;
+  plan_id?: string;
 };
 
 const rechargePlans = [
@@ -262,6 +265,8 @@ const Profile = () => {
                   <th>Date</th>
                   <th>Order ID</th>
                   <th>Amount</th>
+                  <th>Points</th>
+                  <th>Payment</th>
                 </tr>
               </thead>
               <tbody>
@@ -270,6 +275,8 @@ const Profile = () => {
                     <td>{record.date}</td>
                     <td>{record.order_id}</td>
                     <td>{record.amount}</td>
+                    <td>{record.points ?? "-"}</td>
+                    <td>{record.payment_method ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>

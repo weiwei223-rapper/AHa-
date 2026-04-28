@@ -7,6 +7,10 @@ type Video = {
   id: number;
   video_link: string;
   title?: string | null;
+  outline?: string | null;
+  user_id?: number | null;
+  cost_points?: number;
+  error_report?: string | null;
   created_at: string;
 };
 
@@ -16,6 +20,7 @@ type VideoStatusProps = {
 
 const Video = (_props: VideoStatusProps) => {
   const navigate = useNavigate();
+  const userId = Number(localStorage.getItem("userId") || 1);
   const [videoLink, setVideoLink] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
@@ -62,6 +67,8 @@ const Video = (_props: VideoStatusProps) => {
         body: JSON.stringify({
           video_link: videoLink,
           title: videoTitle.trim() || null,
+          user_id: userId,
+          cost_points: 0,
         }),
       });
 

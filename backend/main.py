@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import os
+import json
 
 import bcrypt
 from dotenv import load_dotenv
@@ -117,11 +118,18 @@ class UserUpdate(BaseModel):
 class RechargeRequest(BaseModel):
     points: int
     price: int
+    plan_content: Optional[str] = None
+    payment_method: Optional[str] = None
+    plan_id: Optional[str] = None
 
 class RechargeRecordResponse(BaseModel):
     date: str
     order_id: str
     amount: int
+    points: int
+    plan_content: Optional[str] = None
+    payment_method: Optional[str] = None
+    plan_id: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -305,6 +313,10 @@ def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(
         date=datetime.utcnow().strftime("%Y/%m/%d"),
         order_id=order_id,
         amount=payload.price,
+        points=payload.points,
+        plan_content=payload.plan_content,
+        payment_method=payload.payment_method,
+        plan_id=payload.plan_id,
     )
     user.points += payload.points
     db.add(record)
@@ -336,10 +348,27 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
             title = "未命名影片"
 
     try:
-        video = models.Video(video_link=raw_link, title=title)
+        video = models.Video(
+            video_link=raw_link,
+            title=title,
+            outline=payload.outline,
+            user_id=payload.user_id,
+            cost_points=payload.cost_points or 0,
+            error_report=payload.error_report,
+        )
         db.add(video)
         db.commit()
         db.refresh(video)
+
+        if payload.user_id is not None:
+            upload = models.UploadRecord(
+                user_id=payload.user_id,
+                video_id=video.id,
+                consumed_points=payload.cost_points or 0,
+            )
+            db.add(upload)
+            db.commit()
+
         return video
     except SQLAlchemyError as e:
         db.rollback()
@@ -359,9 +388,94 @@ def delete_video(video_id: int, db: Session = Depends(database.get_db)):
     db.commit()
     return {"message": "影片已刪除"}
 
+@app.post("/api/feedbacks", response_model=schema.AIFeedbackResponse)
+def create_ai_feedback(payload: schema.AIFeedbackCreate, db: Session = Depends(database.get_db)):
+    feedback = models.AIFeedback(
+        user_id=payload.user_id,
+        ai_message=payload.ai_message,
+        user_message=payload.user_message,
+        error_report=payload.error_report,
+    )
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    return feedback
+
+@app.get("/api/feedbacks", response_model=List[schema.AIFeedbackResponse])
+def get_ai_feedbacks(db: Session = Depends(database.get_db)):
+    return db.query(models.AIFeedback).order_by(models.AIFeedback.id.desc()).all()
+
+@app.post("/api/quiz-questions", response_model=schema.QuizQuestionResponse)
+def create_quiz_question(payload: schema.QuizQuestionCreate, db: Session = Depends(database.get_db)):
+    question = models.QuizQuestion(
+        user_id=payload.user_id,
+        video_id=payload.video_id,
+        question_content=payload.question_content,
+        reference_answer=payload.reference_answer,
+        answer_record=payload.answer_record,
+        accuracy=payload.accuracy or 0,
+        options_json=json.dumps(payload.options, ensure_ascii=False),
+    )
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    return schema.QuizQuestionResponse(
+        id=question.id,
+        user_id=question.user_id,
+        video_id=question.video_id,
+        question_content=question.question_content,
+        reference_answer=question.reference_answer,
+        answer_record=question.answer_record,
+        accuracy=question.accuracy,
+        options=payload.options,
+        created_at=question.created_at,
+    )
+
+@app.get("/api/quiz-questions", response_model=List[schema.QuizQuestionResponse])
+def get_quiz_questions(db: Session = Depends(database.get_db)):
+    questions = db.query(models.QuizQuestion).order_by(models.QuizQuestion.id.desc()).all()
+    return [
+        schema.QuizQuestionResponse(
+            id=q.id,
+            user_id=q.user_id,
+            video_id=q.video_id,
+            question_content=q.question_content,
+            reference_answer=q.reference_answer,
+            answer_record=q.answer_record,
+            accuracy=q.accuracy,
+            options=json.loads(q.options_json or "[]"),
+            created_at=q.created_at,
+        )
+        for q in questions
+    ]
+
+@app.post("/api/uploads", response_model=schema.UploadRecordResponse)
+def create_upload(payload: schema.UploadRecordCreate, db: Session = Depends(database.get_db)):
+    upload = models.UploadRecord(
+        user_id=payload.user_id,
+        video_id=payload.video_id,
+        consumed_points=payload.consumed_points,
+    )
+    db.add(upload)
+    db.commit()
+    db.refresh(upload)
+    return upload
+
+@app.post("/api/generations", response_model=schema.GenerationRecordResponse)
+def create_generation(payload: schema.GenerationRecordCreate, db: Session = Depends(database.get_db)):
+    generation = models.GenerationRecord(
+        user_id=payload.user_id,
+        quiz_question_id=payload.quiz_question_id,
+        consumed_points=payload.consumed_points,
+    )
+    db.add(generation)
+    db.commit()
+    db.refresh(generation)
+    return generation
+
 # Quiz API
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
-def generate_quiz(video_id: int, db: Session = Depends(database.get_db)):
+def generate_quiz(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
     """Generate AI-powered quiz questions based on video content analysis"""
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if video is None:
@@ -373,7 +487,34 @@ def generate_quiz(video_id: int, db: Session = Depends(database.get_db)):
         
         # Use AI analyzer to generate quiz questions based on video content
         questions = ai_analyzer.analyze_video_content_with_ai(video_link, title)
-        
+
+        saved_questions = []
+        for item in questions:
+            correct_option = item.options[item.correct_answer] if 0 <= item.correct_answer < len(item.options) else ""
+            question_record = models.QuizQuestion(
+                user_id=user_id,
+                video_id=video.id,
+                question_content=item.question,
+                reference_answer=correct_option,
+                answer_record=None,
+                accuracy=0,
+                options_json=json.dumps(item.options, ensure_ascii=False),
+            )
+            db.add(question_record)
+            saved_questions.append(question_record)
+
+        db.commit()
+
+        if saved_questions:
+            db.refresh(saved_questions[0])
+            generation_record = models.GenerationRecord(
+                user_id=user_id,
+                quiz_question_id=saved_questions[0].id,
+                consumed_points=video.cost_points or 0,
+            )
+            db.add(generation_record)
+            db.commit()
+
         return schema.QuizResponse(
             video_id=video.id,
             video_title=title,
@@ -395,8 +536,7 @@ def generate_quiz(video_id: int, db: Session = Depends(database.get_db)):
 # Quiz Results API
 @app.post("/api/quiz-results", response_model=schema.QuizResultResponse)
 def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(database.get_db)):
-    # For now, assume user_id is 1 (default user)
-    user_id = 1
+    user_id = payload.user_id or 1
 
     quiz_result = models.QuizResult(
         user_id=user_id,
@@ -411,8 +551,8 @@ def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(d
 
 @app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)
 def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
-    # Get video count
-    video_count = db.query(models.Video).count()
+    # Get video count created by this user
+    video_count = db.query(models.Video).filter(models.Video.user_id == user_id).count()
 
     # Get user points
     user = db.query(models.User).filter(models.User.id == user_id).first()

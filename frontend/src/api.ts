@@ -44,8 +44,42 @@ export const userAPI = {
     api.put(`/users/${userId}`, data),
   getRechargeRecords: (userId: number) =>
     api.get(`/users/${userId}/recharge-records`),
-  recharge: (userId: number, data: { points: number; price: number }) =>
+  recharge: (userId: number, data: { points: number; price: number; plan_content?: string; payment_method?: string; plan_id?: string }) =>
     api.post(`/users/${userId}/recharge`, data),
+  getStats: (userId: number) =>
+    api.get(`/users/${userId}/stats`),
+};
+
+export const videoAPI = {
+  getVideos: () => api.get('/api/videos'),
+  createVideo: (data: { video_link: string; title?: string | null; outline?: string | null; user_id?: number; cost_points?: number; error_report?: string | null }) =>
+    api.post('/api/videos', data),
+  deleteVideo: (videoId: number) => api.delete(`/api/videos/${videoId}`),
+  generateQuiz: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId } }),
+};
+
+export const feedbackAPI = {
+  createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null }) =>
+    api.post('/api/feedbacks', data),
+  getFeedbacks: () => api.get('/api/feedbacks'),
+};
+
+export const quizAPI = {
+  createQuestion: (data: { user_id: number; video_id: number; question_content: string; reference_answer: string; options: string[]; answer_record?: string | null; accuracy?: number }) =>
+    api.post('/api/quiz-questions', data),
+  getQuestions: () => api.get('/api/quiz-questions'),
+  createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number }) =>
+    api.post('/api/quiz-results', data),
+};
+
+export const uploadAPI = {
+  createUpload: (data: { user_id: number; video_id: number; consumed_points: number }) =>
+    api.post('/api/uploads', data),
+};
+
+export const generationAPI = {
+  createGeneration: (data: { user_id: number; quiz_question_id: number; consumed_points: number }) =>
+    api.post('/api/generations', data),
 };
 
 export const codeAPI = {

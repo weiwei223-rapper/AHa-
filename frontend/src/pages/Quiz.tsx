@@ -88,8 +88,9 @@ const Quiz = () => {
   const generateQuiz = async (video: Video) => {
     setLoading(true);
     setError("");
+    const userId = Number(localStorage.getItem("userId") || 1);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/videos/${video.id}/quiz`);
+      const res = await fetch(`${API_BASE_URL}/api/videos/${video.id}/quiz?user_id=${userId}`);
       if (!res.ok) {
         throw new Error(await getErrorMessage(res, "AI 測驗生成失敗"));
       }
@@ -131,12 +132,14 @@ const Quiz = () => {
     if (!quiz) {
       return;
     }
+    const userId = Number(localStorage.getItem("userId") || 1);
 
     try {
       await fetch(`${API_BASE_URL}/api/quiz-results`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          user_id: userId,
           video_id: quiz.video_id,
           score,
           total_questions: totalQuestions,
