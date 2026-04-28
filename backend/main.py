@@ -328,8 +328,8 @@ def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(
 
 # Videos API
 @app.get("/api/videos", response_model=List[schema.VideoResponse])
-def get_videos(db: Session = Depends(database.get_db)):
-    videos = db.query(models.Video).order_by(models.Video.id.desc()).all()
+def get_videos(user_id: int, db: Session = Depends(database.get_db)):
+    videos = db.query(models.Video).filter(models.Video.user_id == user_id).order_by(models.Video.id.desc()).all()
     return videos
 
 @app.post("/api/videos", response_model=schema.VideoResponse)

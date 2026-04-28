@@ -34,7 +34,7 @@ const Video = (_props: VideoStatusProps) => {
 
   const fetchVideos = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/videos`);
+      const res = await fetch(`${API_BASE_URL}/api/videos?user_id=${userId}`);
       if (!res.ok) {
         throw new Error(await getErrorMessage(res, `HTTP ${res.status}`));
       }

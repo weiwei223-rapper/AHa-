@@ -51,7 +51,7 @@ export const userAPI = {
 };
 
 export const videoAPI = {
-  getVideos: () => api.get('/api/videos'),
+  getVideos: (userId: number) => api.get('/api/videos', { params: { user_id: userId } }),
   createVideo: (data: { video_link: string; title?: string | null; outline?: string | null; user_id?: number; cost_points?: number; error_report?: string | null }) =>
     api.post('/api/videos', data),
   deleteVideo: (videoId: number) => api.delete(`/api/videos/${videoId}`),
