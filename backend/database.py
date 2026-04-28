@@ -1,49 +1,38 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy.exc import OperationalError
 from dotenv import load_dotenv
 
 # 載入 .env 文件中的環境變數
 load_dotenv()
 
-# 先嘗試從環境變數讀取 Database URL，沒有則使用 SQLite
-# 請設置環境變數 DATABASE_URL，例如: sqlite:///./test.db 或 postgresql://user:password@localhost:5432/yourdb
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@104.199.238.198/postgres"
-)
+# 從環境變數讀取 PostgreSQL Database URL
+# 請設置環境變數 DATABASE_URL，例如: postgresql://user:password@localhost:5432/yourdb
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
-# PostgreSQL 和 SQLite 使用不同的連接參數
-if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-else:
-    # PostgreSQL 連接參數
-    connect_args = {}
+if not SQLALCHEMY_DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set. Please set it to a PostgreSQL connection string.")
 
-def _create_engine_with_fallback():
+if not SQLALCHEMY_DATABASE_URL.startswith("postgresql"):
+    raise ValueError("Only PostgreSQL is supported. DATABASE_URL must start with 'postgresql://'.")
+
+# PostgreSQL 連接參數
+connect_args = {}
+
+def _create_engine():
     try:
-        primary_engine = create_engine(
+        engine = create_engine(
             SQLALCHEMY_DATABASE_URL,
             connect_args=connect_args
         )
-    except ModuleNotFoundError:
-        # PostgreSQL driver（如 psycopg2）不存在時，且未明確指定 DATABASE_URL，改用 SQLite。
-        if not os.getenv("DATABASE_URL"):
-            return create_engine("sqlite:///./aha_app.db", connect_args={"check_same_thread": False})
-        raise
+        # Test the connection
+        with engine.connect():
+            pass
+        return engine
+    except Exception as e:
+        raise RuntimeError(f"Failed to connect to PostgreSQL database: {e}")
 
-    # 若未手動設定 DATABASE_URL，且預設 PostgreSQL 無法連線時，自動降級到本地 SQLite。
-    if not os.getenv("DATABASE_URL"):
-        try:
-            with primary_engine.connect():
-                pass
-        except OperationalError:
-            return create_engine("sqlite:///./aha_app.db", connect_args={"check_same_thread": False})
-
-    return primary_engine
-
-engine = _create_engine_with_fallback()
+engine = _create_engine()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
