@@ -55,16 +55,16 @@ class RechargeRecordResponse(BaseModel):
 
 class QuizQuestion(BaseModel):
     question: str
-    options: List[str]
-    correct_answer: int  # Index of correct option
+    correct_answer: str  # Reference answer text
     explanation: Optional[str] = None
+    starter_code: Optional[str] = None
+    test_cases: List[str] = []
 
 class QuizQuestionCreate(BaseModel):
     user_id: int
     video_id: int
     question_content: str
     reference_answer: str
-    options: List[str]
     answer_record: Optional[str] = None
     accuracy: Optional[int] = 0
 
@@ -76,7 +76,6 @@ class QuizQuestionResponse(BaseModel):
     reference_answer: str
     answer_record: Optional[str] = None
     accuracy: int
-    options: List[str]
     created_at: datetime
 
     class Config:
@@ -87,6 +86,24 @@ class QuizResponse(BaseModel):
     video_title: str
     quiz_type: str = "ai-coding"
     questions: List[QuizQuestion]
+
+
+class TranscriptChunk(BaseModel):
+    index: int
+    content: str
+    score: Optional[float] = None
+
+
+class VideoAnalysisResponse(BaseModel):
+    video_id: int
+    video_title: str
+    transcript_source: str
+    transcript_excerpt: str
+    outline_markdown: str
+    key_topics: List[str]
+    retrieved_chunks: List[TranscriptChunk]
+    vector_backend: str
+    generated_at: datetime
 
 class QuizResultCreate(BaseModel):
     user_id: int = 1

@@ -168,13 +168,17 @@ const Chat: React.FC = () => {
         ...nextMessages,
         { role: 'assistant', content: reply },
       ]);
-    } catch (requestError) {
+    } catch (requestError: unknown) {
       console.error('Error sending message:', requestError);
 
       let errorMessage = '無法連線到聊天服務，請稍後再試。';
-      if (requestError.code === 'ECONNABORTED') {
+      const errorObject = requestError as {
+        code?: string;
+        response?: { status?: number };
+      };
+      if (errorObject.code === 'ECONNABORTED') {
         errorMessage = '請求超時，請檢查網路連線後再試。';
-      } else if (requestError.response?.status === 500) {
+      } else if (errorObject.response?.status === 500) {
         errorMessage = '伺服器內部錯誤，請稍後再試。';
       }
 

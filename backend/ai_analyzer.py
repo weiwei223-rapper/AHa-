@@ -23,7 +23,7 @@ except ImportError:
     import schema
 
 BASE_DIR = os.path.dirname(__file__)
-DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 TRANSCRIPT_LANGUAGES = ("zh-TW", "zh-Hant", "zh-CN", "zh", "en")
 MAX_TRANSCRIPT_CHARS = 12000
@@ -50,7 +50,7 @@ _whisper_model: WhisperModel | None = None
 
 
 def init_gemini() -> str:
-    api_key = os.getenv("AI_API_KEY")
+    api_key = (os.getenv("AI_API_KEY") or "").strip()
     if not api_key:
         raise ValueError("AI_API_KEY not found in environment variables")
     return api_key
@@ -75,7 +75,10 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
             },
             timeout=30,
         )
-        response.raise_for_status()
+        if not response.ok:
+            raise ValueError(
+                f"Gemini API error {response.status_code} for model '{model_name}': {response.text}"
+            )
 
         response.encoding = 'utf-8'
         data = response.json()
@@ -104,6 +107,19 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         raise ValueError(f"Gemini API request failed: {e}")
     except (KeyError, ValueError, TypeError) as e:
         raise ValueError(f"Invalid response from Gemini API: {e}")
+
+
+def test_gemini_connection(model: str = DEFAULT_GEMINI_MODEL) -> dict:
+    prompt = "Reply with exactly: GEMINI_OK"
+    text = generate_text_with_gemini(
+        [{"role": "user", "parts": [{"text": prompt}]}],
+        model=model,
+    )
+    return {
+        "ok": text.strip() == "GEMINI_OK",
+        "model": model,
+        "reply": text.strip(),
+    }
 
 
 def extract_youtube_video_id(video_link: str) -> str | None:
@@ -356,8 +372,8 @@ def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | 
 def analyze_video_content_with_ai(video_link: str, title: str) -> list[schema.QuizQuestion]:
     transcript = fetch_video_transcript(video_link)
     prompt = f"""
-You are generating a programming quiz in Traditional Chinese for a learner who watched a full video.
-Reference the MBPP (Mostly Basic Python Problems) dataset format, but adapt questions to the video content.
+You are a Python code completion quiz designer. Based on the video content, generate 5 "fill-in-the-blank" questions.
+Each question should provide a code snippet with a `___` placeholder that the user needs to fill.
 
 Video Title: {title}
 Video Link: {video_link}
@@ -365,31 +381,22 @@ Full Transcript:
 {transcript or "Transcript unavailable."}
 
 Output requirements:
-1. Generate exactly 5 multiple-choice questions in MBPP style.
-2. Each question should be about implementing a small Python function or solving a coding problem mentioned or implied in the video.
-3. Questions should test understanding of programming concepts, algorithms, data structures, or code patterns from the video.
-4. Each question must have exactly 4 options, where one option is the correct Python code solution.
-5. The other 3 options should be plausible but incorrect variations (common mistakes, syntax errors, logic errors).
-6. Include these fields in every item:
-   - question: string describing the coding task (e.g., "Write a function that...")
-   - options: array of 4 strings, each being a complete Python code snippet
-   - correct_answer: integer 0-3 pointing to the correct code
-   - explanation: short Traditional Chinese explanation of why the correct answer is right and others are wrong
-7. Focus on practical coding problems that would be covered in programming tutorials.
-8. If transcript is unavailable, generate basic Python problems that beginners might encounter.
-9. Return ONLY a valid JSON array. No markdown. No extra prose.
+1. Generate exactly 5 fill-in-the-blank questions.
+2. Questions MUST use syntax, concepts, or logic mentioned in the video.
+3. Include these fields in every item:
+   - question: string describing the task and including the code snippet with `___`
+   - correct_answer: the exact string that replaces `___`
+   - explanation: short Traditional Chinese explanation mentioning the video context
+   - starter_code: the full code snippet including `___`
+4. If transcript is unavailable, base questions on the "Video Title" ({title}).
+5. Return ONLY a valid JSON array.
 
-Example question format:
+Example:
 {{
-  "question": "寫一個函數來計算列表中所有正數的總和",
-  "options": [
-    "def sum_positive(numbers):\\n    return sum(x for x in numbers if x > 0)",
-    "def sum_positive(numbers):\\n    total = 0\\n    for x in numbers:\\n        if x > 0:\\n            total += x\\n    return total",
-    "def sum_positive(numbers):\\n    return sum(numbers)",
-    "def sum_positive(numbers):\\n    return max(numbers)"
-  ],
-  "correct_answer": 1,
-  "explanation": "正確答案使用了迴圈來檢查每個數字是否為正數並累加，這是標準的過濾和求和方法。"
+  "question": "根據影片教學，如何定義一個名為 greet 的函式？\\n\\n```python\\n___ greet():\\n    print('Hello')\\n```",
+  "correct_answer": "def",
+  "explanation": "影片中介紹了使用 def 關鍵字來定義函式。",
+  "starter_code": "___ greet():\\n    print('Hello')"
 }}
 """
     try:
@@ -400,9 +407,9 @@ Example question format:
         return [
             schema.QuizQuestion(
                 question=item.get("question", ""),
-                options=item.get("options", []),
-                correct_answer=item.get("correct_answer", 0),
+                correct_answer=item.get("correct_answer", ""),
                 explanation=item.get("explanation"),
+                starter_code=item.get("starter_code"),
             )
             for item in quiz_data
         ]
@@ -422,70 +429,43 @@ def parse_ai_response(response_text: str) -> list[dict]:
         raise ValueError("Invalid quiz data structure")
 
     for item in quiz_data:
-        if not all(key in item for key in ["question", "options", "correct_answer"]):
+        if not all(key in item for key in ["question", "correct_answer"]):
             raise ValueError("Missing required fields in question")
-        if len(item["options"]) != 4:
-            raise ValueError("Each question must have exactly 4 options")
-        if not isinstance(item["correct_answer"], int) or item["correct_answer"] not in (0, 1, 2, 3):
-            raise ValueError("Each correct_answer must be an integer from 0 to 3")
+        if not isinstance(item["correct_answer"], str):
+            raise ValueError("Each correct_answer must be a string")
     return quiz_data
 
 
 def generate_fallback_questions(title: str) -> list[schema.QuizQuestion]:
     return [
         schema.QuizQuestion(
-            question="寫一個函數來檢查字串是否為迴文（從前往後讀和從後往前讀都一樣）",
-            options=[
-                "def is_palindrome(s):\n    return s == s[::-1]",
-                "def is_palindrome(s):\n    return s == s.reverse()",
-                "def is_palindrome(s):\n    return s.lower() == s.upper()",
-                "def is_palindrome(s):\n    return len(s) > 0"
-            ],
-            correct_answer=0,
-            explanation="正確答案使用了字串切片s[::-1]來反轉字串並比較，這是檢查迴文的標準方法。",
+            question="請填補以下程式碼以檢查字串是否為迴文：\n\n```python\ndef is_palindrome(s):\n    return s == ___ \n```",
+            correct_answer="s[::-1]",
+            explanation="使用字串切片 [::-1] 來反轉字串是檢查迴文的常見做法。",
+            starter_code="def is_palindrome(s):\n    return s == ___",
         ),
         schema.QuizQuestion(
-            question="寫一個函數來計算列表中所有偶數的總和",
-            options=[
-                "def sum_even(numbers):\n    return sum(x for x in numbers if x % 2 == 0)",
-                "def sum_even(numbers):\n    return sum(numbers) // 2",
-                "def sum_even(numbers):\n    return max(numbers) * 2",
-                "def sum_even(numbers):\n    return len(numbers)"
-            ],
-            correct_answer=0,
-            explanation="正確答案使用了生成器表達式過濾偶數（x % 2 == 0）然後求和。",
+            question="請填補以下程式碼以過濾列表中的偶數：\n\n```python\ndef get_evens(nums):\n    return [x for x in nums if ___]\n```",
+            correct_answer="x % 2 == 0",
+            explanation="使用 x % 2 == 0 來判斷一個數字是否為偶數。",
+            starter_code="def get_evens(nums):\n    return [x for x in nums if ___]",
         ),
         schema.QuizQuestion(
-            question="寫一個函數來移除字串中所有的空白字元",
-            options=[
-                "def remove_spaces(s):\n    return ''.join(s.split())",
-                "def remove_spaces(s):\n    return s.replace(' ', '')",
-                "def remove_spaces(s):\n    return s.strip()",
-                "def remove_spaces(s):\n    return s.upper()"
-            ],
-            correct_answer=1,
-            explanation="正確答案使用了replace()方法將所有空格替換為空字串。",
+            question="請使用正確的方法移除字串兩端的空白：\n\n```python\ntext = '  hello  '\nclean_text = text.___()\n```",
+            correct_answer="strip",
+            explanation="Python 的 strip() 方法可以用於移除字串開頭與結維的空白字元。",
+            starter_code="text = '  hello  '\nclean_text = text.___()",
         ),
         schema.QuizQuestion(
-            question="寫一個函數來找出列表中的最大值",
-            options=[
-                "def find_max(numbers):\n    return max(numbers)",
-                "def find_max(numbers):\n    return numbers[0]",
-                "def find_max(numbers):\n    return sum(numbers)",
-                "def find_max(numbers):\n    return len(numbers)"
-            ],
-            correct_answer=0,
-            explanation="正確答案使用了內建的max()函數來找出列表中的最大值。",
+            question="如何將字串轉換為整數？\n\n```python\nnum_str = '123'\nnum = ___(num_str)\n```",
+            correct_answer="int",
+            explanation="int() 函式可以將符合格式的字串或浮點數轉換為整數。",
+            starter_code="num_str = '123'\nnum = ___(num_str)",
         ),
         schema.QuizQuestion(
-            question="寫一個函數來反轉列表的順序",
-            options=[
-                "def reverse_list(items):\n    return items[::-1]",
-                "def reverse_list(items):\n    return items.reverse()",
-                "def reverse_list(items):\n    return sorted(items)",
-                "def reverse_list(items):\n    return items * -1"
-            ],
-            correct_answer=0,
-            explanation="正確答案使用了切片語法[::-1]來反轉列表，這會返回新列表而不修改原列表。",
+            question="請填入正確的關鍵字以在迴圈中跳過當前疊代：\n\n```python\nfor i in range(10):\n    if i % 2 == 0:\n        ___\n    print(i)\n```",
+            correct_answer="continue",
+            explanation="continue 關鍵字用於跳過當前迴圈的剩餘部分，直接進入下一次疊代。",
+            starter_code="for i in range(10):\n    if i % 2 == 0:\n        ___\n    print(i)",
         ),
     ]

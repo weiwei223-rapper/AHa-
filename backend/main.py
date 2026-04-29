@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
-import os
 import json
 
 import bcrypt
@@ -9,94 +8,90 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-# Load environment variables
 load_dotenv()
 
 try:
-    from . import ai_analyzer, database, models, schema, code_compiler
+    from . import ai_analyzer, code_compiler, database, learning_pipeline, models, schema
 except ImportError:
     import ai_analyzer
+    import code_compiler
     import database
+    import learning_pipeline
     import models
     import schema
-    import code_compiler
+
 
 def extract_youtube_title(url: str) -> str:
-    """Extract a meaningful title from YouTube URL"""
     try:
         if "youtube.com/watch?v=" in url:
-            # Extract video ID from standard YouTube URL
             video_id = url.split("v=")[1].split("&")[0]
-            return f"YouTube 影片 - {video_id}"
-        elif "youtu.be/" in url:
-            # Extract video ID from short YouTube URL
+            return f"YouTube Video - {video_id}"
+        if "youtu.be/" in url:
             video_id = url.split("youtu.be/")[1].split("?")[0]
-            return f"YouTube 影片 - {video_id}"
-        elif "youtube.com/playlist?list=" in url:
-            # Handle playlist URLs
+            return f"YouTube Video - {video_id}"
+        if "youtube.com/playlist?list=" in url:
             playlist_id = url.split("list=")[1].split("&")[0]
-            return f"YouTube 播放清單 - {playlist_id}"
-        else:
-            return "YouTube 影片"
-    except:
-        return "YouTube 影片"
+            return f"YouTube Playlist - {playlist_id}"
+        return "YouTube Video"
+    except Exception:
+        return "YouTube Video"
 
-# Password hashing functions - define early so they can be used in startup
+
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt"""
     salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed.decode('utf-8')
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a hashed password"""
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup - create tables and initial data
     try:
         models.Base.metadata.create_all(bind=database.engine)
-        # Create initial user if not exists
         db = database.SessionLocal()
         try:
             user = db.query(models.User).filter(models.User.id == 1).first()
             if user is None:
-                hashed_pwd = hash_password("password")
                 user = models.User(
                     id=1,
                     name="wei",
                     email="wei@gmail.com",
-                    password=hashed_pwd,
+                    password=hash_password("password"),
                     uid="UID-20260419",
                     points=10000,
                 )
                 db.add(user)
                 db.commit()
-                db.refresh(user)
-                print("Initial user created")
         finally:
             db.close()
-    except Exception as e:
-        print(f"Error during startup: {e}")
+    except Exception as exc:
+        print(f"Error during startup: {exc}")
     yield
 
-    # Shutdown
-    # Add any cleanup code here if needed
 
 app = FastAPI(lifespan=lifespan)
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5173/", "http://localhost:5174", "http://localhost:5174/", "http://localhost:5175", "http://localhost:5175/", "http://localhost:5176", "http://localhost:5176/", "http://localhost:5177", "http://localhost:5177/", "http://localhost:3000", "http://localhost:3000/"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",
+        "http://localhost:5177",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 class UserResponse(BaseModel):
     id: int
@@ -107,10 +102,12 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class UserUpdate(BaseModel):
     name: str
     email: str
     password: Optional[str] = None
+
 
 class RechargeRequest(BaseModel):
     points: int
@@ -118,6 +115,7 @@ class RechargeRequest(BaseModel):
     plan_content: Optional[str] = None
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None
+
 
 class RechargeRecordResponse(BaseModel):
     date: str
@@ -130,58 +128,77 @@ class RechargeRecordResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
 
+
 class LoginRequest(BaseModel):
     email: str
     password: str
+
 
 class LoginResponse(BaseModel):
     user: UserResponse
     message: str
 
-@app.get("/")
-def read_root():
-    return {"message": "AHa AI API Server is running", "status": "ok"}
 
 class ChatMessage(BaseModel):
     role: str
     content: str
 
+
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
 
+
 class ChatResponse(BaseModel):
     reply: str
 
+
 class CodeExecutionRequest(BaseModel):
     code: str
+
 
 class CodeExecutionResponse(BaseModel):
     output: str
     error: str
 
+
+class GeminiHealthResponse(BaseModel):
+    ok: bool
+    model: str
+    reply: str
+
+
+@app.get("/")
+def read_root():
+    return {"message": "AHa AI API Server is running", "status": "ok"}
+
+
+@app.get("/api/health/gemini", response_model=GeminiHealthResponse)
+def gemini_health_check():
+    try:
+        result = ai_analyzer.test_gemini_connection()
+        return GeminiHealthResponse(**result)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Gemini connection failed: {exc}")
+
+
 @app.post("/auth/register", response_model=UserResponse)
 def register_user(payload: RegisterRequest, db: Session = Depends(database.get_db)):
-    # Check if email already exists
     existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="該電子郵件已被使用")
-    
-    # Generate UID with current date
+        raise HTTPException(status_code=400, detail="Email already exists")
+
     uid = f"UID-{datetime.utcnow():%Y%m%d%H%M}"
-    
-    # Hash the password
-    hashed_password = hash_password(payload.password)
-    
     new_user = models.User(
         name=payload.name,
         email=payload.email,
-        password=hashed_password,
+        password=hash_password(payload.password),
         uid=uid,
         points=0,
     )
@@ -190,21 +207,14 @@ def register_user(payload: RegisterRequest, db: Session = Depends(database.get_d
     db.refresh(new_user)
     return new_user
 
+
 @app.post("/auth/login", response_model=LoginResponse)
 def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
-    
-    if not user:
-        raise HTTPException(status_code=401, detail="電子郵件或密碼錯誤")
-    
-    # Verify the password using bcrypt
-    if not verify_password(payload.password, user.password):
-        raise HTTPException(status_code=401, detail="電子郵件或密碼錯誤")
-    
-    return {
-        "user": user,
-        "message": f"歡迎回來，{user.name}！"
-    }
+    if not user or not verify_password(payload.password, user.password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return {"user": user, "message": f"Welcome back, {user.name}"}
+
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
@@ -212,92 +222,75 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    recent_videos = (
-        db.query(models.Video)
-        .order_by(models.Video.created_at.desc())
-        .limit(3)
-        .all()
-    )
-    video_context = [
-        {
-            "title": video.title,
-            "video_link": video.video_link,
-        }
-        for video in recent_videos
-    ]
+    recent_videos = db.query(models.Video).order_by(models.Video.created_at.desc()).limit(3).all()
+    video_context = [{"title": video.title, "video_link": video.video_link} for video in recent_videos]
 
-    print(f"Chat request: {user_message[:50]}...")
     try:
         reply = ai_analyzer.generate_chat_reply(
             user_message,
             [{"role": item.role, "content": item.content} for item in payload.history],
             video_context,
         )
-        print(f"Chat reply: {reply[:50]}...")
         return ChatResponse(reply=reply)
-    except Exception as e:
-        print(f"Error chatting with AI: {e}")
-        # Use fallback reply instead of transcript fallback
-        reply = "抱歉，AI 聊天服務目前無法使用。請稍後再試。"
-        return ChatResponse(reply=reply)
+    except Exception as exc:
+        print(f"Error chatting with Gemini: {exc}")
+        return ChatResponse(reply=ai_analyzer.generate_transcript_fallback_reply(user_message, video_context))
+
 
 @app.post("/api/execute-code", response_model=CodeExecutionResponse)
 def execute_code(payload: CodeExecutionRequest):
-    """Execute Python code and return output with validation"""
     if not payload.code or not payload.code.strip():
         return CodeExecutionResponse(output="", error="Code cannot be empty")
-    
-    # Use the improved compiler
     output, error = code_compiler.execute_python_code(
         payload.code,
         timeout=10,
-        enable_security_check=True
+        enable_security_check=True,
     )
-    
     return CodeExecutionResponse(output=output, error=error)
+
 
 @app.get("/users/{user_id}", response_model=UserResponse)
 def read_user(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
-        raise HTTPException(status_code=404, detail="找不到該用戶")
+        raise HTTPException(status_code=404, detail="User not found")
     return user
+
 
 @app.put("/users/{user_id}", response_model=UserResponse)
 def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
-        raise HTTPException(status_code=404, detail="找不到該用戶")
+        raise HTTPException(status_code=404, detail="User not found")
     user.name = payload.name
     user.email = payload.email
     if payload.password:
-        # Hash the password before updating
         user.password = hash_password(payload.password)
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
+
 @app.get("/users/{user_id}/recharge-records", response_model=List[RechargeRecordResponse])
 def read_recharge_records(user_id: int, db: Session = Depends(database.get_db)):
-    records = (
+    return (
         db.query(models.RechargeRecord)
         .filter(models.RechargeRecord.user_id == user_id)
         .order_by(models.RechargeRecord.id.desc())
         .all()
     )
-    return records
+
 
 @app.post("/users/{user_id}/recharge", response_model=RechargeRecordResponse)
 def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
-        raise HTTPException(status_code=404, detail="找不到該用戶")
-    order_id = f"A{datetime.utcnow():%Y%m%d%H%M%S}"
+        raise HTTPException(status_code=404, detail="User not found")
     record = models.RechargeRecord(
         user_id=user.id,
         date=datetime.utcnow().strftime("%Y/%m/%d"),
-        order_id=order_id,
+        order_id=f"A{datetime.utcnow():%Y%m%d%H%M%S}",
         amount=payload.price,
         points=payload.points,
         plan_content=payload.plan_content,
@@ -309,29 +302,45 @@ def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(
     db.add(user)
     db.commit()
     db.refresh(record)
-    db.refresh(user)
     return record
 
-# Videos API
+
 @app.get("/api/videos", response_model=List[schema.VideoResponse])
-def get_videos(user_id: int, db: Session = Depends(database.get_db)):
-    videos = db.query(models.Video).filter(models.Video.user_id == user_id).order_by(models.Video.id.desc()).all()
-    return videos
+def get_videos(user_id: Optional[int] = None, db: Session = Depends(database.get_db)):
+    query = db.query(models.Video)
+    if user_id is not None:
+        query = query.filter(models.Video.user_id == user_id)
+    return query.order_by(models.Video.id.desc()).all()
+
+
+@app.get("/api/videos/{video_id}/analysis", response_model=schema.VideoAnalysisResponse)
+def analyze_video(video_id: int, db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    try:
+        title = video.title or "Untitled Video"
+        analysis = learning_pipeline.analyze_video(video.id, title, video.video_link)
+        if analysis.outline_markdown and analysis.outline_markdown != video.outline:
+            video.outline = analysis.outline_markdown
+            db.add(video)
+            db.commit()
+            db.refresh(video)
+        return analysis
+    except Exception as exc:
+        print(f"Error analyzing video: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to analyze video: {exc}")
+
 
 @app.post("/api/videos", response_model=schema.VideoResponse)
 def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get_db)):
     raw_link = (payload.video_link or "").strip()
     if not raw_link:
-        raise HTTPException(status_code=400, detail="請輸入影片連結")
+        raise HTTPException(status_code=400, detail="Please provide a video link")
 
-    # Extract title from URL if not provided
     title = (payload.title or "").strip() or None
     if not title:
-        # Try to extract a meaningful title from YouTube URL
-        if "youtube.com" in raw_link or "youtu.be" in raw_link:
-            title = extract_youtube_title(raw_link)
-        else:
-            title = "未命名影片"
+        title = extract_youtube_title(raw_link) if ("youtube.com" in raw_link or "youtu.be" in raw_link) else "Uploaded Video"
 
     try:
         video = models.Video(
@@ -354,25 +363,22 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
             )
             db.add(upload)
             db.commit()
-
         return video
-    except SQLAlchemyError as e:
+    except SQLAlchemyError as exc:
         db.rollback()
-        print(f"Database error creating video: {e}")
-        raise HTTPException(status_code=500, detail="資料庫寫入失敗，請稍後再試")
-    except Exception as e:
-        db.rollback()
-        print(f"Unexpected error creating video: {e}")
-        raise HTTPException(status_code=500, detail="新增影片時發生未預期錯誤")
+        print(f"Database error creating video: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to create video")
+
 
 @app.delete("/api/videos/{video_id}")
 def delete_video(video_id: int, db: Session = Depends(database.get_db)):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if video is None:
-        raise HTTPException(status_code=404, detail="找不到該影片")
+        raise HTTPException(status_code=404, detail="Video not found")
     db.delete(video)
     db.commit()
-    return {"message": "影片已刪除"}
+    return {"message": "Video deleted"}
+
 
 @app.post("/api/feedbacks", response_model=schema.AIFeedbackResponse)
 def create_ai_feedback(payload: schema.AIFeedbackCreate, db: Session = Depends(database.get_db)):
@@ -387,9 +393,11 @@ def create_ai_feedback(payload: schema.AIFeedbackCreate, db: Session = Depends(d
     db.refresh(feedback)
     return feedback
 
+
 @app.get("/api/feedbacks", response_model=List[schema.AIFeedbackResponse])
 def get_ai_feedbacks(db: Session = Depends(database.get_db)):
     return db.query(models.AIFeedback).order_by(models.AIFeedback.id.desc()).all()
+
 
 @app.post("/api/quiz-questions", response_model=schema.QuizQuestionResponse)
 def create_quiz_question(payload: schema.QuizQuestionCreate, db: Session = Depends(database.get_db)):
@@ -417,6 +425,7 @@ def create_quiz_question(payload: schema.QuizQuestionCreate, db: Session = Depen
         created_at=question.created_at,
     )
 
+
 @app.get("/api/quiz-questions", response_model=List[schema.QuizQuestionResponse])
 def get_quiz_questions(db: Session = Depends(database.get_db)):
     questions = db.query(models.QuizQuestion).order_by(models.QuizQuestion.id.desc()).all()
@@ -435,6 +444,7 @@ def get_quiz_questions(db: Session = Depends(database.get_db)):
         for q in questions
     ]
 
+
 @app.post("/api/uploads", response_model=schema.UploadRecordResponse)
 def create_upload(payload: schema.UploadRecordCreate, db: Session = Depends(database.get_db)):
     upload = models.UploadRecord(
@@ -446,6 +456,7 @@ def create_upload(payload: schema.UploadRecordCreate, db: Session = Depends(data
     db.commit()
     db.refresh(upload)
     return upload
+
 
 @app.post("/api/generations", response_model=schema.GenerationRecordResponse)
 def create_generation(payload: schema.GenerationRecordCreate, db: Session = Depends(database.get_db)):
@@ -459,32 +470,27 @@ def create_generation(payload: schema.GenerationRecordCreate, db: Session = Depe
     db.refresh(generation)
     return generation
 
-# Quiz API
+
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
 def generate_quiz(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
-    """Generate AI-powered quiz questions based on video content analysis"""
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if video is None:
-        raise HTTPException(status_code=404, detail="找不到該影片")
+        raise HTTPException(status_code=404, detail="Video not found")
 
+    title = video.title or "Untitled Video"
     try:
-        title = video.title or "未命名影片"
-        video_link = video.video_link
-        
-        # Use AI analyzer to generate quiz questions based on video content
-        questions = ai_analyzer.analyze_video_content_with_ai(video_link, title)
-
+        quiz_response = learning_pipeline.generate_quiz(video.id, title, video.video_link)
+        questions = quiz_response.questions
         saved_questions = []
         for item in questions:
-            correct_option = item.options[item.correct_answer] if 0 <= item.correct_answer < len(item.options) else ""
             question_record = models.QuizQuestion(
                 user_id=user_id,
                 video_id=video.id,
                 question_content=item.question,
-                reference_answer=correct_option,
+                reference_answer=item.correct_answer,
                 answer_record=None,
                 accuracy=0,
-                options_json=json.dumps(item.options, ensure_ascii=False),
+                options_json=None,
             )
             db.add(question_record)
             saved_questions.append(question_record)
@@ -504,73 +510,57 @@ def generate_quiz(video_id: int, user_id: int = 1, db: Session = Depends(databas
         return schema.QuizResponse(
             video_id=video.id,
             video_title=title,
-            quiz_type="ai-coding",
-            questions=questions
+            quiz_type=quiz_response.quiz_type,
+            questions=questions,
         )
-    except Exception as e:
-        print(f"Error generating quiz: {e}")
-        # Fallback to basic questions if AI fails
+    except Exception as exc:
+        print(f"Error generating quiz: {exc}")
         questions = ai_analyzer.generate_fallback_questions(title)
         return schema.QuizResponse(
             video_id=video.id,
             video_title=title,
-            quiz_type="ai-coding",
-            questions=questions
+            quiz_type="fallback-coding",
+            questions=questions,
         )
 
 
-# Quiz Results API
 @app.post("/api/quiz-results", response_model=schema.QuizResultResponse)
 def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(database.get_db)):
     user_id = payload.user_id or 1
-
     quiz_result = models.QuizResult(
         user_id=user_id,
         video_id=payload.video_id,
         score=payload.score,
-        total_questions=payload.total_questions
+        total_questions=payload.total_questions,
     )
     db.add(quiz_result)
     db.commit()
     db.refresh(quiz_result)
     return quiz_result
 
+
 @app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)
 def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
-    # Get video count created by this user
     video_count = db.query(models.Video).filter(models.Video.user_id == user_id).count()
-
-    # Get user points
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
-        raise HTTPException(status_code=404, detail="找不到該用戶")
-    remaining_points = user.points
-
-    # Get completed quizzes count
+        raise HTTPException(status_code=404, detail="User not found")
     completed_quizzes = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).count()
-
-    # Calculate average accuracy
     quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).all()
-    if quiz_results:
-        total_accuracy = sum(result.score / result.total_questions * 100 for result in quiz_results)
-        average_accuracy = total_accuracy / len(quiz_results)
-    else:
-        average_accuracy = 0.0
-
+    average_accuracy = (
+        sum(result.score / result.total_questions * 100 for result in quiz_results) / len(quiz_results)
+        if quiz_results
+        else 0.0
+    )
     return schema.UserStatsResponse(
         video_count=video_count,
-        remaining_points=remaining_points,
+        remaining_points=user.points,
         completed_quizzes=completed_quizzes,
-        average_accuracy=round(average_accuracy, 1)
+        average_accuracy=round(average_accuracy, 1),
     )
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        app,
-        host="127.0.0.1",
-        port=8000,
-        reload=False,
-    )
+    uvicorn.run(app, host="127.0.0.1", port=8000, reload=False)

@@ -56,6 +56,7 @@ export const videoAPI = {
   createVideo: (data: { video_link: string; title?: string | null; outline?: string | null; user_id?: number; cost_points?: number; error_report?: string | null }) =>
     api.post('/api/videos', data),
   deleteVideo: (videoId: number) => api.delete(`/api/videos/${videoId}`),
+  analyzeVideo: (videoId: number) => api.get(`/api/videos/${videoId}/analysis`),
   generateQuiz: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId } }),
 };
 

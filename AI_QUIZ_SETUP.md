@@ -9,7 +9,7 @@ This guide explains how to set up and use the AI-powered quiz generation feature
    - Videos are analyzed using Google Gemini AI
    - Quiz questions are generated based on actual video content
    - Questions are in Traditional Chinese
-   - 5 multiple-choice questions per video
+   - 5 short-answer (handwritten) questions per video
 
 ### 2. **Streamlined User Experience**
    - "📝 生成測驗" button on each video in Learning Material page
@@ -88,7 +88,7 @@ The frontend will run at: `http://localhost:5173`
 
 ### Take Quiz
 1. Read each question carefully
-2. Select your answer from 4 options
+2. Type your answer (code or text) into the provided text area
 3. Use navigation buttons to move between questions
 4. Click **"完成測驗"** (Complete Quiz) on the last question
 5. Review results and correct answers
@@ -119,8 +119,8 @@ Questions are returned as JSON with format:
   "questions": [
     {
       "question": "Question text",
-      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-      "correct_answer": 0
+      "correct_answer": "Reference answer code or text",
+      "explanation": "Why this is correct"
     }
   ]
 }
@@ -172,13 +172,13 @@ AI_API_KEY=your_api_key_here
 ## 📊 Quiz Features
 
 ### Question Format
-- **Type:** Multiple choice (4 options per question)
+- **Type:** Short-answer / Handwritten (type your response)
 - **Language:** Traditional Chinese (繁體中文)
 - **Total:** 5 questions per quiz
 - **Content:** Based on video title/URL analysis
 
 ### Scoring
-- Score calculated as: correct_answers / total_questions
+- Score calculated as: exact match (trimmed) / total_questions
 - Percentage displayed with emoji feedback:
   - 🎉 80% or higher: Excellent!
   - 👍 60-79%: Good!
@@ -218,3 +218,4 @@ Possible improvements for future versions:
 
 **Version:** 1.0
 **Last Updated:** April 21, 2026
+il 21, 2026
