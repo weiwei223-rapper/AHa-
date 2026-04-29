@@ -11,7 +11,7 @@ import bcrypt
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -94,7 +94,7 @@ app = FastAPI(lifespan=lifespan)
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5173/", "http://localhost:5174", "http://localhost:5174/", "http://localhost:5175", "http://localhost:5175/", "http://localhost:5176", "http://localhost:5176/", "http://localhost:3000", "http://localhost:3000/"],
+    allow_origins=["http://localhost:5173", "http://localhost:5173/", "http://localhost:5174", "http://localhost:5174/", "http://localhost:5175", "http://localhost:5175/", "http://localhost:5176", "http://localhost:5176/", "http://localhost:5177", "http://localhost:5177/", "http://localhost:3000", "http://localhost:3000/"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -107,8 +107,7 @@ class UserResponse(BaseModel):
     uid: str
     points: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):
     name: str
@@ -131,8 +130,7 @@ class RechargeRecordResponse(BaseModel):
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class RegisterRequest(BaseModel):
     name: str
@@ -146,6 +144,10 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     user: UserResponse
     message: str
+
+@app.get("/")
+def read_root():
+    return {"message": "AHa AI API Server is running", "status": "ok"}
 
 class ChatMessage(BaseModel):
     role: str
@@ -226,16 +228,19 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
         for video in recent_videos
     ]
 
+    print(f"Chat request: {user_message[:50]}...")
     try:
         reply = ai_analyzer.generate_chat_reply(
             user_message,
             [{"role": item.role, "content": item.content} for item in payload.history],
             video_context,
         )
+        print(f"Chat reply: {reply[:50]}...")
         return ChatResponse(reply=reply)
     except Exception as e:
-        print(f"Error chatting with Gemini: {e}")
-        reply = ai_analyzer.generate_transcript_fallback_reply(user_message, video_context)
+        print(f"Error chatting with AI: {e}")
+        # Use fallback reply instead of transcript fallback
+        reply = "抱歉，AI 聊天服務目前無法使用。請稍後再試。"
         return ChatResponse(reply=reply)
 
 @app.post("/api/execute-code", response_model=CodeExecutionResponse)

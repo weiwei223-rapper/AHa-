@@ -152,10 +152,17 @@ const Chat: React.FC = () => {
         history: nextMessages,
       });
 
-      const reply =
+      let reply =
         response.data?.reply ||
         response.data?.message ||
         'The assistant did not return a valid reply.';
+
+      // Validate the reply
+      if (!reply || reply.trim().length === 0) {
+        reply = '抱歉，我沒有收到有效的回應。請再試一次。';
+      } else if (reply.length > 10000) {
+        reply = reply.substring(0, 10000) + '...';
+      }
 
       updateSession(activeSession.id, [
         ...nextMessages,
@@ -164,14 +171,21 @@ const Chat: React.FC = () => {
     } catch (requestError) {
       console.error('Error sending message:', requestError);
 
+      let errorMessage = '無法連線到聊天服務，請稍後再試。';
+      if (requestError.code === 'ECONNABORTED') {
+        errorMessage = '請求超時，請檢查網路連線後再試。';
+      } else if (requestError.response?.status === 500) {
+        errorMessage = '伺服器內部錯誤，請稍後再試。';
+      }
+
       updateSession(activeSession.id, [
         ...nextMessages,
         {
           role: 'assistant',
-          content: 'Sorry, something went wrong while contacting the chat service.'
+          content: errorMessage
         },
       ]);
-      setError('無法連線到聊天服務，請稍後再試。');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

@@ -23,7 +23,7 @@ except ImportError:
     import schema
 
 BASE_DIR = os.path.dirname(__file__)
-DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 TRANSCRIPT_LANGUAGES = ("zh-TW", "zh-Hant", "zh-CN", "zh", "en")
 MAX_TRANSCRIPT_CHARS = 12000
@@ -58,31 +58,52 @@ def init_gemini() -> str:
 
 def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> str:
     api_key = init_gemini()
-    response = requests.post(
-        GEMINI_API_URL.format(model=model),
-        params={"key": api_key},
-        headers={"Content-Type": "application/json"},
-        json={
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 0.5,
-                "maxOutputTokens": 2048,
+    model_name = model.replace("models/", "")
+    try:
+        response = requests.post(
+            GEMINI_API_URL.format(model=model_name),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
             },
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
+            json={
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": 0.5,
+                    "maxOutputTokens": 2048,
+                },
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
 
-    data = response.json()
-    candidates = data.get("candidates", [])
-    if not candidates:
-        raise ValueError(f"No candidates returned from Gemini: {data}")
+        response.encoding = 'utf-8'
+        data = response.json()
 
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text = "".join(part.get("text", "") for part in parts).strip()
-    if not text:
-        raise ValueError(f"Empty text returned from Gemini: {data}")
-    return text
+        if 'error' in data:
+            raise ValueError(f"Gemini API error: {data['error']}")
+
+        candidates = data.get("candidates", [])
+        if not candidates:
+            raise ValueError(f"No candidates returned from Gemini: {data}")
+
+        content = candidates[0].get("content", {})
+        parts = content.get("parts", [])
+        if not parts:
+            raise ValueError(f"No content parts returned from Gemini: {data}")
+
+        text = "".join(part.get("text", "") for part in parts).strip()
+        if not text:
+            raise ValueError(f"Empty text returned from Gemini: {data}")
+
+        return text
+
+    except requests.exceptions.Timeout:
+        raise ValueError("Gemini API request timed out")
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Gemini API request failed: {e}")
+    except (KeyError, ValueError, TypeError) as e:
+        raise ValueError(f"Invalid response from Gemini API: {e}")
 
 
 def extract_youtube_video_id(video_link: str) -> str | None:
@@ -289,16 +310,18 @@ def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | 
     video_context = build_video_context(videos or [])
     system_prompt = (
         "You are the AHa study assistant. "
-        "Answer in Traditional Chinese. "
-        "If uploaded video transcript context is available, prioritize it. "
-        "Explain clearly and avoid copying long transcript passages."
+        "Always answer in Traditional Chinese (繁體中文). "
+        "Keep answers clear and concise. "
+        "If uploaded video transcript context is available, use it to provide relevant information. "
+        "Do not copy long passages from transcripts directly. "
+        "If you cannot answer based on available context, provide general helpful study advice."
     )
 
-    contents = [{"role": "user", "parts": [{"text": system_prompt}]}]
+    contents = [{"role": "system", "parts": [{"text": system_prompt}]}]
 
     if video_context:
         contents.append(
-            {"role": "user", "parts": [{"text": f"Uploaded video context:\n{video_context}"}]}
+            {"role": "system", "parts": [{"text": f"Uploaded video context:\n{video_context}"}]}
         )
 
     for item in history:
@@ -308,13 +331,26 @@ def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | 
             continue
         contents.append(
             {
-                "role": "model" if role == "assistant" else "user",
+                "role": "assistant" if role == "assistant" else "user",
                 "parts": [{"text": content}],
             }
         )
 
     contents.append({"role": "user", "parts": [{"text": message.strip()}]})
-    return generate_text_with_gemini(contents)
+
+    for model in [DEFAULT_GEMINI_MODEL, "gemini-3.5-pro", "gemini-1.5-flash"]:
+        try:
+            reply = generate_text_with_gemini(contents, model)
+            print(f"Generated reply successfully with {model}: {reply[:50]}...")
+            if not reply or len(reply.strip()) < 10:
+                continue
+            return reply.strip()
+        except Exception as e:
+            print(f"Gemini model {model} failed: {e}")
+            continue
+
+    print("All Gemini models failed for chat reply")
+    return "抱歉，聊天服務暫時無法使用。請稍後再試。"
 
 
 def analyze_video_content_with_ai(video_link: str, title: str) -> list[schema.QuizQuestion]:
