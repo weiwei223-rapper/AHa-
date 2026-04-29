@@ -1,9 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
-import subprocess
-import sys
-import tempfile
 import os
 import json
 
@@ -19,12 +16,13 @@ from sqlalchemy.orm import Session
 load_dotenv()
 
 try:
-    from . import ai_analyzer, database, models, schema
+    from . import ai_analyzer, database, models, schema, code_compiler
 except ImportError:
     import ai_analyzer
     import database
     import models
     import schema
+    import code_compiler
 
 def extract_youtube_title(url: str) -> str:
     """Extract a meaningful title from YouTube URL"""
@@ -245,35 +243,18 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
 
 @app.post("/api/execute-code", response_model=CodeExecutionResponse)
 def execute_code(payload: CodeExecutionRequest):
-    """Execute Python code and return output"""
-    try:
-        # Create a temporary file for the code
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(payload.code)
-            temp_file = f.name
-
-        try:
-            # Execute the code
-            result = subprocess.run(
-                [sys.executable, temp_file],
-                capture_output=True,
-                text=True,
-                timeout=10,  # 10 second timeout
-                cwd=os.path.dirname(temp_file)
-            )
-
-            output = result.stdout
-            error = result.stderr
-
-            return CodeExecutionResponse(output=output, error=error)
-        finally:
-            # Clean up the temporary file
-            os.unlink(temp_file)
-
-    except subprocess.TimeoutExpired:
-        return CodeExecutionResponse(output="", error="Code execution timed out")
-    except Exception as e:
-        return CodeExecutionResponse(output="", error=f"Execution error: {str(e)}")
+    """Execute Python code and return output with validation"""
+    if not payload.code or not payload.code.strip():
+        return CodeExecutionResponse(output="", error="Code cannot be empty")
+    
+    # Use the improved compiler
+    output, error = code_compiler.execute_python_code(
+        payload.code,
+        timeout=10,
+        enable_security_check=True
+    )
+    
+    return CodeExecutionResponse(output=output, error=error)
 
 @app.get("/users/{user_id}", response_model=UserResponse)
 def read_user(user_id: int, db: Session = Depends(database.get_db)):

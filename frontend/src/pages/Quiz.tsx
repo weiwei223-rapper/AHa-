@@ -383,7 +383,7 @@ const Quiz = () => {
           <div style={{ marginTop: '10px' }}>
             <h4>輸出結果：</h4>
             {codeOutput && (
-              <pre style={{ backgroundColor: '#f0f0f0', padding: '10px', borderRadius: '4px', marginBottom: '10px', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+              <pre style={{ backgroundColor: '#f0f0f0', color: 'black', padding: '10px', borderRadius: '4px', marginBottom: '10px', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
                 {codeOutput}
               </pre>
             )}
