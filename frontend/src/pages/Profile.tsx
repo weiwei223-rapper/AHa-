@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import api from "../api";
+import api, { userAPI } from "../api";
+import {
+  addAchievementPoints,
+  buildAchievements,
+  loadAchievementPoints,
+  loadLoginMeta,
+  loadUnlockedAchievementKeys,
+  saveUnlockedAchievementKeys,
+  type AchievementItem,
+  type LoginMeta,
+} from "../utils/achievement";
 import "./PageIndex.css";
 
 type UserData = {
@@ -19,6 +29,13 @@ type RechargeRecord = {
   plan_id?: string;
 };
 
+type UserStats = {
+  video_count: number;
+  remaining_points: number;
+  completed_quizzes: number;
+  average_accuracy: number;
+};
+
 const rechargePlans = [
   { title: "NT$ 299", points: 300, price: 299, caption: "適合短期密集練習" },
   { title: "NT$ 599", points: 650, price: 599, caption: "常用方案，額外多送一些" },
@@ -29,6 +46,19 @@ const Profile = () => {
   const [activeTab, setActiveTab] = useState<"basic" | "records">("basic");
   const [showTopup, setShowTopup] = useState(false);
   const [user, setUser] = useState<UserData | null>(null);
+  const [stats, setStats] = useState<UserStats>({
+    video_count: 0,
+    remaining_points: 0,
+    completed_quizzes: 0,
+    average_accuracy: 0,
+  });
+  const [achievements, setAchievements] = useState<AchievementItem[]>([]);
+  const [achievementPoints, setAchievementPoints] = useState(0);
+  const [loginMeta, setLoginMeta] = useState<LoginMeta>({
+    lastLoginDate: '',
+    consecutiveLoginDays: 0,
+    totalLoginDays: 0,
+  });
   const [formValues, setFormValues] = useState({
     name: "",
     password: "",
@@ -55,12 +85,64 @@ const Profile = () => {
       const historyResp = await api.get(`/users/${id}/recharge-records`);
       setHistory(historyResp.data);
       setMessage("");
+      await loadUserStats(id);
+      refreshAchievements();
     } catch (error) {
       console.error(error);
       setMessage("無法讀取使用者資料，請稍後再試。");
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadUserStats = async (id: number) => {
+    try {
+      const statsResp = await userAPI.getStats(id);
+      setStats(statsResp.data);
+    } catch (error) {
+      console.error("Failed to load user stats:", error);
+    }
+  };
+
+  const refreshAchievements = () => {
+    const quizResultsRaw = localStorage.getItem("quizResults");
+    let quizResults: unknown = [];
+    try {
+      quizResults = quizResultsRaw ? JSON.parse(quizResultsRaw) : [];
+    } catch {
+      quizResults = [];
+    }
+
+    const questionCount = Array.isArray(quizResults)
+      ? quizResults.reduce((sum: number, item: { totalQuestions: number }) => sum + (item.totalQuestions || 0), 0)
+      : 0;
+
+    const currentLoginMeta = loadLoginMeta();
+    setLoginMeta(currentLoginMeta);
+
+    const allAchievements = buildAchievements({
+      videoCount: stats.video_count,
+      questionCount,
+      loginStreakDays: currentLoginMeta.consecutiveLoginDays,
+      totalLoginDays: currentLoginMeta.totalLoginDays,
+    });
+
+    const storedKeys = loadUnlockedAchievementKeys();
+    const unlockedKeys = allAchievements.filter((item) => item.unlocked).map((item) => item.key);
+    const newlyUnlockedKeys = unlockedKeys.filter((key) => !storedKeys.includes(key));
+
+    if (newlyUnlockedKeys.length > 0) {
+      const newPoints = allAchievements
+        .filter((item) => newlyUnlockedKeys.includes(item.key))
+        .reduce((sum, item) => sum + item.points, 0);
+      const nextPoints = addAchievementPoints(newPoints);
+      setAchievementPoints(nextPoints);
+      saveUnlockedAchievementKeys([...storedKeys, ...newlyUnlockedKeys]);
+    } else {
+      setAchievementPoints(loadAchievementPoints());
+    }
+
+    setAchievements(allAchievements);
   };
 
   useEffect(() => {
@@ -159,6 +241,48 @@ const Profile = () => {
       </section>
 
       {message ? <div className="page-info-banner">{message}</div> : null}
+
+      <section className="panel-card achievement-overview">
+        <div className="achievement-summary-row">
+          <div>
+            <span>累積成就點數</span>
+            <strong>{achievementPoints}</strong>
+            <p>達成成就後即可獲得對應點數，將在本地儲存並顯示於此。</p>
+          </div>
+          <div>
+            <span>連續登入</span>
+            <strong>{loginMeta.consecutiveLoginDays} 天</strong>
+            <p>維持習慣，連續登入 7 天即可獲得《學習堅持者》。</p>
+          </div>
+          <div>
+            <span>累計登入</span>
+            <strong>{loginMeta.totalLoginDays} 天</strong>
+            <p>累計登入可解鎖長期學習成就。</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel-card achievement-list-card">
+        <div className="achievement-list-header">
+          <h2>成就總覽</h2>
+          <p>依據影片上傳、Quiz 完成題數與登入天數，自動解鎖成就徽章。</p>
+        </div>
+        <div className="achievement-grid">
+          {achievements.map((item) => (
+            <article key={item.key} className={`achievement-card ${item.unlocked ? 'unlocked' : 'locked'}`}>
+              <div className="achievement-card-header">
+                <strong>{item.title}</strong>
+                <span>{item.points} 點</span>
+              </div>
+              <p>{item.description}</p>
+              <div className="achievement-progress">
+                <span>{item.unlocked ? '已解鎖' : '進度'}</span>
+                <strong>{item.progress}</strong>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="panel-card">
         <div className="profile-toolbar">

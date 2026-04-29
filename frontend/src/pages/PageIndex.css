@@ -258,6 +258,121 @@ button:hover span:after {
     transform: translateY(-1px);
 }
 
+.achievement-overview,
+.achievement-list-card {
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid rgba(43, 193, 241, 0.18);
+  border-radius: 18px;
+  background: #0b1120;
+}
+
+.achievement-summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.achievement-summary-row div {
+  background: rgba(43, 193, 241, 0.08);
+  padding: 18px;
+  border-radius: 14px;
+  min-height: 110px;
+}
+
+.achievement-summary-row span {
+  display: block;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+.achievement-summary-row strong {
+  font-size: 32px;
+  display: block;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+
+.achievement-summary-row p {
+  color: #94a3b8;
+  margin: 0;
+}
+
+.achievement-list-header {
+  margin-bottom: 16px;
+}
+
+.achievement-list-header h2 {
+  margin: 0 0 6px 0;
+  color: #ffffff;
+}
+
+.achievement-list-header p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.achievement-card {
+  background: #0f1623;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.achievement-card.unlocked {
+  border-color: #2bc1f1;
+  background: rgba(43, 193, 241, 0.08);
+}
+
+.achievement-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.achievement-card-header strong {
+  font-size: 16px;
+  color: #ffffff;
+}
+
+.achievement-card-header span {
+  color: #2bc1f1;
+  font-weight: 700;
+}
+
+.achievement-card p {
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.achievement-progress {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+}
+
+.achievement-progress span {
+  color: #94a3b8;
+}
+
+.achievement-progress strong {
+  color: #ffffff;
+}
+
 .no-video {
     text-align: center;
     color: #94a3b8;

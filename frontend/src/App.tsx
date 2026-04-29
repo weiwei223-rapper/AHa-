@@ -9,6 +9,7 @@ import Quiz from "./pages/Quiz.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
 import Chat from "./pages/Chat.tsx";
 import {Route,Routes} from "react-router-dom";
+import { updateLoginMetaForToday } from "./utils/achievement";
 
 function App (){
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -20,6 +21,7 @@ function App (){
         const userData = localStorage.getItem('userData');
         
         if (userId && userData) {
+            updateLoginMetaForToday();
             setIsAuthenticated(true);
             setUserInfo(JSON.parse(userData));
         }
