@@ -1,6 +1,7 @@
-from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 class VideoCreate(BaseModel):
     video_link: str
@@ -55,8 +56,12 @@ class RechargeRecordResponse(BaseModel):
 
 class QuizQuestion(BaseModel):
     question: str
-    correct_answer: str  # Reference answer text
+    correct_answer: str
+    options: List[str] = []
+    question_type: str = "fill-in-the-blank"
     explanation: Optional[str] = None
+    source_time: Optional[str] = None
+    source_excerpt: Optional[str] = None
     starter_code: Optional[str] = None
     test_cases: List[str] = []
 
@@ -65,6 +70,7 @@ class QuizQuestionCreate(BaseModel):
     video_id: int
     question_content: str
     reference_answer: str
+    options: List[str] = []
     answer_record: Optional[str] = None
     accuracy: Optional[int] = 0
 
@@ -76,6 +82,7 @@ class QuizQuestionResponse(BaseModel):
     reference_answer: str
     answer_record: Optional[str] = None
     accuracy: int
+    options: List[str] = []
     created_at: datetime
 
     class Config:

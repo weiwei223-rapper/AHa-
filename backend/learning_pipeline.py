@@ -4,6 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 try:
     from . import ai_analyzer, schema
@@ -31,36 +32,6 @@ OUTLINE_CHUNK_OVERLAP = 400
 RETRIEVAL_CHUNK_SIZE = 900
 RETRIEVAL_CHUNK_OVERLAP = 180
 RETRIEVAL_TOP_K = 4
-
-MBPP_FEW_SHOT_EXAMPLES = [
-    {
-        "topic": "list filtering",
-        "question": "撰寫函式，回傳串列中所有大於 0 的整數總和。",
-        "starter_code": "def sum_positive(numbers):\n    pass",
-        "test_cases": [
-            "assert sum_positive([1, -2, 3, 4]) == 8",
-            "assert sum_positive([-5, -1]) == 0",
-        ],
-    },
-    {
-        "topic": "string processing",
-        "question": "撰寫函式，移除字串中的所有空白字元。",
-        "starter_code": "def remove_spaces(text):\n    pass",
-        "test_cases": [
-            "assert remove_spaces('a b c') == 'abc'",
-            "assert remove_spaces(' hello ') == 'hello'",
-        ],
-    },
-    {
-        "topic": "loop and counting",
-        "question": "撰寫函式，計算串列中偶數的個數。",
-        "starter_code": "def count_even(numbers):\n    pass",
-        "test_cases": [
-            "assert count_even([1, 2, 3, 4]) == 2",
-            "assert count_even([1, 3, 5]) == 0",
-        ],
-    },
-]
 
 
 @dataclass
@@ -117,7 +88,7 @@ def _split_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     return splitter.split_text(text)
 
 
-def _call_llm(prompt: str, temperature: float = 0.3, max_tokens: int = 1800) -> str:
+def _call_llm(prompt: str) -> str:
     return ai_analyzer.generate_text_with_gemini(
         [{"role": "user", "parts": [{"text": prompt}]}]
     )
@@ -140,50 +111,51 @@ def load_transcript(video_link: str) -> TranscriptResult:
 
     transcript = ai_analyzer.fetch_video_transcript(video_link)
     if transcript:
-        source = "whisper-fallback" if "Transcript unavailable" not in transcript else "fallback"
-        return TranscriptResult(transcript=transcript, source=source)
+        return TranscriptResult(transcript=transcript, source="youtube-transcript-or-whisper")
 
     return TranscriptResult(transcript="", source="unavailable")
 
 
 def generate_outline(transcript: str, title: str) -> str:
     if not transcript.strip():
-        return "- 無法取得逐字稿\n- 目前無法建立課程大綱"
+        return "- 無法取得影片逐字稿\n- 目前不能生成可靠的影片摘要"
 
     chunks = _split_text(transcript, OUTLINE_CHUNK_SIZE, OUTLINE_CHUNK_OVERLAP)
     chunk_summaries: list[str] = []
 
     for index, chunk in enumerate(chunks, start=1):
         prompt = f"""
-你是課程內容分析助手。請閱讀以下影片逐字稿片段，輸出 3-5 個重點條列。
+請用繁體中文整理以下影片逐字稿片段。
+
 要求：
-- 使用繁體中文
-- 每點一句
-- 聚焦教學重點、概念、程式技巧與範例
+1. 用 3 到 5 點條列。
+2. 每點聚焦在這段內容的具體重點。
+3. 不要補外部知識。
+4. 不要重複原句太長。
 
 影片標題：{title}
-片段編號：{index}/{len(chunks)}
-逐字稿片段：
+片段：{index}/{len(chunks)}
+
+逐字稿：
 {chunk}
 """
-        summary = _call_llm(prompt, temperature=0.2, max_tokens=600)
-        chunk_summaries.append(summary)
+        chunk_summaries.append(_call_llm(prompt))
 
     merged_prompt = f"""
-你是課綱整理助手。請依據以下分段摘要，整理成一份結構清楚的課程大綱。
+請把以下分段摘要整合成一份影片重點整理，使用繁體中文 Markdown 條列。
+
 要求：
-- 使用繁體中文
-- 以 Markdown 條列
-- 先列出 4-8 個主要教學重點
-- 每個重點下可有 1-2 個子點
-- 僅輸出大綱，不要額外說明
+1. 產出 4 到 8 點。
+2. 每點精簡明確。
+3. 只根據提供內容整理。
+4. 優先保留可出題的事實、步驟、概念與結論。
 
 影片標題：{title}
 
 分段摘要：
 {chr(10).join(chunk_summaries)}
 """
-    return _call_llm(merged_prompt, temperature=0.2, max_tokens=900)
+    return _call_llm(merged_prompt)
 
 
 def build_retrieval_index(transcript: str) -> tuple[list[str], str]:
@@ -197,13 +169,13 @@ def retrieve_chunks(query: str, transcript: str, top_k: int = RETRIEVAL_TOP_K) -
         return [], backend
 
     lowered_terms = set(re.findall(r"\w+", query.lower()))
-    fallback_scores: list[RetrievalChunk] = []
+    scores: list[RetrievalChunk] = []
     for index, chunk in enumerate(chunks, start=1):
         chunk_terms = set(re.findall(r"\w+", chunk.lower()))
         score = float(len(lowered_terms & chunk_terms))
-        fallback_scores.append(RetrievalChunk(index=index, content=chunk, score=score))
-    fallback_scores.sort(key=lambda item: item.score, reverse=True)
-    return fallback_scores[:top_k], "memory-keyword"
+        scores.append(RetrievalChunk(index=index, content=chunk, score=score))
+    scores.sort(key=lambda item: item.score, reverse=True)
+    return scores[:top_k], backend
 
 
 def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAnalysisResponse:
@@ -240,80 +212,154 @@ def _extract_json_array(payload: str) -> list[dict[str, Any]]:
     return data
 
 
+def _normalize_test_cases(item: dict[str, Any]) -> list[str]:
+    raw_cases = item.get("test_cases")
+    if isinstance(raw_cases, list):
+        return [str(case).strip() for case in raw_cases if str(case).strip()]
+
+    single_case_keys = ["assert_statement", "assert", "test_case"]
+    cases: list[str] = []
+    for key in single_case_keys:
+        value = item.get(key)
+        if value:
+            text = str(value).strip()
+            if text:
+                cases.append(text)
+    return cases
+
+
+def _build_fallback_test_cases(starter_code: str, correct_answer: str) -> list[str]:
+    assignment_match = re.search(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=", starter_code, re.MULTILINE)
+    if assignment_match:
+        variable_name = assignment_match.group(1)
+        return [
+            f"{variable_name} = {starter_code.split('=', 1)[1].replace('___', repr(correct_answer)).strip()}\nassert {variable_name} == {repr(correct_answer)}",
+            f"{variable_name} = {starter_code.split('=', 1)[1].replace('___', repr(correct_answer)).strip()}\nassert isinstance({variable_name}, str)",
+        ]
+    return []
+
+
+def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
+    question = str(
+        item.get("question")
+        or item.get("question_text")
+        or item.get("prompt")
+        or ""
+    ).strip()
+    correct_answer = str(item.get("correct_answer") or item.get("answer") or "").strip()
+    starter_code = str(
+        item.get("starter_code")
+        or item.get("code")
+        or item.get("snippet")
+        or ""
+    ).strip()
+    source_excerpt = str(item.get("source_excerpt") or item.get("quote") or "").strip() or None
+    explanation = str(item.get("explanation") or "").strip() or None
+    source_time = str(item.get("source_time") or "unknown").strip() or "unknown"
+    question_type = str(item.get("question_type") or "fill-in-the-blank").strip() or "fill-in-the-blank"
+    test_cases = _normalize_test_cases(item)
+
+    if starter_code and "___" not in starter_code and correct_answer:
+        starter_code = starter_code.replace(correct_answer, "___", 1)
+
+    if starter_code and "___" in starter_code and starter_code not in question:
+        question = f"{question}\n\n```python\n{starter_code}\n```".strip()
+
+    if not explanation and source_excerpt:
+        explanation = f"這題來自影片內容：{source_excerpt}"
+
+    if not test_cases and starter_code and correct_answer:
+        test_cases = _build_fallback_test_cases(starter_code, correct_answer)
+
+    return schema.QuizQuestion(
+        question=question,
+        correct_answer=correct_answer,
+        explanation=explanation,
+        question_type=question_type,
+        source_time=source_time,
+        source_excerpt=source_excerpt,
+        starter_code=starter_code or None,
+        test_cases=test_cases,
+    )
+
+
 def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResponse:
     analysis = analyze_video(video_id, title, video_link)
     retrieved_context = "\n\n".join(
         f"[Chunk {chunk.index}] {chunk.content}" for chunk in analysis.retrieved_chunks
     )
-    few_shot_examples = json.dumps(MBPP_FEW_SHOT_EXAMPLES, ensure_ascii=False, indent=2)
 
     prompt = f"""
-你是 Python 程式填空題設計助手。請根據影片教學內容，產生 5 題「程式填空題」。
-每題應包含一段帶有缺漏（使用 `___` 表示）的程式碼，並要求使用者填入正確的片段。
+你是一個 Python 教學影片出題助手。請根據影片逐字稿與摘要內容，產生 5 題與影片內容直接相關的程式填空題。
 
-課程標題：{title}
-課程大綱：
+影片標題：{title}
+
+影片摘要：
 {analysis.outline_markdown}
 
-檢索到的原始字幕片段：
+可引用的逐字稿片段：
 {retrieved_context}
 
-輸出要求：
-1. 使用繁體中文。
-2. 回傳 JSON array，固定 5 題。
-3. 題目必須「完全運用影片有提到的語法、概念或邏輯」。
-4. 每題包含以下欄位：
-   - question: 題目敘述加上包含 `___` 的程式碼區塊
-   - correct_answer: 填入 `___` 處的正確程式碼片段
-   - explanation: 說明該程式碼的作用，並強調這是在影片哪個部分提到的
-   - starter_code: 給前端編輯器的完整程式碼（包含 `___`），方便使用者複製或修改
-   - test_cases: 2 到 4 筆 Python assert 測試（選填）
-5. 僅輸出 JSON，不要加 markdown。
+嚴格要求：
+1. 只能根據提供的摘要與逐字稿片段出題，不可補外部知識。
+2. 題目語言使用繁體中文。
+3. 產生 exactly 5 題。
+4. 每題都必須是程式填空題，並在程式碼中使用 `___` 表示缺漏。
+5. 題目要能直接對應影片提到的 Python 語法、函式、流程控制、資料結構或實作概念。
+6. `correct_answer` 必須是可直接填入 `___` 的精確字串。
+7. `starter_code` 必須提供完整的程式片段，且包含 `___`。
+8. 每題提供 2 到 4 個 `assert` 測試案例。
+9. 每題都要提供簡短解析。
+10. 每題都要附可追溯來源。
+11. `source_time` 無法判定時填 `unknown`。
+12. `source_excerpt` 節錄與答案最相關的原文，120 字內。
+13. 只回傳 JSON array，不要加 markdown 或說明文字。
 
-範例格式：
+每個題目物件格式：
 {{
-  "question": "在影片中我們學到如何過濾正數，請填補以下缺漏：\\n\\n```python\\ndef filter_pos(nums):\\n    return [x for x in nums if ___]\\n```",
-  "correct_answer": "x > 0",
-  "explanation": "影片中提到使用列表推導式配合條件判斷來過濾元素，這裡應判斷 x 是否大於 0。",
-  "starter_code": "def filter_pos(nums):\\n    return [x for x in nums if ___]"
+  "question": "題目文字",
+  "correct_answer": "正確答案文字",
+  "explanation": "繁體中文解析",
+  "question_type": "fill-in-the-blank",
+  "source_time": "00:10-00:42 或 unknown",
+  "source_excerpt": "逐字稿節錄",
+  "starter_code": "包含 ___ 的完整程式碼",
+  "test_cases": ["assert ...", "assert ..."]
 }}
 """
 
     try:
-        payload = _call_llm(prompt, temperature=0.35, max_tokens=2200)
+        payload = _call_llm(prompt)
         raw_questions = _extract_json_array(payload)
-        questions = [
-            schema.QuizQuestion(
-                question=item.get("question", ""),
-                correct_answer=str(item.get("correct_answer", "")),
-                explanation=item.get("explanation"),
-                starter_code=item.get("starter_code"),
-                test_cases=item.get("test_cases") or [],
-            )
-            for item in raw_questions
+        questions = [_normalize_question(item) for item in raw_questions]
+
+        valid_questions = [
+            question
+            for question in questions
+            if question.question
+            and question.correct_answer
+            and question.starter_code
+            and "___" in (question.starter_code or "")
         ]
+        if len(valid_questions) != 5:
+            raise ValueError("Model did not return 5 valid fill-in-the-blank questions")
+
         return schema.QuizResponse(
             video_id=video_id,
             video_title=title,
-            quiz_type="rag-fill-in-blank",
-            questions=questions,
+            quiz_type="video-fill-in-blank",
+            questions=valid_questions,
         )
     except Exception as exc:
         print(f"Quiz generation fallback for {title}: {exc}")
-        fallback_questions = ai_analyzer.generate_fallback_questions(title)
-        enriched = [
-            schema.QuizQuestion(
-                question=item.question,
-                correct_answer=item.correct_answer,
-                explanation=item.explanation,
-                starter_code=item.starter_code,
-                test_cases=MBPP_FEW_SHOT_EXAMPLES[index % len(MBPP_FEW_SHOT_EXAMPLES)]["test_cases"],
-            )
-            for index, item in enumerate(fallback_questions)
-        ]
+        fallback_questions = ai_analyzer.generate_fallback_questions(
+            title,
+            transcript=analysis.transcript_excerpt,
+            outline=analysis.outline_markdown,
+        )
         return schema.QuizResponse(
             video_id=video_id,
             video_title=title,
-            quiz_type="fallback-fill-in-blank",
-            questions=enriched,
+            quiz_type="fallback-video-fill-in-blank",
+            questions=fallback_questions,
         )

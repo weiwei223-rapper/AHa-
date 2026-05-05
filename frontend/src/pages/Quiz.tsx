@@ -15,6 +15,9 @@ type QuizQuestion = {
   question: string;
   correct_answer: string;
   explanation?: string | null;
+  question_type?: string;
+  source_time?: string | null;
+  source_excerpt?: string | null;
   starter_code?: string | null;
   test_cases?: string[];
 };
@@ -76,9 +79,7 @@ const Quiz = () => {
     }
     return userAnswers.reduce((total, answer, index) => {
       const correct = quiz.questions[index].correct_answer.trim();
-      const user = answer.trim();
-      // Simple comparison - can be improved with AI or fuzzy matching
-      return user === correct ? total + 1 : total;
+      return answer.trim() === correct ? total + 1 : total;
     }, 0);
   }, [quiz, userAnswers]);
 
@@ -104,7 +105,7 @@ const Quiz = () => {
       setShowResults(false);
     } catch (err: any) {
       console.error("Error generating quiz:", err);
-      setError(err.response?.data?.detail || "產生題目失敗");
+      setError(err.response?.data?.detail || "無法產生影片填空題");
     } finally {
       setLoading(false);
     }
@@ -177,12 +178,14 @@ const Quiz = () => {
           <div>
             <div className="page-eyebrow">Quiz Result</div>
             <h1>{quiz.video_title}</h1>
-            <p>這份題目完全由 Gemini 根據影片內容與檢索片段生成。</p>
+            <p>這份題目是根據影片內容產生的程式填空題，可以逐題檢查答案與來源。</p>
           </div>
           <div className="page-hero-metric">
             <span>Score</span>
             <strong>{percentage}%</strong>
-            <p>{score} / {quiz.questions.length}</p>
+            <p>
+              {score} / {quiz.questions.length}
+            </p>
           </div>
         </section>
 
@@ -193,22 +196,45 @@ const Quiz = () => {
                 <div className="quiz-review-status">
                   {userAnswers[index].trim() === question.correct_answer.trim() ? "Correct" : "Review"}
                 </div>
-                <h3>{index + 1}. {question.question}</h3>
+                <h3>
+                  {index + 1}. {question.question}
+                </h3>
+                {question.starter_code && <pre className="code-snippet">{question.starter_code}</pre>}
                 <div style={{ marginTop: "12px" }}>
-                  <p><strong>你的答案：</strong></p>
+                  <p>
+                    <strong>你的答案：</strong>
+                  </p>
                   <pre className="code-snippet">{userAnswers[index] || "未作答"}</pre>
                 </div>
                 <div style={{ marginTop: "12px" }}>
-                  <p><strong>正確答案：</strong></p>
+                  <p>
+                    <strong>正確答案：</strong>
+                  </p>
                   <pre className="code-snippet">{question.correct_answer}</pre>
                 </div>
-                {question.explanation && <p style={{ marginTop: "12px" }}><strong>解析：</strong>{question.explanation}</p>}
+                {question.explanation && (
+                  <p style={{ marginTop: "12px" }}>
+                    <strong>解析：</strong>
+                    {question.explanation}
+                  </p>
+                )}
+                {(question.source_time || question.source_excerpt) && (
+                  <div style={{ marginTop: "12px" }}>
+                    <p>
+                      <strong>出題依據：</strong>
+                      {question.source_time || "unknown"}
+                    </p>
+                    {question.source_excerpt && <pre className="code-snippet">{question.source_excerpt}</pre>}
+                  </div>
+                )}
               </article>
             ))}
           </div>
 
           <div className="quiz-nav-row">
-            <button onClick={resetQuiz} className="page-primary-button">重新選擇影片</button>
+            <button onClick={resetQuiz} className="page-primary-button">
+              回到影片列表
+            </button>
           </div>
         </section>
       </div>
@@ -219,9 +245,9 @@ const Quiz = () => {
     <div className="page-shell">
       <section className="page-hero">
         <div>
-          <div className="page-eyebrow">Gemini Quiz</div>
-          <h1>影片導向實作題</h1>
-          <p>題目會根據影片逐字稿、課程大綱與檢索片段生成，請在下方輸入框寫下你的答案。</p>
+          <div className="page-eyebrow">Video Quiz</div>
+          <h1>影片程式填空題</h1>
+          <p>系統會依照影片逐字稿與摘要，生成 Python 程式填空題與對應測試案例。</p>
         </div>
         <div className="page-hero-metric">
           <span>Sources</span>
@@ -231,7 +257,7 @@ const Quiz = () => {
       </section>
 
       {error && <div className="page-error">{error}</div>}
-      {loading && <div className="page-loading">正在產生測驗...</div>}
+      {loading && <div className="page-loading">正在分析影片並產生填空題...</div>}
 
       <section className="video-library-grid">
         {videos.map((video) => (
@@ -257,8 +283,8 @@ const Quiz = () => {
 
         {videos.length === 0 && (
           <div className="empty-state-card">
-            <h3>沒有可用影片</h3>
-            <p>先到影片頁新增教學影片，再回來產生測驗。</p>
+            <h3>目前沒有影片</h3>
+            <p>先到 Learning Material 新增影片，才能產生和影片內容相關的填空題。</p>
           </div>
         )}
       </section>
@@ -271,32 +297,40 @@ const Quiz = () => {
                 Question {currentQuestionIndex + 1} / {quiz.questions.length}
               </div>
               <h2>{currentQuestion.question}</h2>
-              
+
               <div style={{ marginTop: "20px" }}>
                 <p className="page-eyebrow">Your Answer</p>
                 <textarea
                   className="page-input"
-                  style={{ width: "100%", minHeight: "150px", fontFamily: "monospace", padding: "12px" }}
-                  placeholder="在此輸入你的答案或程式碼..."
+                  style={{ width: "100%", minHeight: "120px", fontFamily: "monospace", padding: "12px" }}
+                  placeholder="輸入要填入 ___ 的答案"
                   value={userAnswers[currentQuestionIndex]}
                   onChange={(e) => handleAnswerChange(e.target.value)}
                 />
               </div>
+
+              {(currentQuestion.source_time || currentQuestion.source_excerpt) && (
+                <div style={{ marginTop: "20px" }}>
+                  <p className="page-eyebrow">出題依據</p>
+                  <p>{currentQuestion.source_time || "unknown"}</p>
+                  {currentQuestion.source_excerpt && <pre className="code-snippet">{currentQuestion.source_excerpt}</pre>}
+                </div>
+              )}
             </div>
 
             <div className="quiz-nav-row">
-              <button onClick={handlePrevious} disabled={currentQuestionIndex === 0} className="page-secondary-button">
+              <button
+                onClick={handlePrevious}
+                disabled={currentQuestionIndex === 0}
+                className="page-secondary-button"
+              >
                 Previous
               </button>
-              <button
-                onClick={() => void handleNext()}
-                className="page-primary-button"
-              >
+              <button onClick={() => void handleNext()} className="page-primary-button">
                 {currentQuestionIndex === quiz.questions.length - 1 ? "Finish Quiz" : "Next"}
               </button>
             </div>
           </section>
-
 
           <section className="panel-card">
             <div className="panel-header">

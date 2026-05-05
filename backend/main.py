@@ -490,7 +490,7 @@ def generate_quiz(video_id: int, user_id: int = 1, db: Session = Depends(databas
                 reference_answer=item.correct_answer,
                 answer_record=None,
                 accuracy=0,
-                options_json=None,
+                options_json=json.dumps(item.options, ensure_ascii=False),
             )
             db.add(question_record)
             saved_questions.append(question_record)
