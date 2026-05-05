@@ -165,6 +165,7 @@ export const buildAchievements = (params: {
       threshold,
       unlocked: questionCount >= threshold,
       progress: `${Math.min(questionCount, threshold)}/${threshold}`,
+      badgeImage: `/achievements/quiz-${threshold}.png`,
     });
   });
 
