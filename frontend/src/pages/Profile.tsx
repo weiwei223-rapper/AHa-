@@ -471,8 +471,20 @@ const Profile = () => {
           {achievements.map((item) => (
             <article key={item.key} className={`achievement-card ${item.unlocked ? 'unlocked' : 'locked'}`}>
               <div className="achievement-card-header">
-                <strong>{item.title}</strong>
-                <span>{item.points} 點</span>
+                <div className="achievement-badge">
+                  <img
+                    src={item.badgeImage}
+                    alt={`${item.title} 徽章`}
+                    onError={(event) => {
+                      const img = event.currentTarget;
+                      img.style.display = 'none';
+                    }}
+                  />
+                </div>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.points} 點</span>
+                </div>
               </div>
               <p>{item.description}</p>
               <div className="achievement-progress">

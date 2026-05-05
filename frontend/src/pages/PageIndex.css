@@ -340,6 +340,25 @@ button:hover span:after {
   gap: 12px;
 }
 
+.achievement-badge {
+  width: 56px;
+  min-width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.achievement-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .achievement-card-header strong {
   font-size: 16px;
   color: #ffffff;

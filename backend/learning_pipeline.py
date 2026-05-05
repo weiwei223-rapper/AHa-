@@ -7,9 +7,10 @@ from datetime import datetime
 from typing import Any
 
 try:
-    from . import ai_analyzer, schema
+    from . import ai_analyzer, question_bank, schema
 except ImportError:
     import ai_analyzer
+    import question_bank
     import schema
 
 try:
@@ -131,7 +132,7 @@ def generate_outline(transcript: str, title: str) -> str:
 1. 用 3 到 5 點條列。
 2. 每點聚焦在這段內容的具體重點。
 3. 不要補外部知識。
-4. 不要重複原句太長。
+4. 優先保留可以轉成程式題目的概念、流程或關鍵詞。
 
 影片標題：{title}
 片段：{index}/{len(chunks)}
@@ -232,27 +233,18 @@ def _build_fallback_test_cases(starter_code: str, correct_answer: str) -> list[s
     assignment_match = re.search(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=", starter_code, re.MULTILINE)
     if assignment_match:
         variable_name = assignment_match.group(1)
+        expression = starter_code.split("=", 1)[1].replace("___", repr(correct_answer)).strip()
         return [
-            f"{variable_name} = {starter_code.split('=', 1)[1].replace('___', repr(correct_answer)).strip()}\nassert {variable_name} == {repr(correct_answer)}",
-            f"{variable_name} = {starter_code.split('=', 1)[1].replace('___', repr(correct_answer)).strip()}\nassert isinstance({variable_name}, str)",
+            f"{variable_name} = {expression}\nassert {variable_name} == {repr(correct_answer)}",
+            f"{variable_name} = {expression}\nassert isinstance({variable_name}, str)",
         ]
     return []
 
 
 def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
-    question = str(
-        item.get("question")
-        or item.get("question_text")
-        or item.get("prompt")
-        or ""
-    ).strip()
+    question = str(item.get("question") or item.get("question_text") or item.get("prompt") or "").strip()
     correct_answer = str(item.get("correct_answer") or item.get("answer") or "").strip()
-    starter_code = str(
-        item.get("starter_code")
-        or item.get("code")
-        or item.get("snippet")
-        or ""
-    ).strip()
+    starter_code = str(item.get("starter_code") or item.get("code") or item.get("snippet") or "").strip()
     source_excerpt = str(item.get("source_excerpt") or item.get("quote") or "").strip() or None
     explanation = str(item.get("explanation") or "").strip() or None
     source_time = str(item.get("source_time") or "unknown").strip() or "unknown"
@@ -266,7 +258,7 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
         question = f"{question}\n\n```python\n{starter_code}\n```".strip()
 
     if not explanation and source_excerpt:
-        explanation = f"這題來自影片內容：{source_excerpt}"
+        explanation = f"這題根據影片內容出題：{source_excerpt}"
 
     if not test_cases and starter_code and correct_answer:
         test_cases = _build_fallback_test_cases(starter_code, correct_answer)
@@ -288,44 +280,58 @@ def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResp
     retrieved_context = "\n\n".join(
         f"[Chunk {chunk.index}] {chunk.content}" for chunk in analysis.retrieved_chunks
     )
+    reference_templates = question_bank.retrieve_templates(
+        title,
+        analysis.key_topics,
+        analysis.transcript_excerpt,
+    )
+    template_context = question_bank.format_templates_for_prompt(reference_templates)
 
     prompt = f"""
-你是一個 Python 教學影片出題助手。請根據影片逐字稿與摘要內容，產生 5 題與影片內容直接相關的程式填空題。
+You are a Python quiz designer for learning videos.
+Generate exactly 5 fill-in-the-blank Python questions based on the video content.
 
-影片標題：{title}
+You must use the video content as the semantic source, and use the retrieved LeetCode/TQC templates as style and structure references.
 
-影片摘要：
+Video title:
+{title}
+
+Video outline:
 {analysis.outline_markdown}
 
-可引用的逐字稿片段：
+Transcript evidence:
 {retrieved_context}
 
-嚴格要求：
-1. 只能根據提供的摘要與逐字稿片段出題，不可補外部知識。
-2. 題目語言使用繁體中文。
-3. 產生 exactly 5 題。
-4. 每題都必須是程式填空題，並在程式碼中使用 `___` 表示缺漏。
-5. 題目要能直接對應影片提到的 Python 語法、函式、流程控制、資料結構或實作概念。
-6. `correct_answer` 必須是可直接填入 `___` 的精確字串。
-7. `starter_code` 必須提供完整的程式片段，且包含 `___`。
-8. 每題提供 2 到 4 個 `assert` 測試案例。
-9. 每題都要提供簡短解析。
-10. 每題都要附可追溯來源。
-11. `source_time` 無法判定時填 `unknown`。
-12. `source_excerpt` 節錄與答案最相關的原文，120 字內。
-13. 只回傳 JSON array，不要加 markdown 或說明文字。
+Retrieved LeetCode/TQC templates:
+{template_context}
 
-每個題目物件格式：
-{{
-  "question": "題目文字",
-  "correct_answer": "正確答案文字",
-  "explanation": "繁體中文解析",
-  "question_type": "fill-in-the-blank",
-  "source_time": "00:10-00:42 或 unknown",
-  "source_excerpt": "逐字稿節錄",
-  "starter_code": "包含 ___ 的完整程式碼",
-  "test_cases": ["assert ...", "assert ..."]
-}}
+Requirements:
+1. Use Traditional Chinese for `question` and `explanation`.
+2. The factual meaning of each question must come from the video content, not outside knowledge.
+3. The code skeleton and test-case style should clearly resemble the retrieved LeetCode/TQC templates.
+4. Return exactly 5 items.
+5. Each item must include a `starter_code` field with `___`.
+6. `correct_answer` must be the exact text that replaces `___`.
+7. Each item must include 2 to 4 assert-style test cases.
+8. `question_type` must be `fill-in-the-blank`.
+9. `source_time` should be `unknown` if not available.
+10. `source_excerpt` must quote the most relevant video text.
+11. At least 3 questions should obviously follow one of the retrieved templates.
+12. Return JSON array only.
+
+JSON schema:
+[
+  {{
+    "question": "題目文字",
+    "correct_answer": "正確答案",
+    "explanation": "簡短解析",
+    "question_type": "fill-in-the-blank",
+    "source_time": "00:10-00:42 or unknown",
+    "source_excerpt": "影片原文片段",
+    "starter_code": "包含 ___ 的 Python 程式片段",
+    "test_cases": ["assert ...", "assert ..."]
+  }}
+]
 """
 
     try:
@@ -340,6 +346,7 @@ def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResp
             and question.correct_answer
             and question.starter_code
             and "___" in (question.starter_code or "")
+            and len(question.test_cases) >= 2
         ]
         if len(valid_questions) != 5:
             raise ValueError("Model did not return 5 valid fill-in-the-blank questions")
@@ -347,7 +354,7 @@ def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResp
         return schema.QuizResponse(
             video_id=video_id,
             video_title=title,
-            quiz_type="video-fill-in-blank",
+            quiz_type="template-rag-fill-in-blank",
             questions=valid_questions,
         )
     except Exception as exc:

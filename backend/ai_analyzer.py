@@ -17,8 +17,9 @@ from youtube_transcript_api._errors import YouTubeTranscriptApiException
 from yt_dlp import YoutubeDL
 
 try:
-    from . import schema
+    from . import question_bank, schema
 except ImportError:
+    import question_bank
     import schema
 
 BASE_DIR = os.path.dirname(__file__)
@@ -39,7 +40,7 @@ STOPWORDS = {
     "about", "they", "them", "then", "here", "there", "into", "would", "could",
     "should", "were", "been", "being", "when", "where", "which", "while", "because",
     "just", "than", "also", "only", "some", "more", "most", "very", "much", "now",
-    "right", "okay", "well", "need", "want", "like", "video",
+    "right", "okay", "well", "need", "want", "like", "video", "python",
 }
 
 load_dotenv(dotenv_path=os.path.join(BASE_DIR, "API_key.env"))
@@ -61,34 +62,22 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
     try:
         response = requests.post(
             GEMINI_API_URL.format(model=model_name),
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-            },
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json={
                 "contents": contents,
-                "generationConfig": {
-                    "temperature": 0.5,
-                    "maxOutputTokens": 2048,
-                },
+                "generationConfig": {"temperature": 0.5, "maxOutputTokens": 2048},
             },
             timeout=30,
         )
         if not response.ok:
-            raise ValueError(
-                f"Gemini API error {response.status_code} for model '{model_name}': {response.text}"
-            )
-
+            raise ValueError(f"Gemini API error {response.status_code} for model '{model_name}': {response.text}")
         data = response.json()
         candidates = data.get("candidates", [])
         if not candidates:
             raise ValueError(f"No candidates returned from Gemini: {data}")
-
-        content = candidates[0].get("content", {})
-        parts = content.get("parts", [])
+        parts = candidates[0].get("content", {}).get("parts", [])
         if not parts:
             raise ValueError(f"No content parts returned from Gemini: {data}")
-
         text = "".join(part.get("text", "") for part in parts).strip()
         if not text:
             raise ValueError(f"Empty text returned from Gemini: {data}")
@@ -100,11 +89,7 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
 
 
 def test_gemini_connection(model: str = DEFAULT_GEMINI_MODEL) -> dict:
-    prompt = "Reply with exactly: GEMINI_OK"
-    text = generate_text_with_gemini(
-        [{"role": "user", "parts": [{"text": prompt}]}],
-        model=model,
-    )
+    text = generate_text_with_gemini([{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], model=model)
     return {"ok": text.strip() == "GEMINI_OK", "model": model, "reply": text.strip()}
 
 
@@ -144,30 +129,23 @@ def _write_cached_transcript(video_id: str, transcript: str) -> None:
 def _get_whisper_model() -> WhisperModel:
     global _whisper_model
     if _whisper_model is None:
-        _whisper_model = WhisperModel(
-            WHISPER_MODEL_NAME,
-            device=WHISPER_DEVICE,
-            compute_type=WHISPER_COMPUTE_TYPE,
-        )
+        _whisper_model = WhisperModel(WHISPER_MODEL_NAME, device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE_TYPE)
     return _whisper_model
 
 
 def _download_audio_track(video_link: str, target_dir: Path) -> Path:
-    output_template = str(target_dir / "%(id)s.%(ext)s")
     options = {
         "format": "bestaudio/best",
-        "outtmpl": output_template,
+        "outtmpl": str(target_dir / "%(id)s.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
     }
-
     with YoutubeDL(options) as ydl:
         info = ydl.extract_info(video_link, download=True)
         downloaded = Path(ydl.prepare_filename(info))
         if downloaded.exists():
             return downloaded
-
         candidates = sorted(target_dir.glob(f"{info['id']}.*"))
         if not candidates:
             raise FileNotFoundError("Downloaded audio file not found")
@@ -177,19 +155,16 @@ def _download_audio_track(video_link: str, target_dir: Path) -> Path:
 def _transcribe_audio_file(audio_path: Path) -> str:
     model = _get_whisper_model()
     segments, _ = model.transcribe(str(audio_path), vad_filter=True)
-    text = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", " ".join(segment.text.strip() for segment in segments if segment.text.strip())).strip()
 
 
 def transcribe_video_audio(video_link: str, max_chars: int = MAX_TRANSCRIPT_CHARS) -> str:
     video_id = extract_youtube_video_id(video_link)
     if not video_id:
         return ""
-
     cached = _read_cached_transcript(video_id, max_chars)
     if cached:
         return cached
-
     try:
         with TemporaryDirectory(dir=DOWNLOAD_CACHE_DIR) as temp_dir:
             audio_path = _download_audio_track(video_link, Path(temp_dir))
@@ -197,7 +172,6 @@ def transcribe_video_audio(video_link: str, max_chars: int = MAX_TRANSCRIPT_CHAR
     except Exception as exc:
         print(f"Audio transcription unavailable for {video_link}: {exc}")
         return ""
-
     if transcript:
         _write_cached_transcript(video_id, transcript)
     return transcript[:max_chars]
@@ -217,26 +191,18 @@ def fetch_video_transcript(video_link: str, max_chars: int = MAX_TRANSCRIPT_CHAR
     video_id = extract_youtube_video_id(video_link)
     if not video_id:
         return ""
-
     cached = _read_cached_transcript(video_id, max_chars)
     if cached:
         return cached
-
     try:
-        transcript = YouTubeTranscriptApi().fetch(
-            video_id,
-            languages=TRANSCRIPT_LANGUAGES,
-            preserve_formatting=False,
-        )
+        transcript = YouTubeTranscriptApi().fetch(video_id, languages=TRANSCRIPT_LANGUAGES, preserve_formatting=False)
     except YouTubeTranscriptApiException as exc:
         print(f"Transcript unavailable for {video_link}: {exc}")
         return transcribe_video_audio(video_link, max_chars=max_chars)
     except Exception as exc:
         print(f"Unexpected transcript error for {video_link}: {exc}")
         return transcribe_video_audio(video_link, max_chars=max_chars)
-
-    text = _stringify_transcript_items(transcript)
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", _stringify_transcript_items(transcript)).strip()
     if text:
         _write_cached_transcript(video_id, text)
         return text[:max_chars]
@@ -256,7 +222,7 @@ def build_video_context(videos: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
-def _extract_keywords(text: str, limit: int = 6) -> list[str]:
+def _extract_keywords(text: str, limit: int = 8) -> list[str]:
     words = re.findall(r"[A-Za-z][A-Za-z']{2,}", text.lower())
     filtered = [word for word in words if word not in STOPWORDS]
     counts = Counter(filtered)
@@ -277,7 +243,6 @@ def _summarize_transcript(transcript: str) -> str:
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if not cleaned:
         return "目前沒有可用的逐字稿內容。"
-
     snippets = re.split(r"(?<=[.!?。！？])\s+", cleaned)
     snippets = [snippet.strip() for snippet in snippets if snippet.strip()]
     summary = " ".join(snippets[:4]).strip()
@@ -289,13 +254,11 @@ def generate_transcript_fallback_reply(message: str, videos: list[dict] | None =
     selected = _pick_relevant_video(message, available_videos)
     if not selected:
         return "目前沒有可參考的影片內容，請先新增影片，再問我和影片有關的問題。"
-
     title = str(selected.get("title") or "未命名影片").strip()
     link = str(selected.get("video_link") or "").strip()
     transcript = fetch_video_transcript(link, max_chars=MAX_CHAT_TRANSCRIPT_CHARS)
     if not transcript:
         return f"我目前還抓不到《{title}》的逐字稿，所以沒辦法可靠地根據影片內容回答。"
-
     summary = _summarize_transcript(transcript)
     keywords = _extract_keywords(transcript)
     keyword_text = f"關鍵字：{', '.join(keywords[:5])}" if keywords else ""
@@ -312,20 +275,15 @@ def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | 
         "Do not copy long passages from transcripts directly. "
         "If you cannot answer based on available context, provide general helpful study advice."
     )
-
     contents = [{"role": "system", "parts": [{"text": system_prompt}]}]
     if video_context:
         contents.append({"role": "system", "parts": [{"text": f"Uploaded video context:\n{video_context}"}]})
-
     for item in history:
         role = item.get("role", "user")
         content = str(item.get("content", "")).strip()
-        if not content:
-            continue
-        contents.append({"role": "assistant" if role == "assistant" else "user", "parts": [{"text": content}]})
-
+        if content:
+            contents.append({"role": "assistant" if role == "assistant" else "user", "parts": [{"text": content}]})
     contents.append({"role": "user", "parts": [{"text": message.strip()}]})
-
     for model in [DEFAULT_GEMINI_MODEL, "gemini-1.5-flash"]:
         try:
             reply = generate_text_with_gemini(contents, model)
@@ -333,7 +291,6 @@ def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | 
                 return reply.strip()
         except Exception as exc:
             print(f"Gemini model {model} failed: {exc}")
-
     return "我現在無法連線到 AI 服務，但你可以先問我你想聚焦哪個影片主題，我再用已抓到的內容協助整理。"
 
 
@@ -364,14 +321,38 @@ def _pick_answer_from_snippet(snippet: str) -> str:
     return compact.split()[-1] if compact else "value"
 
 
-def _dynamic_fallback_questions(transcript: str, outline: str) -> list[schema.QuizQuestion]:
-    snippets = _extract_transcript_snippets(transcript, limit=5)
-    if not snippets:
-        snippets = _extract_transcript_snippets(outline, limit=5)
+def _answer_for_template(template: question_bank.QuestionTemplate, keyword_pool: list[str]) -> str:
+    starter = template.starter_code
+    if ".___()" in starter:
+        return "strip"
+    if "return ___(" in starter:
+        return "int"
+    if "return [n for n in nums if ___]" in starter:
+        return "n % 2 == 0"
+    if "___ f'Hello, {name}'" in starter or '___ f"Hello, {name}"' in starter:
+        return "return"
+    if "if ___ else" in starter:
+        return "score >= 60"
+    if "if value == target:\n        ___" in starter:
+        return "continue"
+    return keyword_pool[0] if keyword_pool else "value"
 
+
+def generate_fallback_questions(
+    title: str,
+    transcript: str = "",
+    outline: str = "",
+    templates: list[question_bank.QuestionTemplate] | None = None,
+) -> list[schema.QuizQuestion]:
+    snippets = _extract_transcript_snippets(transcript, limit=5) or _extract_transcript_snippets(outline, limit=5)
+    keyword_pool = _extract_keywords(f"{transcript}\n{outline}", limit=10)
     questions: list[schema.QuizQuestion] = []
+    used_starters: set[str] = set()
     used_answers: set[str] = set()
+
     for index, snippet in enumerate(snippets, start=1):
+        if len(questions) >= 5:
+            break
         answer = _pick_answer_from_snippet(snippet)
         if answer.lower() in used_answers:
             continue
@@ -381,7 +362,7 @@ def _dynamic_fallback_questions(transcript: str, outline: str) -> list[schema.Qu
             schema.QuizQuestion(
                 question=f"根據影片內容，補上最符合這段描述的關鍵字。\n\n```python\n{variable_name} = \"___\"\n```",
                 correct_answer=answer,
-                explanation="這題直接根據影片片段抽取關鍵詞，因此不同影片會產生不同內容。",
+                explanation="這題直接根據影片片段抽取關鍵詞，所以不同影片會得到不同答案。",
                 question_type="fill-in-the-blank",
                 source_time="unknown",
                 source_excerpt=snippet,
@@ -393,91 +374,31 @@ def _dynamic_fallback_questions(transcript: str, outline: str) -> list[schema.Qu
             )
         )
 
-    keyword_source = f"{transcript}\n{outline}".strip()
-    for keyword in _extract_keywords(keyword_source, limit=8):
+    for template in templates or []:
         if len(questions) >= 5:
             break
-        if keyword.lower() in used_answers:
+        starter = template.starter_code.strip()
+        if not starter or starter in used_starters:
             continue
-        used_answers.add(keyword.lower())
-        variable_name = f"video_keyword_{len(questions) + 1}"
+        used_starters.add(starter)
+        answer = _answer_for_template(template, keyword_pool)
+        if answer.lower() in used_answers:
+            continue
+        used_answers.add(answer.lower())
+        starter_code = starter.replace(answer, "___", 1) if answer in starter else starter
         questions.append(
             schema.QuizQuestion(
-                question=f"根據影片主題，補上影片中反覆出現的關鍵字。\n\n```python\n{variable_name} = \"___\"\n```",
-                correct_answer=keyword,
-                explanation="這題根據影片逐字稿中的高頻關鍵字生成。",
+                question=(
+                    f"請依照影片內容，使用 LeetCode 題型骨架完成這題填空。\n\n```python\n{starter_code}\n```"
+                ),
+                correct_answer=answer,
+                explanation=f"這題套用了 LeetCode 模板 `{template.title}` 的程式骨架，但答案仍依影片內容或影片關鍵詞生成。",
                 question_type="fill-in-the-blank",
                 source_time="unknown",
-                source_excerpt=keyword_source[:120] or "Transcript excerpt unavailable.",
-                starter_code=f'{variable_name} = "___"',
-                test_cases=[
-                    f'{variable_name} = "{keyword}"\nassert {variable_name} == "{keyword}"',
-                    f'{variable_name} = "{keyword}"\nassert len({variable_name}) >= 1',
-                ],
+                source_excerpt=(snippets[0] if snippets else outline[:120] or title),
+                starter_code=starter_code,
+                test_cases=template.test_case_examples[:2] or ["assert True", "assert 1 == 1"],
             )
         )
-    return questions
 
-
-def generate_fallback_questions(title: str, transcript: str = "", outline: str = "") -> list[schema.QuizQuestion]:
-    dynamic_questions = _dynamic_fallback_questions(transcript, outline)
-    if len(dynamic_questions) >= 5:
-        return dynamic_questions[:5]
-
-    defaults = [
-        schema.QuizQuestion(
-            question=f"根據《{title}》常見的 Python 基礎教學脈絡，補上函式定義需要的關鍵字。\n\n```python\ndef greet(name):\n    ___ f'Hello, {{name}}'\n```",
-            correct_answer="return",
-            explanation="函式需要使用 return 回傳結果。",
-            question_type="fill-in-the-blank",
-            source_time="unknown",
-            source_excerpt="Fallback question generated because transcript content was unavailable.",
-            starter_code="def greet(name):\n    ___ f'Hello, {name}'",
-            test_cases=["assert greet('Wei') == 'Hello, Wei'", "assert greet('AHa') == 'Hello, AHa'"],
-        ),
-        schema.QuizQuestion(
-            question="補上列表推導式中的條件，讓函式只保留偶數。\n\n```python\ndef get_even_numbers(nums):\n    return [n for n in nums if ___]\n```",
-            correct_answer="n % 2 == 0",
-            explanation="這是列表推導式與條件判斷的基礎寫法。",
-            question_type="fill-in-the-blank",
-            source_time="unknown",
-            source_excerpt="Fallback question generated because transcript content was unavailable.",
-            starter_code="def get_even_numbers(nums):\n    return [n for n in nums if ___]",
-            test_cases=["assert get_even_numbers([1, 2, 3, 4]) == [2, 4]", "assert get_even_numbers([1, 3, 5]) == []"],
-        ),
-        schema.QuizQuestion(
-            question="補上字串去除前後空白的方法。\n\n```python\ndef normalize_text(text):\n    return text.___()\n```",
-            correct_answer="strip",
-            explanation="這是字串清理的常見方法。",
-            question_type="fill-in-the-blank",
-            source_time="unknown",
-            source_excerpt="Fallback question generated because transcript content was unavailable.",
-            starter_code="def normalize_text(text):\n    return text.___()",
-            test_cases=["assert normalize_text('  hi  ') == 'hi'", "assert normalize_text('aha') == 'aha'"],
-        ),
-        schema.QuizQuestion(
-            question="補上將字串轉成整數的函式名稱。\n\n```python\ndef parse_age(raw_age):\n    return ___(raw_age)\n```",
-            correct_answer="int",
-            explanation="這是基本型別轉換。",
-            question_type="fill-in-the-blank",
-            source_time="unknown",
-            source_excerpt="Fallback question generated because transcript content was unavailable.",
-            starter_code="def parse_age(raw_age):\n    return ___(raw_age)",
-            test_cases=["assert parse_age('12') == 12", "assert parse_age('0') == 0"],
-        ),
-        schema.QuizQuestion(
-            question="補上在迴圈中跳過本次迭代的關鍵字。\n\n```python\nresult = []\nfor n in range(5):\n    if n == 2:\n        ___\n    result.append(n)\n```",
-            correct_answer="continue",
-            explanation="這是流程控制中的常見關鍵字。",
-            question_type="fill-in-the-blank",
-            source_time="unknown",
-            source_excerpt="Fallback question generated because transcript content was unavailable.",
-            starter_code="result = []\nfor n in range(5):\n    if n == 2:\n        ___\n    result.append(n)",
-            test_cases=[
-                "result = []\nfor n in range(5):\n    if n == 2:\n        continue\n    result.append(n)\nassert result == [0, 1, 3, 4]",
-                "result = []\nfor n in range(3):\n    if n == 2:\n        continue\n    result.append(n)\nassert result == [0, 1]",
-            ],
-        ),
-    ]
-    needed = max(0, 5 - len(dynamic_questions))
-    return dynamic_questions + defaults[:needed]
+    return questions[:5]

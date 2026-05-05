@@ -13,6 +13,7 @@ export type AchievementItem = {
   threshold: number;
   unlocked: boolean;
   progress: string;
+  badgeImage: string;
 };
 
 const STORAGE_KEYS = {
@@ -97,7 +98,7 @@ export const addAchievementPoints = (points: number): number => {
   return next;
 };
 
-const quizMilestones = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+const quizMilestones = [1, 5, 15, 30, 50, 100] as const;
 const videoMilestones = [1, 5, 10] as const;
 
 const specialQuizTitles: Record<number, string> = {
@@ -149,6 +150,7 @@ export const buildAchievements = (params: {
       threshold,
       unlocked: videoCount >= threshold,
       progress: `${Math.min(videoCount, threshold)}/${threshold}`,
+      badgeImage: `/achievements/video-${threshold}.png`,
     });
   });
 
@@ -182,6 +184,7 @@ export const buildAchievements = (params: {
       unlocked:
         threshold === 7 ? loginStreakDays >= threshold : totalLoginDays >= threshold,
       progress: `${Math.min(threshold === 7 ? loginStreakDays : totalLoginDays, threshold)}/${threshold}`,
+      badgeImage: `/achievements/login-${threshold}.png`,
     });
   });
 
