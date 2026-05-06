@@ -32,7 +32,6 @@ const Layout = ({ onLogout }: LayoutProps) => {
           <NavLink to="/Video" className={navClassName}>Video</NavLink>
           <NavLink to="/Profile" className={navClassName}>Profile</NavLink>
           <NavLink to="/Quiz" className={navClassName}>Quiz</NavLink>
-          <NavLink to="/Chat" className={navClassName}>Chat</NavLink>
         </div>
 
         <button onClick={handleLogout} className="workspace-logout-button">
