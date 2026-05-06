@@ -42,7 +42,6 @@ const Quiz = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [code, setCode] = useState("# Select a quiz to load starter code");
   const [codeOutput, setCodeOutput] = useState("");
   const [codeError, setCodeError] = useState("");
   const [codeLoading, setCodeLoading] = useState(false);
@@ -55,8 +54,6 @@ const Quiz = () => {
     if (!quiz) {
       return;
     }
-    const question = quiz.questions[currentQuestionIndex];
-    setCode(question?.starter_code || "# Write your Python solution here");
     setCodeOutput("");
     setCodeError("");
   }, [quiz, currentQuestionIndex]);
@@ -147,8 +144,9 @@ const Quiz = () => {
     setCodeOutput("");
     setCodeError("");
     try {
+      const userCode = userAnswers[currentQuestionIndex];
       const testBlock = currentQuestion?.test_cases?.join("\n") || "";
-      const script = testBlock ? `${code}\n\n${testBlock}\nprint("All tests passed")` : code;
+      const script = testBlock ? `${userCode}\n\n${testBlock}\nprint("All tests passed")` : userCode;
       const response = await codeAPI.executeCode({ code: script });
       setCodeOutput(response.data.output);
       setCodeError(response.data.error);
@@ -165,7 +163,6 @@ const Quiz = () => {
     setCurrentQuestionIndex(0);
     setUserAnswers([]);
     setShowResults(false);
-    setCode("# Select a quiz to load starter code");
     setCodeOutput("");
     setCodeError("");
   };
@@ -290,63 +287,38 @@ const Quiz = () => {
       </section>
 
       {quiz && currentQuestion && (
-        <>
-          <section className="panel-card">
-            <div className="quiz-question-card">
-              <div className="quiz-question-number">
-                Question {currentQuestionIndex + 1} / {quiz.questions.length}
-              </div>
-              <h2>{currentQuestion.question}</h2>
+        <section className="panel-card">
+          <div className="quiz-question-card">
+            <div className="quiz-question-number">
+              Question {currentQuestionIndex + 1} / {quiz.questions.length}
+            </div>
+            <h2>{currentQuestion.question}</h2>
 
+            {(currentQuestion.source_time || currentQuestion.source_excerpt) && (
               <div style={{ marginTop: "20px" }}>
-                <p className="page-eyebrow">Your Answer</p>
-                <textarea
-                  className="page-input"
-                  style={{ width: "100%", minHeight: "120px", fontFamily: "monospace", padding: "12px" }}
-                  placeholder="輸入要填入 ___ 的答案"
-                  value={userAnswers[currentQuestionIndex]}
-                  onChange={(e) => handleAnswerChange(e.target.value)}
-                />
+                <p className="page-eyebrow">出題依據</p>
+                <p>{currentQuestion.source_time || "unknown"}</p>
+                {currentQuestion.source_excerpt && <pre className="code-snippet">{currentQuestion.source_excerpt}</pre>}
               </div>
+            )}
+          </div>
 
-              {(currentQuestion.source_time || currentQuestion.source_excerpt) && (
-                <div style={{ marginTop: "20px" }}>
-                  <p className="page-eyebrow">出題依據</p>
-                  <p>{currentQuestion.source_time || "unknown"}</p>
-                  {currentQuestion.source_excerpt && <pre className="code-snippet">{currentQuestion.source_excerpt}</pre>}
-                </div>
-              )}
+          {currentQuestion.starter_code && (
+            <div>
+              <p className="page-eyebrow">Starter Code</p>
+              <pre className="code-snippet">{currentQuestion.starter_code}</pre>
             </div>
+          )}
 
-            <div className="quiz-nav-row">
-              <button
-                onClick={handlePrevious}
-                disabled={currentQuestionIndex === 0}
-                className="page-secondary-button"
-              >
-                Previous
-              </button>
-              <button onClick={() => void handleNext()} className="page-primary-button">
-                {currentQuestionIndex === quiz.questions.length - 1 ? "Finish Quiz" : "Next"}
-              </button>
-            </div>
-          </section>
-
-          <section className="panel-card">
-            <div className="panel-header">
-              <div>
-                <div className="page-eyebrow">Editor</div>
-                <h2>Starter Code 與測試案例</h2>
-              </div>
-            </div>
-
-            <div style={{ height: "320px", border: "1px solid #d9d9d9", marginBottom: "12px" }}>
+          <div style={{ marginTop: "20px" }}>
+            <p className="page-eyebrow">Your Solution</p>
+            <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
               <Editor
                 height="100%"
                 language="python"
-                value={code}
-                onChange={(value) => setCode(value || "")}
-                theme="vs-light"
+                value={userAnswers[currentQuestionIndex]}
+                onChange={(value) => handleAnswerChange(value || "")}
+                theme="vs-dark"
                 options={{
                   minimap: { enabled: false },
                   fontSize: 14,
@@ -357,40 +329,71 @@ const Quiz = () => {
                 }}
               />
             </div>
+          </div>
 
-            <div className="quiz-review-list">
+          {(currentQuestion.test_cases && currentQuestion.test_cases.length > 0) && (
+            <div>
+              <p className="page-eyebrow">Test Cases</p>
               <article className="quiz-review-card">
-                <div className="quiz-review-status">Test Cases</div>
                 <pre className="code-snippet">
-                  {(currentQuestion.test_cases || []).join("\n") || "目前沒有測試案例"}
+                  {currentQuestion.test_cases.join("\n")}
                 </pre>
               </article>
             </div>
+          )}
 
-            <div className="quiz-nav-row">
-              <button onClick={() => void executeCode()} disabled={codeLoading} className="page-primary-button">
-                {codeLoading ? "執行中..." : "Run Code"}
-              </button>
-            </div>
-
-            {(codeOutput || codeError) && (
-              <div className="quiz-review-list">
-                {codeOutput && (
+          {(codeOutput || codeError) && (
+            <div>
+              {codeOutput && (
+                <div>
+                  <p className="page-eyebrow">Output</p>
                   <article className="quiz-review-card">
-                    <div className="quiz-review-status">Output</div>
                     <pre className="code-snippet">{codeOutput}</pre>
                   </article>
-                )}
-                {codeError && (
+                </div>
+              )}
+              {codeError && (
+                <div>
+                  <p className="page-eyebrow">Error</p>
                   <article className="quiz-review-card">
-                    <div className="quiz-review-status">Error</div>
                     <pre className="code-snippet">{codeError}</pre>
                   </article>
-                )}
-              </div>
-            )}
-          </section>
-        </>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end" }} className="unified-control-bar">
+            <button
+              onClick={handlePrevious}
+              disabled={currentQuestionIndex === 0}
+              className="page-secondary-button"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => void handleNext()}
+              className="page-primary-button"
+            >
+              {currentQuestionIndex === quiz.questions.length - 1 ? "Finish" : "Next"}
+            </button>
+            <button
+              onClick={() => void executeCode()}
+              disabled={codeLoading}
+              className="page-primary-button"
+            >
+              {codeLoading ? "Testing..." : "Test"}
+            </button>
+            <button
+              onClick={() => {
+                console.log("Submit clicked");
+              }}
+              className="page-primary-button"
+            >
+              Submit
+            </button>
+          </div>
+        </section>
       )}
     </div>
   );
