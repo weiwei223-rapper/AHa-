@@ -472,14 +472,24 @@ def create_generation(payload: schema.GenerationRecordCreate, db: Session = Depe
 
 
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
-def generate_quiz(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
+def generate_quiz(
+    video_id: int,
+    user_id: int = 1,
+    outline: Optional[str] = None,
+    db: Session = Depends(database.get_db),
+):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if video is None:
         raise HTTPException(status_code=404, detail="Video not found")
 
     title = video.title or "Untitled Video"
     try:
-        quiz_response = learning_pipeline.generate_quiz(video.id, title, video.video_link)
+        quiz_response = learning_pipeline.generate_quiz(
+            video.id,
+            title,
+            video.video_link,
+            outline=(outline or video.outline),
+        )
         questions = quiz_response.questions
         saved_questions = []
         for item in questions:

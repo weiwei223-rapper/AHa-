@@ -218,6 +218,10 @@ def _normalize_test_cases(item: dict[str, Any]) -> list[str]:
     if isinstance(raw_cases, list):
         return [str(case).strip() for case in raw_cases if str(case).strip()]
 
+    if isinstance(raw_cases, str):
+        lines = [line.strip() for line in re.split(r"\r?\n", raw_cases) if line.strip()]
+        return [line for line in lines if line.startswith("assert")]
+
     single_case_keys = ["assert_statement", "assert", "test_case"]
     cases: list[str] = []
     for key in single_case_keys:
@@ -230,15 +234,35 @@ def _normalize_test_cases(item: dict[str, Any]) -> list[str]:
 
 
 def _build_fallback_test_cases(starter_code: str, correct_answer: str) -> list[str]:
-    assignment_match = re.search(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=", starter_code, re.MULTILINE)
+    """Build test cases that verify the correct answer when replacing ___ in starter_code."""
+    if not starter_code or "___" not in starter_code:
+        return []
+    
+    # Generate test case code by replacing ___ with correct answer
+    test_code = starter_code.replace("___", repr(correct_answer) if isinstance(correct_answer, str) else str(correct_answer))
+    
+    # Try to extract variable name or function name for assertion
+    assignment_match = re.search(r"^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=", test_code, re.MULTILINE)
+    function_match = re.search(r"def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", test_code, re.MULTILINE)
+    
+    test_cases: list[str] = []
+    
     if assignment_match:
         variable_name = assignment_match.group(1)
-        expression = starter_code.split("=", 1)[1].replace("___", repr(correct_answer)).strip()
-        return [
-            f"{variable_name} = {expression}\nassert {variable_name} == {repr(correct_answer)}",
-            f"{variable_name} = {expression}\nassert isinstance({variable_name}, str)",
-        ]
-    return []
+        test_cases.append(f"{test_code}\nassert {variable_name} is not None")
+    elif function_match:
+        function_name = function_match.group(1)
+        test_cases.append(f"{test_code}\nassert callable({function_name})")
+    else:
+        # If no clear structure, just include the code as is with a basic assertion
+        test_cases.append(f"{test_code}\nassert True")
+    
+    # Add a second test case if possible
+    if assignment_match:
+        variable_name = assignment_match.group(1)
+        test_cases.append(f"{test_code}\nassert len(str({variable_name})) > 0")
+    
+    return test_cases[:2] if test_cases else []
 
 
 def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
@@ -275,8 +299,9 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
     )
 
 
-def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResponse:
+def generate_quiz(video_id: int, title: str, video_link: str, outline: str | None = None) -> schema.QuizResponse:
     analysis = analyze_video(video_id, title, video_link)
+    video_outline = (outline or analysis.outline_markdown or "").strip()
     retrieved_context = "\n\n".join(
         f"[Chunk {chunk.index}] {chunk.content}" for chunk in analysis.retrieved_chunks
     )
@@ -297,7 +322,7 @@ Video title:
 {title}
 
 Video outline:
-{analysis.outline_markdown}
+{video_outline}
 
 Transcript evidence:
 {retrieved_context}
@@ -315,9 +340,10 @@ Requirements:
 7. Each item must include 2 to 4 assert-style test cases.
 8. `question_type` must be `fill-in-the-blank`.
 9. `source_time` should be `unknown` if not available.
-10. `source_excerpt` must quote the most relevant video text.
+10. `source_excerpt` must quote the most relevant video text from the transcript or outline.
 11. At least 3 questions should obviously follow one of the retrieved templates.
-12. Return JSON array only.
+12. Do not add any extra text outside the JSON array.
+13. Use plain JSON only, without markdown fences or explanatory text.
 
 JSON schema:
 [

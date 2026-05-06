@@ -157,10 +157,32 @@ const Quiz = () => {
     setCodeOutput("");
     setCodeError("");
     try {
-      const userCode = userAnswers[currentQuestionIndex];
-      const testBlock = currentQuestion?.test_cases?.join("\n") || "";
-      const script = testBlock ? `${userCode}\n\n${testBlock}\nprint("All tests passed")` : userCode;
-      const response = await codeAPI.executeCode({ code: script });
+      const userAnswer = userAnswers[currentQuestionIndex] || "";
+      const starterCode = currentQuestion?.starter_code || "";
+      const testCases = currentQuestion?.test_cases || [];
+
+      let executableCode = "";
+
+      // If there's starter code with ___ placeholder, replace it with user answer
+      if (starterCode && starterCode.includes("___")) {
+        executableCode = starterCode.replace("___", userAnswer);
+      } else if (userAnswer) {
+        // Otherwise use user code directly
+        executableCode = userAnswer;
+      }
+
+      // Append test cases and validation
+      if (testCases.length > 0) {
+        executableCode += "\n\n" + testCases.join("\n");
+        executableCode += '\n\nprint("All tests passed")';
+      }
+
+      if (!executableCode.trim()) {
+        setCodeError("請先輸入程式碼");
+        return;
+      }
+
+      const response = await codeAPI.executeCode({ code: executableCode });
       setCodeOutput(response.data.output);
       setCodeError(response.data.error);
     } catch (err: any) {
