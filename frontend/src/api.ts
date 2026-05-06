@@ -53,11 +53,13 @@ export const userAPI = {
 
 export const videoAPI = {
   getVideos: (userId: number) => api.get('/api/videos', { params: { user_id: userId } }),
+  getVideo: (videoId: number) => api.get(`/api/videos/${videoId}`),
   createVideo: (data: { video_link: string; title?: string | null; outline?: string | null; user_id?: number; cost_points?: number; error_report?: string | null }) =>
     api.post('/api/videos', data),
   deleteVideo: (videoId: number) => api.delete(`/api/videos/${videoId}`),
   analyzeVideo: (videoId: number) => api.get(`/api/videos/${videoId}/analysis`),
-  generateQuiz: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId } }),
+  generateQuiz: (videoId: number, userId: number, outline?: string | null) =>
+    api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, outline: outline || undefined } }),
 };
 
 export const feedbackAPI = {
