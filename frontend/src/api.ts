@@ -66,6 +66,8 @@ export const feedbackAPI = {
   createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null }) =>
     api.post('/api/feedbacks', data),
   getFeedbacks: () => api.get('/api/feedbacks'),
+  deleteConversation: (conversationId: string, userId: number) =>
+    api.delete(`/api/feedbacks/conversations/${conversationId}`, { params: { user_id: userId } }),
 };
 
 export const quizAPI = {

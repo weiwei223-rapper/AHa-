@@ -5,7 +5,7 @@ import json
 
 import bcrypt
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import SQLAlchemyError
@@ -397,6 +397,31 @@ def create_ai_feedback(payload: schema.AIFeedbackCreate, db: Session = Depends(d
 @app.get("/api/feedbacks", response_model=List[schema.AIFeedbackResponse])
 def get_ai_feedbacks(db: Session = Depends(database.get_db)):
     return db.query(models.AIFeedback).order_by(models.AIFeedback.id.desc()).all()
+
+
+@app.delete("/api/feedbacks/conversations/{conversation_id}")
+def delete_chat_conversation(
+    conversation_id: str,
+    user_id: int = Query(..., description="User id"),
+    db: Session = Depends(database.get_db),
+):
+    """
+    Delete all ai_feedback rows that belong to a single chat conversation.
+
+    Note: the frontend stores the conversation token in `error_report` as:
+      `chat-session:{conversation_id}`
+    """
+
+    token = f"chat-session:{conversation_id}"
+    q = (
+        db.query(models.AIFeedback)
+        .filter(models.AIFeedback.user_id == user_id)
+        .filter(models.AIFeedback.error_report == token)
+    )
+    deleted_count = q.count()
+    q.delete(synchronize_session=False)
+    db.commit()
+    return {"message": "Conversation deleted", "deleted_count": deleted_count}
 
 
 @app.post("/api/quiz-questions", response_model=schema.QuizQuestionResponse)
