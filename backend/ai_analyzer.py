@@ -56,18 +56,62 @@ def init_gemini() -> str:
     return api_key
 
 
-def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> str:
+def generate_text_with_gemini(contents: list[dict], system_instruction: str | None = None, model: str = DEFAULT_GEMINI_MODEL) -> str:
     api_key = init_gemini()
     model_name = model.replace("models/", "")
+<<<<<<< HEAD
+    
+    payload = {
+        "contents": contents,
+        "generationConfig": {"temperature": 0.5, "maxOutputTokens": 2048},
+    }
+    
+    if system_instruction:
+        payload["system_instruction"] = {
+            "parts": [{"text": system_instruction}]
+        }
+=======
+    system_parts: list[dict] = []
+    gemini_contents: list[dict] = []
+    for item in contents:
+        role = item.get("role", "user")
+        parts = item.get("parts", [])
+        if role == "system":
+            system_parts.extend(parts)
+            continue
+        gemini_contents.append(
+            {
+                "role": "model" if role == "assistant" else "user",
+                "parts": parts,
+            }
+        )
+
+    request_payload = {
+        "contents": gemini_contents,
+        "generationConfig": {"temperature": 0.35, "maxOutputTokens": 2048},
+    }
+    if system_parts:
+        request_payload["systemInstruction"] = {"parts": system_parts}
+>>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
+
     try:
         response = requests.post(
             GEMINI_API_URL.format(model=model_name),
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+<<<<<<< HEAD
             json={
                 "contents": contents,
                 "generationConfig": {"temperature": 0.5, "maxOutputTokens": 4096},
             },
             timeout=120,
+=======
+<<<<<<< HEAD
+            json=payload,
+=======
+            json=request_payload,
+>>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
+            timeout=30,
+>>>>>>> 452c40aa138d8c43818489822b2bd8246273c04c
         )
         if not response.ok:
             raise ValueError(f"Gemini API error {response.status_code} for model '{model_name}': {response.text}")
@@ -89,7 +133,10 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
 
 
 def test_gemini_connection(model: str = DEFAULT_GEMINI_MODEL) -> dict:
-    text = generate_text_with_gemini([{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], model=model)
+    text = generate_text_with_gemini(
+        contents=[{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], 
+        model=model
+    )
     return {"ok": text.strip() == "GEMINI_OK", "model": model, "reply": text.strip()}
 
 
@@ -209,16 +256,65 @@ def fetch_video_transcript(video_link: str, max_chars: int = MAX_TRANSCRIPT_CHAR
     return transcribe_video_audio(video_link, max_chars=max_chars)
 
 
-def build_video_context(videos: list[dict]) -> str:
+def _format_questions_context(questions: list[dict]) -> str:
+    blocks: list[str] = []
+    for index, question in enumerate(questions[:8], start=1):
+        prompt = str(question.get("question") or "").strip()
+        answer = str(question.get("reference_answer") or "").strip()
+        learner_answer = str(question.get("answer_record") or "").strip()
+        accuracy = question.get("accuracy")
+        block = f"Question {index}: {prompt}\nReference answer: {answer}"
+        if learner_answer:
+            block += f"\nLearner answer: {learner_answer}"
+        if accuracy is not None:
+            block += f"\nAccuracy: {accuracy}"
+        blocks.append(block)
+    return "\n\n".join(blocks)
+
+
+def build_selected_video_context(video: dict) -> str:
+    title = str(video.get("title") or "Untitled video").strip()
+    link = str(video.get("video_link") or "").strip()
+    outline = str(video.get("outline") or "").strip()
+    transcript = str(video.get("transcript") or "").strip()
+    transcript_source = str(video.get("transcript_source") or "").strip() or "unavailable"
+    retrieved_chunks = video.get("retrieved_chunks") or []
+    questions = video.get("questions") or []
+
+    chunk_text = "\n\n".join(
+        f"[Chunk {chunk.get('index')}] {str(chunk.get('content') or '').strip()}"
+        for chunk in retrieved_chunks[:5]
+        if str(chunk.get("content") or "").strip()
+    )
+    if not chunk_text and transcript:
+        chunk_text = transcript[:MAX_CHAT_TRANSCRIPT_CHARS]
+
+    question_text = _format_questions_context(questions if isinstance(questions, list) else [])
+    return (
+        f"Selected video\n"
+        f"Title: {title}\n"
+        f"Link: {link}\n"
+        f"Transcript source: {transcript_source}\n\n"
+        f"Video outline:\n{outline or 'No outline saved.'}\n\n"
+        f"Relevant transcript evidence:\n{chunk_text or 'Transcript evidence unavailable.'}\n\n"
+        f"Generated quiz questions for this video:\n{question_text or 'No generated quiz questions saved yet.'}"
+    )
+
+
+def build_video_context(videos: list[dict] | dict) -> str:
+    if isinstance(videos, dict):
+        return build_selected_video_context(videos)
+
     blocks: list[str] = []
     for index, video in enumerate(videos[:MAX_CONTEXT_VIDEOS], start=1):
         title = str(video.get("title") or "Untitled video").strip()
         link = str(video.get("video_link") or "").strip()
-        transcript = fetch_video_transcript(link, max_chars=MAX_CHAT_TRANSCRIPT_CHARS)
+        outline = str(video.get("outline") or "").strip()
+        transcript = str(video.get("transcript") or "").strip() or fetch_video_transcript(link, max_chars=MAX_CHAT_TRANSCRIPT_CHARS)
         if transcript:
-            blocks.append(f"Video {index}\nTitle: {title}\nLink: {link}\nTranscript excerpt:\n{transcript}")
+            blocks.append(f"Video {index}\nTitle: {title}\nLink: {link}\nOutline:\n{outline}\nTranscript excerpt:\n{transcript}")
         else:
-            blocks.append(f"Video {index}\nTitle: {title}\nLink: {link}\nTranscript excerpt unavailable.")
+            blocks.append(f"Video {index}\nTitle: {title}\nLink: {link}\nOutline:\n{outline}\nTranscript excerpt unavailable.")
     return "\n\n".join(blocks)
 
 
@@ -249,7 +345,21 @@ def _summarize_transcript(transcript: str) -> str:
     return summary[:600] if summary else cleaned[:600]
 
 
-def generate_transcript_fallback_reply(message: str, videos: list[dict] | None = None) -> str:
+def generate_transcript_fallback_reply(message: str, videos: list[dict] | dict | None = None) -> str:
+    if isinstance(videos, dict):
+        title = str(videos.get("title") or "未命名影片").strip()
+        transcript = str(videos.get("transcript") or "").strip()
+        outline = str(videos.get("outline") or "").strip()
+        questions = videos.get("questions") if isinstance(videos.get("questions"), list) else []
+        question_text = _format_questions_context(questions)
+        source_text = transcript or outline
+        if not source_text and not question_text:
+            return f"我目前沒有《{title}》的逐字稿、摘要或題目資料，所以沒辦法可靠地根據影片內容回答。"
+        summary = _summarize_transcript(source_text)
+        if question_text and ("題" in message or "答案" in message or "解析" in message):
+            return f"根據《{title}》已儲存的題目資料：\n{question_text[:1000]}"
+        return f"根據《{title}》目前可取得的影片內容，重點是：{summary}".strip()
+
     available_videos = videos or []
     selected = _pick_relevant_video(message, available_videos)
     if not selected:
@@ -265,32 +375,45 @@ def generate_transcript_fallback_reply(message: str, videos: list[dict] | None =
     return f"根據《{title}》目前可取得的內容，重點是：{summary} {keyword_text}".strip()
 
 
-def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | None = None) -> str:
+def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | dict | None = None) -> str:
     video_context = build_video_context(videos or [])
     system_prompt = (
         "You are the AHa study assistant. "
         "Always answer in Traditional Chinese. "
-        "Keep answers clear and concise. "
-        "If uploaded video transcript context is available, use it to provide relevant information. "
+        "Answer according to the selected video's content and its generated quiz questions. "
+        "Use the transcript evidence, outline, and quiz reference answers as the primary sources. "
+        "When explaining a quiz question, compare the user's question with the saved question and reference answer. "
+        "If the context is insufficient, say clearly that the current video data does not contain enough evidence. "
         "Do not copy long passages from transcripts directly. "
-        "If you cannot answer based on available context, provide general helpful study advice."
+        "Keep answers clear, concise, and useful for learning."
     )
-    contents = [{"role": "system", "parts": [{"text": system_prompt}]}]
+    
+    full_system_instruction = system_prompt
     if video_context:
-        contents.append({"role": "system", "parts": [{"text": f"Uploaded video context:\n{video_context}"}]})
+        full_system_instruction += f"\n\nUploaded video context:\n{video_context}"
+
+    contents = []
     for item in history:
         role = item.get("role", "user")
         content = str(item.get("content", "")).strip()
         if content:
-            contents.append({"role": "assistant" if role == "assistant" else "user", "parts": [{"text": content}]})
+            # Gemini uses 'model' instead of 'assistant'
+            gemini_role = "model" if role == "assistant" else "user"
+            contents.append({"role": gemini_role, "parts": [{"text": content}]})
+    
     contents.append({"role": "user", "parts": [{"text": message.strip()}]})
+    
+    # Optional: ensure alternating user/model roles if required by Gemini
+    # (Though usually it handles it if they alternate)
+    
     for model in [DEFAULT_GEMINI_MODEL, "gemini-1.5-flash"]:
         try:
-            reply = generate_text_with_gemini(contents, model)
-            if reply and len(reply.strip()) >= 10:
+            reply = generate_text_with_gemini(contents, system_instruction=full_system_instruction, model=model)
+            if reply and len(reply.strip()) >= 2:
                 return reply.strip()
         except Exception as exc:
             print(f"Gemini model {model} failed: {exc}")
+    
     return "我現在無法連線到 AI 服務，但你可以先問我你想聚焦哪個影片主題，我再用已抓到的內容協助整理。"
 
 

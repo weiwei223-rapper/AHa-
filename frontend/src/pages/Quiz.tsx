@@ -173,6 +173,22 @@ const Quiz = () => {
         score,
         total_questions: quiz.questions.length,
       });
+
+      // 更新 localStorage 中的 quizResults，用於成就系統
+      const existingResults = JSON.parse(localStorage.getItem("quizResults") || "[]");
+      const newResult = {
+        score,
+        totalQuestions: quiz.questions.length,
+        videoId: quiz.video_id,
+        completedAt: new Date().toISOString(),
+      };
+      const updatedResults = [...existingResults, newResult];
+      localStorage.setItem("quizResults", JSON.stringify(updatedResults));
+
+      // 發送自定義事件通知成就系統更新
+      window.dispatchEvent(new CustomEvent('quizCompleted', {
+        detail: { userId, newResult }
+      }));
     } catch (err) {
       console.error("Error saving quiz result:", err);
     }
