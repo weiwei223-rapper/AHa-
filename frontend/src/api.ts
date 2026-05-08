@@ -63,7 +63,7 @@ export const videoAPI = {
 };
 
 export const feedbackAPI = {
-  createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null }) =>
+  createFeedback: (data: { user_id: number; video_id?: number | null; ai_message: string; user_message: string; error_report?: string | null }) =>
     api.post('/api/feedbacks', data),
   getFeedbacks: () => api.get('/api/feedbacks'),
   deleteConversation: (conversationId: string, userId: number) =>
@@ -94,7 +94,7 @@ export const codeAPI = {
 };
 
 export const chatAPI = {
-  sendMessage: (data: { message: string; history: { role: string; content: string }[] }) =>
+  sendMessage: (data: { message: string; history: { role: string; content: string }[]; user_id?: number; video_id?: number | null }) =>
     api.post('/api/chat', data),
 };
 

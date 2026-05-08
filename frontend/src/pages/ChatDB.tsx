@@ -79,25 +79,28 @@ const ChatDB: React.FC = () => {
     if (!userId) {
       setVideos([]);
       setVideosError('請先登入以載入影片列表。');
-      return;
+      return [];
     }
 
     setVideosLoading(true);
     setVideosError('');
     try {
       const response = await videoAPI.getVideos(userId);
-      setVideos((response.data ?? []) as Video[]);
+      const nextVideos = (response.data ?? []) as Video[];
+      setVideos(nextVideos);
+      return nextVideos;
     } catch (requestError: unknown) {
       console.error('Error fetching videos:', requestError);
       const errorObject = requestError as { response?: { data?: { detail?: string } } };
       setVideosError(errorObject.response?.data?.detail || '無法載入影片列表');
       setVideos([]);
+      return [];
     } finally {
       setVideosLoading(false);
     }
   };
 
-  const fetchConversationsFromAIFeedback = async () => {
+  const fetchConversationsFromAIFeedback = async (videoList: Video[] = videos) => {
     if (!userId) {
       setSessions([]);
       setActiveSessionId('');
@@ -109,6 +112,7 @@ const ChatDB: React.FC = () => {
       const allFeedbacks = (response.data ?? []) as Array<{
         id: number;
         user_id: number;
+        video_id?: number | null;
         ai_message: string;
         user_message: string;
         error_report: string | null;
@@ -135,6 +139,7 @@ const ChatDB: React.FC = () => {
         const messages: Message[] = [];
         let title = 'New conversation';
         let selectedVideoTitle: string | null = null;
+        let selectedVideoId: number | null = sorted.find((item) => item.video_id)?.video_id ?? null;
 
         for (const item of sorted) {
           if (item.user_message && item.user_message.trim()) {
@@ -153,6 +158,19 @@ const ChatDB: React.FC = () => {
           }
         }
 
+        if (selectedVideoId) {
+          const selectedVideo = videoList.find((video) => video.id === selectedVideoId);
+          if (selectedVideo?.title) {
+            selectedVideoTitle = selectedVideo.title;
+            title = selectedVideo.title;
+          }
+        } else if (selectedVideoTitle) {
+          const matchedVideo = videoList.find((video) => video.title === selectedVideoTitle);
+          if (matchedVideo) {
+            selectedVideoId = matchedVideo.id;
+          }
+        }
+
         const updatedAt = sorted.reduce((max, cur) => (Date.parse(cur.created_at) > Date.parse(max) ? cur.created_at : max), sorted[0]?.created_at ?? new Date().toISOString());
 
         return {
@@ -161,7 +179,7 @@ const ChatDB: React.FC = () => {
           updatedAt,
           messages,
           selectedVideoTitle,
-          selectedVideoId: null,
+          selectedVideoId,
           isPersisted: true,
         };
       });
@@ -194,8 +212,11 @@ const ChatDB: React.FC = () => {
   };
 
   useEffect(() => {
-    void fetchVideos();
-    void fetchConversationsFromAIFeedback();
+    const initChat = async () => {
+      const nextVideos = await fetchVideos();
+      await fetchConversationsFromAIFeedback(nextVideos);
+    };
+    void initChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -253,6 +274,7 @@ const ChatDB: React.FC = () => {
       if (!userId) throw new Error('Not logged in');
       await feedbackAPI.createFeedback({
         user_id: userId,
+        video_id: videoId,
         ai_message: greeting,
         user_message: '',
         error_report: token,
@@ -271,6 +293,11 @@ const ChatDB: React.FC = () => {
 
     if (!userId) {
       setError('請先登入');
+      return;
+    }
+
+    if (!activeSession.selectedVideoId) {
+      setError('這個聊天尚未綁定影片，請開新聊天並選擇影片後再提問。');
       return;
     }
 
@@ -301,6 +328,8 @@ const ChatDB: React.FC = () => {
       const response = await chatAPI.sendMessage({
         message: trimmedInput,
         history: nextMessages,
+        user_id: userId,
+        video_id: activeSession.selectedVideoId ?? null,
       });
 
       let reply =
@@ -331,6 +360,7 @@ const ChatDB: React.FC = () => {
 
       await feedbackAPI.createFeedback({
         user_id: userId,
+        video_id: activeSession.selectedVideoId ?? null,
         ai_message: reply,
         user_message: trimmedInput,
         error_report: token,
@@ -358,6 +388,7 @@ const ChatDB: React.FC = () => {
       // Save error reply too (still under the conversation token).
       await feedbackAPI.createFeedback({
         user_id: userId,
+        video_id: activeSession.selectedVideoId ?? null,
         ai_message: errorMessage,
         user_message: trimmedInput,
         error_report: token,
@@ -561,4 +592,3 @@ const ChatDB: React.FC = () => {
 };
 
 export default ChatDB;
-

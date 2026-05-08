@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 load_dotenv()
 
@@ -50,10 +51,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
+def ensure_database_columns() -> None:
+    schema_updates = [
+        "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript TEXT",
+        "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript_source VARCHAR",
+        "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript_updated_at TIMESTAMP",
+        "ALTER TABLE ai_feedbacks ADD COLUMN IF NOT EXISTS video_id INTEGER",
+    ]
+    with database.engine.begin() as connection:
+        for statement in schema_updates:
+            connection.execute(text(statement))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         models.Base.metadata.create_all(bind=database.engine)
+        ensure_database_columns()
         db = database.SessionLocal()
         try:
             user = db.query(models.User).filter(models.User.id == 1).first()
@@ -153,6 +167,8 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
+    user_id: Optional[int] = None
+    video_id: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
@@ -186,6 +202,54 @@ def gemini_health_check():
         return GeminiHealthResponse(**result)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Gemini connection failed: {exc}")
+
+
+def get_or_update_video_transcript(video: models.Video, db: Session) -> tuple[str, str]:
+    if video.transcript:
+        return video.transcript, video.transcript_source or "database"
+
+    transcript_result = learning_pipeline.load_transcript(video.video_link)
+    if transcript_result.transcript:
+        video.transcript = transcript_result.transcript
+        video.transcript_source = transcript_result.source
+        video.transcript_updated_at = datetime.utcnow()
+        db.add(video)
+        db.commit()
+        db.refresh(video)
+    return video.transcript or "", video.transcript_source or transcript_result.source
+
+
+def build_chat_video_context(video: models.Video, db: Session, query: str, user_id: Optional[int]) -> dict:
+    transcript, transcript_source = get_or_update_video_transcript(video, db)
+    retrieved_chunks, retrieval_backend = learning_pipeline.retrieve_chunks(query, transcript)
+
+    questions_query = db.query(models.QuizQuestion).filter(models.QuizQuestion.video_id == video.id)
+    if user_id is not None:
+        questions_query = questions_query.filter(models.QuizQuestion.user_id == user_id)
+    questions = questions_query.order_by(models.QuizQuestion.created_at.desc()).limit(8).all()
+
+    return {
+        "id": video.id,
+        "title": video.title or "Untitled Video",
+        "video_link": video.video_link,
+        "outline": video.outline or "",
+        "transcript": transcript,
+        "transcript_source": transcript_source,
+        "retrieval_backend": retrieval_backend,
+        "retrieved_chunks": [
+            {"index": chunk.index, "content": chunk.content, "score": round(chunk.score, 4)}
+            for chunk in retrieved_chunks
+        ],
+        "questions": [
+            {
+                "question": question.question_content,
+                "reference_answer": question.reference_answer,
+                "answer_record": question.answer_record,
+                "accuracy": question.accuracy,
+            }
+            for question in questions
+        ],
+    }
 
 
 @app.post("/auth/register", response_model=UserResponse)
@@ -222,8 +286,29 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    recent_videos = db.query(models.Video).order_by(models.Video.created_at.desc()).limit(3).all()
-    video_context = [{"title": video.title, "video_link": video.video_link} for video in recent_videos]
+    video_context: dict | list[dict]
+    if payload.video_id is not None:
+        video_query = db.query(models.Video).filter(models.Video.id == payload.video_id)
+        if payload.user_id is not None:
+            video_query = video_query.filter(models.Video.user_id == payload.user_id)
+        video = video_query.first()
+        if video is None:
+            raise HTTPException(status_code=404, detail="Video not found")
+        video_context = build_chat_video_context(video, db, user_message, payload.user_id)
+    else:
+        recent_videos_query = db.query(models.Video)
+        if payload.user_id is not None:
+            recent_videos_query = recent_videos_query.filter(models.Video.user_id == payload.user_id)
+        recent_videos = recent_videos_query.order_by(models.Video.created_at.desc()).limit(3).all()
+        video_context = [
+            {
+                "id": video.id,
+                "title": video.title,
+                "video_link": video.video_link,
+                "outline": video.outline,
+            }
+            for video in recent_videos
+        ]
 
     try:
         reply = ai_analyzer.generate_chat_reply(
@@ -347,6 +432,9 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
             video_link=raw_link,
             title=title,
             outline=payload.outline,
+            transcript=payload.transcript,
+            transcript_source=payload.transcript_source,
+            transcript_updated_at=datetime.utcnow() if payload.transcript else None,
             user_id=payload.user_id,
             cost_points=payload.cost_points or 0,
             error_report=payload.error_report,
@@ -384,6 +472,7 @@ def delete_video(video_id: int, db: Session = Depends(database.get_db)):
 def create_ai_feedback(payload: schema.AIFeedbackCreate, db: Session = Depends(database.get_db)):
     feedback = models.AIFeedback(
         user_id=payload.user_id,
+        video_id=payload.video_id,
         ai_message=payload.ai_message,
         user_message=payload.user_message,
         error_report=payload.error_report,

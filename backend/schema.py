@@ -7,6 +7,8 @@ class VideoCreate(BaseModel):
     video_link: str
     title: Optional[str] = None
     outline: Optional[str] = None
+    transcript: Optional[str] = None
+    transcript_source: Optional[str] = None
     user_id: Optional[int] = None
     cost_points: Optional[int] = 0
     error_report: Optional[str] = None
@@ -16,6 +18,9 @@ class VideoResponse(BaseModel):
     video_link: str
     title: Optional[str] = None
     outline: Optional[str] = None
+    transcript: Optional[str] = None
+    transcript_source: Optional[str] = None
+    transcript_updated_at: Optional[datetime] = None
     user_id: Optional[int] = None
     cost_points: int
     error_report: Optional[str] = None
@@ -26,6 +31,7 @@ class VideoResponse(BaseModel):
 
 class AIFeedbackCreate(BaseModel):
     user_id: int
+    video_id: Optional[int] = None
     ai_message: str
     user_message: str
     error_report: Optional[str] = None
@@ -33,6 +39,7 @@ class AIFeedbackCreate(BaseModel):
 class AIFeedbackResponse(BaseModel):
     id: int
     user_id: int
+    video_id: Optional[int] = None
     ai_message: str
     user_message: str
     error_report: Optional[str] = None
