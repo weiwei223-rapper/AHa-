@@ -1,12 +1,14 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class VideoCreate(BaseModel):
     video_link: str
     title: Optional[str] = None
     outline: Optional[str] = None
+    transcript: Optional[str] = None
+    transcript_source: Optional[str] = None
     user_id: Optional[int] = None
     cost_points: Optional[int] = 0
     error_report: Optional[str] = None
@@ -16,16 +18,19 @@ class VideoResponse(BaseModel):
     video_link: str
     title: Optional[str] = None
     outline: Optional[str] = None
+    transcript: Optional[str] = None
+    transcript_source: Optional[str] = None
+    transcript_updated_at: Optional[datetime] = None
     user_id: Optional[int] = None
-    cost_points: int
+    cost_points: Optional[int] = 0
     error_report: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True   # Pydantic v2
+    model_config = ConfigDict(from_attributes=True)
 
 class AIFeedbackCreate(BaseModel):
     user_id: int
+    video_id: Optional[int] = None
     ai_message: str
     user_message: str
     error_report: Optional[str] = None
@@ -33,13 +38,13 @@ class AIFeedbackCreate(BaseModel):
 class AIFeedbackResponse(BaseModel):
     id: int
     user_id: int
+    video_id: Optional[int] = None
     ai_message: str
     user_message: str
     error_report: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class RechargeRecordResponse(BaseModel):
     id: int
@@ -51,14 +56,13 @@ class RechargeRecordResponse(BaseModel):
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class QuizQuestion(BaseModel):
     question: str
     correct_answer: str
     options: List[str] = []
-    question_type: str = "fill-in-the-blank"
+    question_type: str = "coding-implementation"
     explanation: Optional[str] = None
     reference_concept: Optional[str] = None
     source_time: Optional[str] = None
@@ -86,8 +90,7 @@ class QuizQuestionResponse(BaseModel):
     options: List[str] = []
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class QuizResponse(BaseModel):
     video_id: int
@@ -127,8 +130,7 @@ class QuizResultResponse(BaseModel):
     total_questions: int
     completed_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class GenerationRecordCreate(BaseModel):
     user_id: int
@@ -142,8 +144,7 @@ class GenerationRecordResponse(BaseModel):
     consumed_points: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UploadRecordCreate(BaseModel):
     user_id: int
@@ -157,11 +158,12 @@ class UploadRecordResponse(BaseModel):
     consumed_points: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserStatsResponse(BaseModel):
     video_count: int
+    analyzed_video_count: int
     remaining_points: int
     completed_quizzes: int
+    total_questions_count: int
     average_accuracy: float

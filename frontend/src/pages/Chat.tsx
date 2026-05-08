@@ -210,16 +210,18 @@ const Chat: React.FC = () => {
       const response = await chatAPI.sendMessage({
         message: trimmedInput,
         history: nextMessages,
+        user_id: Number(localStorage.getItem('userId') || 0) || undefined,
+        selected_video_id: activeSession.selectedVideoId ?? null,
       });
 
       let reply =
         response.data?.reply ||
         response.data?.message ||
-        'The assistant did not return a valid reply.';
+        'Gemini did not return a valid reply.';
 
       // Validate the reply
       if (!reply || reply.trim().length === 0) {
-        reply = '抱歉，我沒有收到有效的回應。請再試一次。';
+        reply = '抱歉，Gemini 沒有收到有效的回應。請再試一次。';
       } else if (reply.length > 10000) {
         reply = reply.substring(0, 10000) + '...';
       }
@@ -231,7 +233,7 @@ const Chat: React.FC = () => {
     } catch (requestError: unknown) {
       console.error('Error sending message:', requestError);
 
-      let errorMessage = '無法連線到聊天服務，請稍後再試。';
+      let errorMessage = '無法連線到 Gemini 服務，請稍後再試。';
       const errorObject = requestError as {
         code?: string;
         response?: { status?: number };
@@ -302,6 +304,29 @@ const Chat: React.FC = () => {
       </aside>
 
       <section className="chat-panel">
+<<<<<<< HEAD
+        <div className="chat-hero">
+          <div className="chat-hero-copy">
+            <div className="chat-hero-label">Powered by Gemini</div>
+            <h1>聊天工作台</h1>
+            <p>
+              用側欄管理歷史紀錄，在主畫面專注追問影片內容、測驗重點與學習摘要。
+            </p>
+          </div>
+          <div className="chat-hero-stats">
+            <div className="chat-stat-card">
+              <span>Conversations</span>
+              <strong>{sessions.length}</strong>
+            </div>
+            <div className="chat-stat-card">
+              <span>Messages</span>
+              <strong>{activeSession?.messages.length ?? 0}</strong>
+            </div>
+          </div>
+        </div>
+
+=======
+>>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
         <div className="chat-thread-shell">
           <div className="chat-thread-header">
             <div>
@@ -313,6 +338,48 @@ const Chat: React.FC = () => {
             </div>
           </div>
 
+<<<<<<< HEAD
+          <div className="chat-thread">
+            {activeSession?.messages.map((message, index) => (
+              <article
+                key={`${message.role}-${index}`}
+                className={`chat-message-row ${message.role === 'user' ? 'user' : 'assistant'}`}
+              >
+                <div className="chat-avatar">{message.role === 'user' ? 'You' : 'Gemini'}</div>
+                <div className="chat-message-card">
+                  <div className="chat-message-role">
+                    {message.role === 'user' ? 'You' : 'Gemini'}
+                  </div>
+                  <p>{message.content}</p>
+                </div>
+              </article>
+            ))}
+
+            {loading && (
+              <article className="chat-message-row assistant">
+                <div className="chat-avatar">Gemini</div>
+                <div className="chat-message-card typing">
+                  <div className="chat-message-role">Gemini</div>
+                  <p>Thinking about your question...</p>
+                </div>
+              </article>
+            )}
+          </div>
+
+          <div className="chat-composer">
+            <textarea
+              className="chat-composer-input"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="輸入問題，按 Enter 送出，Shift + Enter 換行"
+              rows={4}
+              disabled={loading || !activeSession}
+            />
+            <div className="chat-composer-footer">
+              <div className="chat-composer-hint">
+                可以詢問影片內容整理、重點摘要、題目解析或延伸學習方向。
+=======
           {!activeSession?.selectedVideoId ? (
             <div className="chat-video-picker">
               <div className="chat-video-picker-head">
@@ -320,6 +387,7 @@ const Chat: React.FC = () => {
                 <div className="chat-video-picker-subtitle">
                   選定後我會用該影片作為上下文，幫你整理重點、回答問題與延伸學習。
                 </div>
+>>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
               </div>
 
               {videosError && <div className="chat-video-picker-error">{videosError}</div>}

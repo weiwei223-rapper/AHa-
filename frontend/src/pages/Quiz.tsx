@@ -16,7 +16,6 @@ type QuizQuestion = {
   question: string;
   correct_answer: string;
   explanation?: string | null;
-  reference_concept?: string | null;
   question_type?: string;
   source_time?: string | null;
   source_excerpt?: string | null;
@@ -81,9 +80,7 @@ const Quiz = () => {
     }
     return userAnswers.reduce((total, answer, index) => {
       const correct = quiz.questions[index].correct_answer.trim();
-      // If the answer is the full code, we should check if it contains the correct_answer in place of ___
-      // But for simplicity, we'll check if the answer (which was pre-filled with starter_code) now contains the correct_answer
-      return answer.trim().includes(correct) ? total + 1 : total;
+      return answer.trim() === correct ? total + 1 : total;
     }, 0);
   }, [quiz, userAnswers]);
 
@@ -114,7 +111,7 @@ const Quiz = () => {
       const nextQuiz = response.data as QuizData;
       setQuiz(nextQuiz);
       setCurrentQuestionIndex(0);
-      setUserAnswers(nextQuiz.questions.map(q => q.starter_code || ""));
+      setUserAnswers(new Array(nextQuiz.questions.length).fill(""));
       setShowResults(false);
     } catch (err: any) {
       console.error("Error generating quiz:", err);
@@ -134,10 +131,6 @@ const Quiz = () => {
     setCurrentQuestionIndex((prev) => Math.max(prev - 1, 0));
   };
 
-  const [grading, setGrading] = useState(false);
-  const [gradeDetails, setGradeDetails] = useState<any[]>([]);
-  const [backendScore, setBackendScore] = useState(0);
-
   const handleNext = async () => {
     if (!quiz) {
       return;
@@ -146,34 +139,17 @@ const Quiz = () => {
       setCurrentQuestionIndex((prev) => prev + 1);
       return;
     }
-
-    setGrading(true);
-    setLoading(true);
     try {
-      // 呼叫後端進行邏輯批改
-      const gradeRes = await quizAPI.gradeQuiz(quiz.video_id, {
-        user_id: userId,
-        answers: userAnswers,
-      });
-      
-      const { total_score, details } = gradeRes.data;
-      setBackendScore(total_score);
-      setGradeDetails(details);
-
       await quizAPI.createResult({
         user_id: userId,
         video_id: quiz.video_id,
-        score: total_score,
+        score,
         total_questions: quiz.questions.length,
       });
-      setShowResults(true);
     } catch (err) {
-      console.error("Error grading quiz:", err);
-      setError("批改過程中發生錯誤，請稍後再試。");
-    } finally {
-      setGrading(false);
-      setLoading(false);
+      console.error("Error saving quiz result:", err);
     }
+    setShowResults(true);
   };
 
   const executeCode = async () => {
@@ -205,66 +181,64 @@ const Quiz = () => {
   };
 
   if (showResults && quiz) {
+    const percentage = Math.round((score / quiz.questions.length) * 100);
     return (
       <div className="page-shell">
         <section className="page-hero">
           <div>
             <div className="page-eyebrow">Quiz Result</div>
             <h1>{quiz.video_title}</h1>
-            <p>這份題目是根據影片內容產生的程式填空題，系統已透過 3 個測試案例進行邏輯驗證。</p>
+            <p>這份題目是根據影片內容產生的程式填空題，可以逐題檢查答案與來源。</p>
           </div>
           <div className="page-hero-metric">
             <span>Score</span>
-            <strong>{backendScore}%</strong>
+            <strong>{percentage}%</strong>
             <p>
-              {gradeDetails.filter(d => d.passed).length} / {quiz.questions.length} Passed
+              {score} / {quiz.questions.length}
             </p>
           </div>
         </section>
 
         <section className="panel-card">
           <div className="quiz-review-list">
-            {quiz.questions.map((question, index) => {
-              const detail = gradeDetails[index];
-              return (
-                <article key={index} className="quiz-review-card">
-                  <div className={`quiz-review-status ${detail?.passed ? "correct" : "review"}`}>
-                    {detail?.passed ? "Logic Correct" : "Logic Failed"}
-                  </div>
-                  <h3>
-                    {index + 1}. {question.question}
-                  </h3>
-                  {question.reference_concept && (
-                    <p style={{ color: "#38bdf8", fontWeight: "bold", margin: "8px 0" }}>
-                      {question.reference_concept}
-                    </p>
-                  )}
-                  
+            {quiz.questions.map((question, index) => (
+              <article key={index} className="quiz-review-card">
+                <div className="quiz-review-status">
+                  {userAnswers[index].trim() === question.correct_answer.trim() ? "Correct" : "Review"}
+                </div>
+                <h3>
+                  {index + 1}. {question.question}
+                </h3>
+                {question.starter_code && <pre className="code-snippet">{question.starter_code}</pre>}
+                <div style={{ marginTop: "12px" }}>
+                  <p>
+                    <strong>你的答案：</strong>
+                  </p>
+                  <pre className="code-snippet">{userAnswers[index] || "未作答"}</pre>
+                </div>
+                <div style={{ marginTop: "12px" }}>
+                  <p>
+                    <strong>正確答案：</strong>
+                  </p>
+                  <pre className="code-snippet">{question.correct_answer}</pre>
+                </div>
+                {question.explanation && (
+                  <p style={{ marginTop: "12px" }}>
+                    <strong>解析：</strong>
+                    {question.explanation}
+                  </p>
+                )}
+                {(question.source_time || question.source_excerpt) && (
                   <div style={{ marginTop: "12px" }}>
-                    <p><strong>驗證詳情：</strong></p>
-                    <ul style={{ listStyle: "none", padding: 0 }}>
-                      {detail?.test_results?.map((res: any, i: number) => (
-                        <li key={i} style={{ color: res.passed ? "#4ade80" : "#fb7185", fontSize: "0.9em", marginBottom: "4px" }}>
-                          Test {i+1}: {res.passed ? "✓ Passed" : `✗ Failed (Expected: ${res.expected}, Actual: ${res.actual})`}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div style={{ marginTop: "12px" }}>
-                    <p><strong>你的作答：</strong></p>
-                    <pre className="code-snippet">{userAnswers[index] || "未作答"}</pre>
-                  </div>
-                  
-                  {question.explanation && (
-                    <p style={{ marginTop: "12px" }}>
-                      <strong>解析：</strong>
-                      {question.explanation}
+                    <p>
+                      <strong>出題依據：</strong>
+                      {question.source_time || "unknown"}
                     </p>
-                  )}
-                </article>
-              );
-            })}
+                    {question.source_excerpt && <pre className="code-snippet">{question.source_excerpt}</pre>}
+                  </div>
+                )}
+              </article>
+            ))}
           </div>
 
           <div className="quiz-nav-row">
@@ -283,7 +257,7 @@ const Quiz = () => {
         <div>
           <div className="page-eyebrow">Video Quiz</div>
           <h1>影片程式填空題</h1>
-          <p>系統會依照影片逐字稿與摘要，並參考 LeetCode 題庫，生成 Python 程式填空題。</p>
+          <p>系統會依照影片逐字稿與摘要，生成 Python 程式填空題與對應測試案例。</p>
         </div>
         <div className="page-hero-metric">
           <span>Sources</span>
@@ -345,24 +319,25 @@ const Quiz = () => {
               Question {currentQuestionIndex + 1} / {quiz.questions.length}
             </div>
             <h2>{currentQuestion.question}</h2>
-            
-            {currentQuestion.reference_concept && (
-              <p style={{ color: "#38bdf8", fontSize: "1.1em", fontWeight: "bold", marginTop: "10px" }}>
-                {currentQuestion.reference_concept}
-              </p>
+
+            {(currentQuestion.source_time || currentQuestion.source_excerpt) && (
+              <div style={{ marginTop: "20px" }}>
+                <p className="page-eyebrow">出題依據</p>
+                <p>{currentQuestion.source_time || "unknown"}</p>
+                {currentQuestion.source_excerpt && <pre className="code-snippet">{currentQuestion.source_excerpt}</pre>}
+              </div>
             )}
           </div>
 
+          {currentQuestion.starter_code && (
+            <div>
+              <p className="page-eyebrow">Starter Code</p>
+              <pre className="code-snippet">{currentQuestion.starter_code}</pre>
+            </div>
+          )}
+
           <div style={{ marginTop: "20px" }}>
-            <p className="page-eyebrow">Python Editor (填入 ___ 處內容)</p>
-            <style>{`
-              .monaco-editor .suggest-widget {
-                color: white !important;
-              }
-              .monaco-editor .suggest-widget .monaco-list-row .label-name {
-                color: white !important;
-              }
-            `}</style>
+            <p className="page-eyebrow">Your Solution</p>
             <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
               <Editor
                 height="100%"
@@ -434,6 +409,14 @@ const Quiz = () => {
               className="page-primary-button"
             >
               {codeLoading ? "Testing..." : "Test"}
+            </button>
+            <button
+              onClick={() => {
+                console.log("Submit clicked");
+              }}
+              className="page-primary-button"
+            >
+              Submit
             </button>
           </div>
         </section>
