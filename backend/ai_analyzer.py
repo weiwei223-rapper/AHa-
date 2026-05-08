@@ -56,17 +56,25 @@ def init_gemini() -> str:
     return api_key
 
 
-def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> str:
+def generate_text_with_gemini(contents: list[dict], system_instruction: str | None = None, model: str = DEFAULT_GEMINI_MODEL) -> str:
     api_key = init_gemini()
     model_name = model.replace("models/", "")
+    
+    payload = {
+        "contents": contents,
+        "generationConfig": {"temperature": 0.5, "maxOutputTokens": 2048},
+    }
+    
+    if system_instruction:
+        payload["system_instruction"] = {
+            "parts": [{"text": system_instruction}]
+        }
+
     try:
         response = requests.post(
             GEMINI_API_URL.format(model=model_name),
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-            json={
-                "contents": contents,
-                "generationConfig": {"temperature": 0.5, "maxOutputTokens": 2048},
-            },
+            json=payload,
             timeout=30,
         )
         if not response.ok:
@@ -89,7 +97,10 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
 
 
 def test_gemini_connection(model: str = DEFAULT_GEMINI_MODEL) -> dict:
-    text = generate_text_with_gemini([{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], model=model)
+    text = generate_text_with_gemini(
+        contents=[{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], 
+        model=model
+    )
     return {"ok": text.strip() == "GEMINI_OK", "model": model, "reply": text.strip()}
 
 
@@ -275,22 +286,33 @@ def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | 
         "Do not copy long passages from transcripts directly. "
         "If you cannot answer based on available context, provide general helpful study advice."
     )
-    contents = [{"role": "system", "parts": [{"text": system_prompt}]}]
+    
+    full_system_instruction = system_prompt
     if video_context:
-        contents.append({"role": "system", "parts": [{"text": f"Uploaded video context:\n{video_context}"}]})
+        full_system_instruction += f"\n\nUploaded video context:\n{video_context}"
+
+    contents = []
     for item in history:
         role = item.get("role", "user")
         content = str(item.get("content", "")).strip()
         if content:
-            contents.append({"role": "assistant" if role == "assistant" else "user", "parts": [{"text": content}]})
+            # Gemini uses 'model' instead of 'assistant'
+            gemini_role = "model" if role == "assistant" else "user"
+            contents.append({"role": gemini_role, "parts": [{"text": content}]})
+    
     contents.append({"role": "user", "parts": [{"text": message.strip()}]})
+    
+    # Optional: ensure alternating user/model roles if required by Gemini
+    # (Though usually it handles it if they alternate)
+    
     for model in [DEFAULT_GEMINI_MODEL, "gemini-1.5-flash"]:
         try:
-            reply = generate_text_with_gemini(contents, model)
-            if reply and len(reply.strip()) >= 10:
+            reply = generate_text_with_gemini(contents, system_instruction=full_system_instruction, model=model)
+            if reply and len(reply.strip()) >= 2:
                 return reply.strip()
         except Exception as exc:
             print(f"Gemini model {model} failed: {exc}")
+    
     return "我現在無法連線到 AI 服務，但你可以先問我你想聚焦哪個影片主題，我再用已抓到的內容協助整理。"
 
 

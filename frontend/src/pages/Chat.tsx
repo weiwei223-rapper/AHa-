@@ -155,11 +155,11 @@ const Chat: React.FC = () => {
       let reply =
         response.data?.reply ||
         response.data?.message ||
-        'The assistant did not return a valid reply.';
+        'Gemini did not return a valid reply.';
 
       // Validate the reply
       if (!reply || reply.trim().length === 0) {
-        reply = '抱歉，我沒有收到有效的回應。請再試一次。';
+        reply = '抱歉，Gemini 沒有收到有效的回應。請再試一次。';
       } else if (reply.length > 10000) {
         reply = reply.substring(0, 10000) + '...';
       }
@@ -171,7 +171,7 @@ const Chat: React.FC = () => {
     } catch (requestError: unknown) {
       console.error('Error sending message:', requestError);
 
-      let errorMessage = '無法連線到聊天服務，請稍後再試。';
+      let errorMessage = '無法連線到 Gemini 服務，請稍後再試。';
       const errorObject = requestError as {
         code?: string;
         response?: { status?: number };
@@ -236,7 +236,7 @@ const Chat: React.FC = () => {
       <section className="chat-panel">
         <div className="chat-hero">
           <div className="chat-hero-copy">
-            <div className="chat-hero-label">AI Study Assistant</div>
+            <div className="chat-hero-label">Powered by Gemini</div>
             <h1>聊天工作台</h1>
             <p>
               用側欄管理歷史紀錄，在主畫面專注追問影片內容、測驗重點與學習摘要。
@@ -271,10 +271,10 @@ const Chat: React.FC = () => {
                 key={`${message.role}-${index}`}
                 className={`chat-message-row ${message.role === 'user' ? 'user' : 'assistant'}`}
               >
-                <div className="chat-avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
+                <div className="chat-avatar">{message.role === 'user' ? 'You' : 'Gemini'}</div>
                 <div className="chat-message-card">
                   <div className="chat-message-role">
-                    {message.role === 'user' ? 'You' : 'Assistant'}
+                    {message.role === 'user' ? 'You' : 'Gemini'}
                   </div>
                   <p>{message.content}</p>
                 </div>
@@ -283,9 +283,9 @@ const Chat: React.FC = () => {
 
             {loading && (
               <article className="chat-message-row assistant">
-                <div className="chat-avatar">AI</div>
+                <div className="chat-avatar">Gemini</div>
                 <div className="chat-message-card typing">
-                  <div className="chat-message-role">Assistant</div>
+                  <div className="chat-message-role">Gemini</div>
                   <p>Thinking about your question...</p>
                 </div>
               </article>

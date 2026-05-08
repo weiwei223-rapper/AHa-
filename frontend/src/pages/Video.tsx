@@ -81,6 +81,11 @@ const Video = (_props: VideoStatusProps) => {
       setVideos((prev) => [response.data, ...prev]);
       setVideoLink("");
       setVideoTitle("");
+
+      // 發送自定義事件通知其他頁面影片數量已更新
+      window.dispatchEvent(new CustomEvent('video-updated', {
+        detail: { userId, newVideoCount: videos.length + 1 }
+      }));
     } catch (err: any) {
       console.error("Error uploading video:", err);
       setError(err.response?.data?.detail || "新增影片失敗");
@@ -99,6 +104,9 @@ const Video = (_props: VideoStatusProps) => {
       if (analysis?.video_id === videoId) {
         setAnalysis(null);
       }
+      window.dispatchEvent(new CustomEvent('video-updated', {
+        detail: { userId, newVideoCount: Math.max(0, videos.length - 1) }
+      }));
     } catch (err: any) {
       console.error("Error deleting video:", err);
       setError(err.response?.data?.detail || "刪除影片失敗");
@@ -112,6 +120,12 @@ const Video = (_props: VideoStatusProps) => {
       const response = await videoAPI.analyzeVideo(videoId);
       setAnalysis(response.data);
       await fetchVideos();
+
+      // 影片分析完成後，觸發成就更新事件
+      // 因為 analyzed_video_count 已更新
+      window.dispatchEvent(new CustomEvent('video-updated', {
+        detail: { userId, videoIdAnalyzed: videoId }
+      }));
     } catch (err: any) {
       console.error("Error analyzing video:", err);
       setError(err.response?.data?.detail || "影片分析失敗");

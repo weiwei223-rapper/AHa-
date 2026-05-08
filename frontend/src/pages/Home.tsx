@@ -22,6 +22,7 @@ type HomeStats = {
   points: number;
   completedQuizCount: number;
   averageAccuracy: number;
+  analyzedVideoCount: number;
 };
 
 const QUIZ_RESULTS_KEY = "quizResults";
@@ -32,6 +33,7 @@ const Home = ({ name }: UserStatusProps) => {
     points: 0,
     completedQuizCount: 0,
     averageAccuracy: 0,
+    analyzedVideoCount: 0,
   });
 
   useEffect(() => {
@@ -61,59 +63,28 @@ const Home = ({ name }: UserStatusProps) => {
   }, []);
 
   const loadStats = async () => {
-    const [videoCount, points, quizResults] = await Promise.all([
-      getVideoCount(),
-      getPoints(),
-      Promise.resolve(getQuizResults()),
-    ]);
-
-    const totalCorrect = quizResults.reduce((sum, item) => sum + item.score, 0);
-    const totalQuestions = quizResults.reduce((sum, item) => sum + item.totalQuestions, 0);
-
-    setStats({
-      videoCount,
-      points,
-      completedQuizCount: quizResults.length,
-      averageAccuracy: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0,
-    });
-  };
-
-  const getVideoCount = async () => {
     const userId = Number(localStorage.getItem("userId") || 0);
-    if (!userId) {
-      return 0;
-    }
+    if (!userId) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/videos?user_id=${userId}`);
-      if (!response.ok) {
-        return 0;
-      }
+      const [statsResp, quizResults] = await Promise.all([
+        userAPI.getStats(userId),
+        Promise.resolve(getQuizResults()),
+      ]);
 
-      const videos = await parseResponseBody<Video[]>(response);
-      if (!videos) {
-        return 0;
-      }
-      return videos.length;
+      const stats = statsResp.data;
+      const totalCorrect = quizResults.reduce((sum, item) => sum + item.score, 0);
+      const totalQuestions = quizResults.reduce((sum, item) => sum + item.totalQuestions, 0);
+
+      setStats({
+        videoCount: stats.video_count,
+        points: stats.remaining_points,
+        completedQuizCount: stats.completed_quizzes,
+        averageAccuracy: stats.average_accuracy,
+        analyzedVideoCount: stats.analyzed_video_count, // Add this
+      });
     } catch (error) {
-      console.error("Failed to load videos:", error);
-      return 0;
-    }
-  };
-
-  const getPoints = async () => {
-    const userId = localStorage.getItem("userId");
-    if (!userId) {
-      return readStoredUserPoints();
-    }
-
-    try {
-      const response = await userAPI.getUser(Number(userId));
-      localStorage.setItem("userData", JSON.stringify(response.data));
-      return response.data.points ?? 0;
-    } catch (error) {
-      console.error("Failed to load user points:", error);
-      return readStoredUserPoints();
+      console.error("Failed to load stats:", error);
     }
   };
 

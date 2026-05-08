@@ -1,15 +1,23 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+import hashlib
+import html
 import json
+from urllib.parse import quote, quote_plus
 
 import bcrypt
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
+ECPAY_MERCHANT_ID = "2000132"
+ECPAY_HASH_KEY = "5294y06JbISpM5x9"
+ECPAY_HASH_IV = "v77hoKGq4kWxNNIS"
 
 load_dotenv()
 
@@ -117,6 +125,57 @@ class RechargeRequest(BaseModel):
     plan_id: Optional[str] = None
 
 
+class EcpayCheckoutRequest(BaseModel):
+    MerchantID: Optional[str] = None
+    MerchantTradeNo: str
+    MerchantTradeDate: str
+    PaymentType: str
+    TotalAmount: int
+    TradeDesc: str
+    ItemName: str
+    ReturnURL: str
+    ClientBackURL: str
+    ChoosePayment: str
+    EncryptType: int
+
+
+class EcpayCheckoutResponse(BaseModel):
+    CheckMacValue: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+def build_ecpay_check_mac_debug(params: Dict[str, Any]) -> tuple[str, str, str]:
+    filtered = {
+        key: str(value)
+        for key, value in params.items()
+        if key != "CheckMacValue" and value is not None and str(value) != ""
+    }
+    if "MerchantID" not in filtered or filtered["MerchantID"] in (None, ""):
+        filtered["MerchantID"] = ECPAY_MERCHANT_ID
+
+    ordered = sorted(filtered.items(), key=lambda item: item[0])
+    encoded = "&".join(f"{key}={value}" for key, value in ordered)
+    raw = f"HashKey={ECPAY_HASH_KEY}&{encoded}&HashIV={ECPAY_HASH_IV}"
+    encoded_raw = quote(raw, safe="").lower()
+    encoded_raw = encoded_raw.replace("%2d", "-")
+    encoded_raw = encoded_raw.replace("%5f", "_")
+    encoded_raw = encoded_raw.replace("%2e", ".")
+    encoded_raw = encoded_raw.replace("%21", "!")
+    encoded_raw = encoded_raw.replace("%2a", "*")
+    encoded_raw = encoded_raw.replace("%28", "(")
+    encoded_raw = encoded_raw.replace("%29", ")")
+    encoded_raw = encoded_raw.replace("%7e", "~")
+    encoded_raw = encoded_raw.replace("%20", "+")
+    check_mac_value = hashlib.sha256(encoded_raw.encode("utf-8")).hexdigest().upper()
+    return raw, encoded_raw, check_mac_value
+
+
+def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
+    _, _, check_mac_value = build_ecpay_check_mac_debug(params)
+    return check_mac_value
+
+
 class RechargeRecordResponse(BaseModel):
     date: str
     order_id: str
@@ -214,6 +273,111 @@ def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
     if not user or not verify_password(payload.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     return {"user": user, "message": f"Welcome back, {user.name}"}
+
+
+@app.post("/ecpay/create-checkmac", response_model=EcpayCheckoutResponse)
+def create_ecpay_checkmac(payload: EcpayCheckoutRequest):
+    params = payload.model_dump()
+    return EcpayCheckoutResponse(CheckMacValue=generate_ecpay_check_mac_value(params))
+
+
+@app.post("/ecpay/debug-checkmac")
+def debug_ecpay_checkmac(payload: Dict[str, Any]):
+    raw, encoded_raw, check_mac_value = build_ecpay_check_mac_debug(payload)
+    return {
+        "raw": raw,
+        "encoded_raw": encoded_raw,
+        "CheckMacValue": check_mac_value,
+    }
+
+
+@app.post("/ecpay/checkout", response_class=HTMLResponse)
+async def checkout_ecpay(request: Request):
+    form_data = await request.form()
+    params = {key: form_data[key] for key in form_data}
+    params["MerchantID"] = ECPAY_MERCHANT_ID
+    params["CheckMacValue"] = generate_ecpay_check_mac_value(params)
+
+    fields = []
+    for key, value in params.items():
+        escaped_value = html.escape(str(value), quote=True)
+        fields.append(f'<input type="hidden" name="{html.escape(key)}" value="{escaped_value}" />')
+
+    form_html = """
+<html>
+  <body>
+    <form id="ecpayForm" method="post" action="https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5">
+      {fields}
+    </form>
+    <script>document.getElementById('ecpayForm').submit();</script>
+  </body>
+</html>
+""".replace("{fields}", "\n      ".join(fields))
+
+    return HTMLResponse(content=form_html, status_code=200)
+
+
+@app.post("/ecpay/return", response_class=PlainTextResponse)
+async def ecpay_return(request: Request, db: Session = Depends(database.get_db)):
+    form_data = await request.form()
+    params = dict(form_data)
+    print("收到綠界付款結果回傳：", params)
+    
+    # 驗證 CheckMacValue
+    received_mac = params.get("CheckMacValue")
+    calculated_mac = generate_ecpay_check_mac_value(params)
+    
+    if received_mac != calculated_mac:
+        print("❌ CheckMacValue 驗證失敗！可能是偽造請求。")
+        return PlainTextResponse(content="0|CheckMacValue Error", status_code=200)
+
+    rtn_code = params.get("RtnCode")
+    merchant_trade_no = params.get("MerchantTradeNo")
+    total_amount = int(params.get("TotalAmount", 0))
+
+    if rtn_code == "1":
+        print(f"✅ 訂單 {merchant_trade_no} 付款成功！")
+        # 從 MerchantTradeNo 解析 user_id (格式: AHA{user_id}{timestamp})
+        try:
+            # 假設 "AHA" 後面接著的是 user_id，timestamp 固定 10 位
+            user_id_str = merchant_trade_no[3:-10]
+            user_id = int(user_id_str)
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if user:
+                # 根據金額對應點數 (與前端 rechargePlans 一致)
+                points_to_add = 0
+                if total_amount == 299:
+                    points_to_add = 300
+                elif total_amount == 599:
+                    points_to_add = 650
+                elif total_amount == 999:
+                    points_to_add = 1100
+                else:
+                    # 預設 1:1
+                    points_to_add = total_amount
+                
+                user.points += points_to_add
+                
+                # 建立儲值紀錄
+                record = models.RechargeRecord(
+                    user_id=user.id,
+                    date=datetime.utcnow().strftime("%Y/%m/%d"),
+                    order_id=merchant_trade_no,
+                    amount=total_amount,
+                    points=points_to_add,
+                    plan_content="ECPay Online Payment",
+                    payment_method=params.get("PaymentType", "ECPay"),
+                )
+                db.add(user)
+                db.add(record)
+                db.commit()
+                print(f"💰 已為使用者 {user.name} (ID: {user.id}) 增加 {points_to_add} 點數。")
+        except Exception as e:
+            print(f"❌ 解析訂單編號或更新點數失敗: {e}")
+    else:
+        print(f"❌ 訂單 {merchant_trade_no} 付款失敗，RtnCode={rtn_code}")
+
+    return PlainTextResponse(content="1|OK", status_code=200)
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -542,11 +706,20 @@ def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(d
 @app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)
 def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
     video_count = db.query(models.Video).filter(models.Video.user_id == user_id).count()
+    analyzed_video_count = (
+        db.query(models.Video)
+        .filter(models.Video.user_id == user_id)
+        .filter(models.Video.outline.isnot(None))
+        .count()
+    )
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    completed_quizzes = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).count()
+    
     quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).all()
+    completed_quizzes = len(quiz_results)
+    total_questions_count = sum(result.total_questions for result in quiz_results)
+    
     average_accuracy = (
         sum(result.score / result.total_questions * 100 for result in quiz_results) / len(quiz_results)
         if quiz_results
@@ -554,8 +727,10 @@ def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
     )
     return schema.UserStatsResponse(
         video_count=video_count,
+        analyzed_video_count=analyzed_video_count,
         remaining_points=user.points,
         completed_quizzes=completed_quizzes,
+        total_questions_count=total_questions_count,
         average_accuracy=round(average_accuracy, 1),
     )
 

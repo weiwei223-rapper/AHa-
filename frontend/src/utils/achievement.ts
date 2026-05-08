@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
   loginMeta: 'learningLoginMeta',
   unlockedAchievements: 'learningAchievements',
   achievementPoints: 'learningAchievementPoints',
+  videoCount: 'learningVideoCount', // 新增：用來記錄影片總數
 };
 
 const parseJson = <T>(value: string | null): T | null => {
@@ -73,6 +74,21 @@ export const updateLoginMetaForToday = (): LoginMeta => {
   };
   saveLoginMeta(nextMeta);
   return nextMeta;
+};
+
+// 新增：讀取目前影片數量
+export const loadVideoCount = (): number => {
+  const raw = localStorage.getItem(STORAGE_KEYS.videoCount);
+  const stored = parseJson<number>(raw);
+  return typeof stored === 'number' ? stored : 0;
+};
+
+// 新增：更新影片數量（傳入增加的數量，預設為加 1）
+export const updateVideoCount = (addCount: number = 1): number => {
+  const current = loadVideoCount();
+  const next = current + addCount;
+  localStorage.setItem(STORAGE_KEYS.videoCount, JSON.stringify(next));
+  return next;
 };
 
 export const loadUnlockedAchievementKeys = (): string[] => {
@@ -133,24 +149,42 @@ const loginPoints: Record<number, number> = {
 
 export const buildAchievements = (params: {
   videoCount: number;
+  totalVideoCount?: number; // 新增
   questionCount: number;
   loginStreakDays: number;
   totalLoginDays: number;
 }): AchievementItem[] => {
-  const { videoCount, questionCount, loginStreakDays, totalLoginDays } = params;
+  const { videoCount, totalVideoCount = 1, questionCount, loginStreakDays, totalLoginDays } = params;
   const achievements: AchievementItem[] = [];
 
-  videoMilestones.forEach((threshold) => {
+  // 動態調整影片里程碑
+  const dynamicVideoMilestones = [1];
+  if (totalVideoCount > 1 && totalVideoCount < 5) {
+    if (!dynamicVideoMilestones.includes(totalVideoCount)) dynamicVideoMilestones.push(totalVideoCount);
+  } else if (totalVideoCount >= 5) {
+    dynamicVideoMilestones.push(5);
+    if (totalVideoCount > 5 && totalVideoCount < 10) {
+      if (!dynamicVideoMilestones.includes(totalVideoCount)) dynamicVideoMilestones.push(totalVideoCount);
+    } else if (totalVideoCount >= 10) {
+      dynamicVideoMilestones.push(10);
+      if (totalVideoCount > 10) {
+        if (!dynamicVideoMilestones.includes(totalVideoCount)) dynamicVideoMilestones.push(totalVideoCount);
+      }
+    }
+  }
+
+  dynamicVideoMilestones.sort((a, b) => a - b).forEach((threshold) => {
+    const isTotal = threshold === totalVideoCount && totalVideoCount > 1;
     achievements.push({
       key: `video-${threshold}`,
       category: 'video',
-      title: videoTitles[threshold],
-      description: `完成 ${threshold} 支影片上傳與 AI 內容分析`,
-      points: 200,
+      title: isTotal ? '全能學習者' : videoTitles[threshold] || '影片里程碑',
+      description: isTotal ? `完成所有 ${threshold} 部影片分析` : `完成 ${threshold} 部影片分析並建立知識樹`,
+      points: isTotal ? 500 : 200,
       threshold,
       unlocked: videoCount >= threshold,
       progress: `${Math.min(videoCount, threshold)}/${threshold}`,
-      badgeImage: `/achievements/video-${threshold}.png`,
+      badgeImage: `/achievements/video-${threshold > 10 ? 10 : threshold}.png`,
     });
   });
 
@@ -178,8 +212,8 @@ export const buildAchievements = (params: {
         threshold === 7
           ? '連續登入 7 天，維持學習節奏'
           : threshold === 1
-          ? '首次開啟學習日誌'
-          : `累積登入 ${threshold} 天，保持學習習慣`,
+            ? '首次開啟學習日誌'
+            : `累積登入 ${threshold} 天，保持學習習慣`,
       points: loginPoints[threshold],
       threshold,
       unlocked:

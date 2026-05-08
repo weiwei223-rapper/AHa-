@@ -19,7 +19,7 @@ async function main() {
     for await (const chunk of result.stream) {
       process.stdout.write(chunk.text()); // 使用 stdout.write 讓文字接續印在同一行
     }
-    
+
     console.log("\n\n✅ 輸出完畢！");
 
   } catch (error) {

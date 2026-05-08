@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance } from 'axios';
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || '';
+  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
 export async function parseResponseBody<T>(response: Response): Promise<T | null> {
   const raw = await response.text();
@@ -49,6 +49,18 @@ export const userAPI = {
     api.post(`/users/${userId}/recharge`, data),
   getStats: (userId: number) =>
     api.get(`/users/${userId}/stats`),
+  createCheckout: (data: {
+    MerchantTradeNo: string;
+    MerchantTradeDate: string;
+    PaymentType: string;
+    TotalAmount: number;
+    TradeDesc: string;
+    ItemName: string;
+    ReturnURL: string;
+    ClientBackURL: string;
+    ChoosePayment: string;
+    EncryptType: number;
+  }) => api.post('/ecpay/create-checkmac', data),
 };
 
 export const videoAPI = {

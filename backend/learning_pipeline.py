@@ -288,48 +288,48 @@ def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResp
     template_context = question_bank.format_templates_for_prompt(reference_templates)
 
     prompt = f"""
-You are a Python quiz designer for learning videos.
-Generate exactly 5 fill-in-the-blank Python questions based on the video content.
+你是一位專業的 Python 教學設計師。
+請根據提供的影片內容，生成 5 題高品質的「填空式」程式練習題。
 
-You must use the video content as the semantic source, and use the retrieved LeetCode/TQC templates as style and structure references.
+這些題目必須：
+1. **真實反映影片內容**：題目場景與教學重點必須來自影片逐字稿與大綱。
+2. **合理的難度與教學價值**：如果影片是基礎教學，請出基礎題；如果是進階，則出進階題。
+3. **優質的程式碼範本**：`starter_code` 應包含具備教學價值的 Python 片段，將關鍵部分置換為 `___`。
+4. **教學引導**：`explanation` 應詳細說明為何答案是該選項，並連結到影片中的具體概念。
 
-Video title:
+影片標題：
 {title}
 
-Video outline:
+影片重點摘要：
 {analysis.outline_markdown}
 
-Transcript evidence:
+影片內容證據（逐字稿片段）：
 {retrieved_context}
 
-Retrieved LeetCode/TQC templates:
+參考程式模式（僅供結構參考，若難度不符請自行調整）：
 {template_context}
 
-Requirements:
-1. Use Traditional Chinese for `question` and `explanation`.
-2. The factual meaning of each question must come from the video content, not outside knowledge.
-3. The code skeleton and test-case style should clearly resemble the retrieved LeetCode/TQC templates.
-4. Return exactly 5 items.
-5. Each item must include a `starter_code` field with `___`.
-6. `correct_answer` must be the exact text that replaces `___`.
-7. Each item must include 2 to 4 assert-style test cases.
-8. `question_type` must be `fill-in-the-blank`.
-9. `source_time` should be `unknown` if not available.
-10. `source_excerpt` must quote the most relevant video text.
-11. At least 3 questions should obviously follow one of the retrieved templates.
-12. Return JSON array only.
+要求細節：
+1. 使用繁體中文編寫 `question` 和 `explanation`。
+2. 題目數量：正好 5 題。
+3. 每題必須包含 `starter_code`，其中包含一個 `___`。
+4. `correct_answer` 必須是取代 `___` 的精確文字。
+5. 每題必須包含 2 到 4 個 `assert` 風格的測試案例（`test_cases`），用來驗證程式邏輯。
+6. `source_excerpt` 必須引用影片中最相關的原話，作為出題依據。
+7. **嚴禁生搬硬套**：如果參考模式（LeetCode）難度與影片不符，請優先以影片內容出題，維持「合理性」。
+8. 回傳格式：純 JSON 陣列。
 
-JSON schema:
+回傳格式範例：
 [
   {{
-    "question": "題目文字",
-    "correct_answer": "正確答案",
-    "explanation": "簡短解析",
+    "question": "在 Python 中，我們可以使用什麼關鍵字來定義函數？",
+    "correct_answer": "def",
+    "explanation": "影片中提到定義函數的語法是使用 def 關鍵字，後接函數名稱。",
     "question_type": "fill-in-the-blank",
-    "source_time": "00:10-00:42 or unknown",
-    "source_excerpt": "影片原文片段",
-    "starter_code": "包含 ___ 的 Python 程式片段",
-    "test_cases": ["assert ...", "assert ..."]
+    "source_time": "02:15",
+    "source_excerpt": "接著我們使用 def 來宣告一個新的功能...",
+    "starter_code": "___ my_function():\n    print('Hello')",
+    "test_cases": ["# 這裡不一定需要執行，但請提供邏輯檢查說明"]
   }}
 ]
 """
