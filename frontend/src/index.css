@@ -1,0 +1,11 @@
+/* Fix Monaco Suggestion Widget Visibility */
+.monaco-editor .suggest-widget,
+.monaco-editor .suggest-widget * {
+  color: #ffffff !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row:hover,
+.monaco-editor .suggest-widget .monaco-list-row.focused {
+  background-color: #2b415e !important;
+  color: #ffffff !important;
+}
