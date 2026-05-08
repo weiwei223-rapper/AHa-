@@ -88,6 +88,8 @@ export const quizAPI = {
   getQuestions: () => api.get('/api/quiz-questions'),
   createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number }) =>
     api.post('/api/quiz-results', data),
+  gradeQuiz: (videoId: number, data: { user_id: number; answers: string[] }) =>
+    api.post(`/api/quizzes/${videoId}/grade`, data),
 };
 
 export const uploadAPI = {

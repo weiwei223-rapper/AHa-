@@ -15,13 +15,13 @@ async function main() {
     // 使用串流方式發送請求
     const result = await model.generateContentStream("請用繁體中文簡介 AHa!! 系統的可能應用場景。");
 
-    // 逐字印出回覆內容 
+    // 逐字印出回覆內容
     for await (const chunk of result.stream) {
       process.stdout.write(chunk.text()); // 使用 stdout.write 讓文字接續印在同一行
     }
 
     console.log("\n\n✅ 輸出完畢！");
-
+    
   } catch (error) {
     console.error("❌ 發生錯誤：", error);
   }

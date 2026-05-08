@@ -17,6 +17,7 @@ class User(Base):
     password = Column(String)
     uid = Column(String, unique=True, index=True)
     points = Column(Integer, default=0)
+    role = Column(Integer, default=1, nullable=False)
 
     videos = relationship("Video", back_populates="uploader", cascade="all, delete-orphan")
     recharge_records = relationship("RechargeRecord", back_populates="user", cascade="all, delete-orphan")
@@ -90,6 +91,15 @@ class QuizQuestion(Base):
     answer_record = Column(String, nullable=True)
     accuracy = Column(Integer, default=0)
     options_json = Column(String, nullable=True)
+    
+    # 新增欄位
+    starter_code = Column(String, nullable=True)
+    test_cases_json = Column(String, nullable=True)
+    explanation = Column(String, nullable=True)
+    reference_concept = Column(String, nullable=True)
+    source_time = Column(String, nullable=True)
+    source_excerpt = Column(String, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="quiz_questions")

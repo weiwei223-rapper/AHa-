@@ -1,25 +1,25 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-import hashlib
-import html
+from typing import List, Optional
 import json
+<<<<<<< HEAD
 import re
 from urllib.parse import quote, quote_plus
 
 import bcrypt
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+=======
+
+import bcrypt
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, Query
+>>>>>>> 2caae9783fccb9af9414409fb7870ea308131988
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy import text
-
-ECPAY_MERCHANT_ID = "2000132"
-ECPAY_HASH_KEY = "5294y06JbISpM5x9"
-ECPAY_HASH_IV = "v77hoKGq4kWxNNIS"
 
 load_dotenv()
 
@@ -61,6 +61,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def ensure_database_columns() -> None:
+<<<<<<< HEAD
     schema_updates = [
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript TEXT",
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript_source VARCHAR",
@@ -68,9 +69,13 @@ def ensure_database_columns() -> None:
         "ALTER TABLE ai_feedbacks ADD COLUMN IF NOT EXISTS video_id INTEGER",
         "ALTER TABLE recharge_records ADD COLUMN IF NOT EXISTS balance_after INTEGER",
     ]
+=======
+>>>>>>> 2caae9783fccb9af9414409fb7870ea308131988
     with database.engine.begin() as connection:
-        for statement in schema_updates:
-            connection.execute(text(statement))
+        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role INTEGER DEFAULT 1"))
+        connection.execute(text("UPDATE users SET role = 1 WHERE role IS NULL"))
+        connection.execute(text("ALTER TABLE users ALTER COLUMN role SET DEFAULT 1"))
+        connection.execute(text("ALTER TABLE users ALTER COLUMN role SET NOT NULL"))
 
 
 @asynccontextmanager
@@ -89,6 +94,7 @@ async def lifespan(app: FastAPI):
                     password=hash_password("password"),
                     uid="UID-20260419",
                     points=10000,
+                    role=1,
                 )
                 db.add(user)
                 db.flush()  # To get the user ID if needed, though it's set to 1
@@ -137,6 +143,7 @@ class UserResponse(BaseModel):
     name: str
     uid: str
     points: int
+    role: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -153,57 +160,6 @@ class RechargeRequest(BaseModel):
     plan_content: Optional[str] = None
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None
-
-
-class EcpayCheckoutRequest(BaseModel):
-    MerchantID: Optional[str] = None
-    MerchantTradeNo: str
-    MerchantTradeDate: str
-    PaymentType: str
-    TotalAmount: int
-    TradeDesc: str
-    ItemName: str
-    ReturnURL: str
-    ClientBackURL: str
-    ChoosePayment: str
-    EncryptType: int
-
-
-class EcpayCheckoutResponse(BaseModel):
-    CheckMacValue: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-def build_ecpay_check_mac_debug(params: Dict[str, Any]) -> tuple[str, str, str]:
-    filtered = {
-        key: str(value)
-        for key, value in params.items()
-        if key != "CheckMacValue" and value is not None and str(value) != ""
-    }
-    if "MerchantID" not in filtered or filtered["MerchantID"] in (None, ""):
-        filtered["MerchantID"] = ECPAY_MERCHANT_ID
-
-    ordered = sorted(filtered.items(), key=lambda item: item[0])
-    encoded = "&".join(f"{key}={value}" for key, value in ordered)
-    raw = f"HashKey={ECPAY_HASH_KEY}&{encoded}&HashIV={ECPAY_HASH_IV}"
-    encoded_raw = quote(raw, safe="").lower()
-    encoded_raw = encoded_raw.replace("%2d", "-")
-    encoded_raw = encoded_raw.replace("%5f", "_")
-    encoded_raw = encoded_raw.replace("%2e", ".")
-    encoded_raw = encoded_raw.replace("%21", "!")
-    encoded_raw = encoded_raw.replace("%2a", "*")
-    encoded_raw = encoded_raw.replace("%28", "(")
-    encoded_raw = encoded_raw.replace("%29", ")")
-    encoded_raw = encoded_raw.replace("%7e", "~")
-    encoded_raw = encoded_raw.replace("%20", "+")
-    check_mac_value = hashlib.sha256(encoded_raw.encode("utf-8")).hexdigest().upper()
-    return raw, encoded_raw, check_mac_value
-
-
-def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
-    _, _, check_mac_value = build_ecpay_check_mac_debug(params)
-    return check_mac_value
 
 
 class RechargeRecordResponse(BaseModel):
@@ -244,8 +200,6 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
-    user_id: Optional[int] = None
-    video_id: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
@@ -281,54 +235,6 @@ def gemini_health_check():
         raise HTTPException(status_code=503, detail=f"Gemini connection failed: {exc}")
 
 
-def get_or_update_video_transcript(video: models.Video, db: Session) -> tuple[str, str]:
-    if video.transcript:
-        return video.transcript, video.transcript_source or "database"
-
-    transcript_result = learning_pipeline.load_transcript(video.video_link)
-    if transcript_result.transcript:
-        video.transcript = transcript_result.transcript
-        video.transcript_source = transcript_result.source
-        video.transcript_updated_at = datetime.utcnow()
-        db.add(video)
-        db.commit()
-        db.refresh(video)
-    return video.transcript or "", video.transcript_source or transcript_result.source
-
-
-def build_chat_video_context(video: models.Video, db: Session, query: str, user_id: Optional[int]) -> dict:
-    transcript, transcript_source = get_or_update_video_transcript(video, db)
-    retrieved_chunks, retrieval_backend = learning_pipeline.retrieve_chunks(query, transcript)
-
-    questions_query = db.query(models.QuizQuestion).filter(models.QuizQuestion.video_id == video.id)
-    if user_id is not None:
-        questions_query = questions_query.filter(models.QuizQuestion.user_id == user_id)
-    questions = questions_query.order_by(models.QuizQuestion.created_at.desc()).limit(8).all()
-
-    return {
-        "id": video.id,
-        "title": video.title or "Untitled Video",
-        "video_link": video.video_link,
-        "outline": video.outline or "",
-        "transcript": transcript,
-        "transcript_source": transcript_source,
-        "retrieval_backend": retrieval_backend,
-        "retrieved_chunks": [
-            {"index": chunk.index, "content": chunk.content, "score": round(chunk.score, 4)}
-            for chunk in retrieved_chunks
-        ],
-        "questions": [
-            {
-                "question": question.question_content,
-                "reference_answer": question.reference_answer,
-                "answer_record": question.answer_record,
-                "accuracy": question.accuracy,
-            }
-            for question in questions
-        ],
-    }
-
-
 @app.post("/auth/register", response_model=UserResponse)
 def register_user(payload: RegisterRequest, db: Session = Depends(database.get_db)):
     existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -342,6 +248,7 @@ def register_user(payload: RegisterRequest, db: Session = Depends(database.get_d
         password=hash_password(payload.password),
         uid=uid,
         points=0,
+        role=1,
     )
     db.add(new_user)
     db.commit()
@@ -357,6 +264,7 @@ def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
     return {"user": user, "message": f"Welcome back, {user.name}"}
 
 
+<<<<<<< HEAD
 @app.post("/ecpay/create-checkmac", response_model=EcpayCheckoutResponse)
 def create_ecpay_checkmac(payload: EcpayCheckoutRequest):
     params = payload.model_dump()
@@ -493,35 +401,16 @@ async def ecpay_return(request: Request, db: Session = Depends(database.get_db))
     return PlainTextResponse(content="1|OK", status_code=200)
 
 
+=======
+>>>>>>> 2caae9783fccb9af9414409fb7870ea308131988
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
     user_message = payload.message.strip()
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    video_context: dict | list[dict]
-    if payload.video_id is not None:
-        video_query = db.query(models.Video).filter(models.Video.id == payload.video_id)
-        if payload.user_id is not None:
-            video_query = video_query.filter(models.Video.user_id == payload.user_id)
-        video = video_query.first()
-        if video is None:
-            raise HTTPException(status_code=404, detail="Video not found")
-        video_context = build_chat_video_context(video, db, user_message, payload.user_id)
-    else:
-        recent_videos_query = db.query(models.Video)
-        if payload.user_id is not None:
-            recent_videos_query = recent_videos_query.filter(models.Video.user_id == payload.user_id)
-        recent_videos = recent_videos_query.order_by(models.Video.created_at.desc()).limit(3).all()
-        video_context = [
-            {
-                "id": video.id,
-                "title": video.title,
-                "video_link": video.video_link,
-                "outline": video.outline,
-            }
-            for video in recent_videos
-        ]
+    recent_videos = db.query(models.Video).order_by(models.Video.created_at.desc()).limit(3).all()
+    video_context = [{"title": video.title, "video_link": video.video_link} for video in recent_videos]
 
     try:
         reply = ai_analyzer.generate_chat_reply(
@@ -652,9 +541,6 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
             video_link=raw_link,
             title=title,
             outline=payload.outline,
-            transcript=payload.transcript,
-            transcript_source=payload.transcript_source,
-            transcript_updated_at=datetime.utcnow() if payload.transcript else None,
             user_id=payload.user_id,
             cost_points=payload.cost_points or 0,
             error_report=payload.error_report,
@@ -692,7 +578,6 @@ def delete_video(video_id: int, db: Session = Depends(database.get_db)):
 def create_ai_feedback(payload: schema.AIFeedbackCreate, db: Session = Depends(database.get_db)):
     feedback = models.AIFeedback(
         user_id=payload.user_id,
-        video_id=payload.video_id,
         ai_message=payload.ai_message,
         user_message=payload.user_message,
         error_report=payload.error_report,
@@ -876,20 +761,11 @@ def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(d
 @app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)
 def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
     video_count = db.query(models.Video).filter(models.Video.user_id == user_id).count()
-    analyzed_video_count = (
-        db.query(models.Video)
-        .filter(models.Video.user_id == user_id)
-        .filter(models.Video.outline.isnot(None))
-        .count()
-    )
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    
+    completed_quizzes = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).count()
     quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).all()
-    completed_quizzes = len(quiz_results)
-    total_questions_count = sum(result.total_questions for result in quiz_results)
-    
     average_accuracy = (
         sum(result.score / result.total_questions * 100 for result in quiz_results) / len(quiz_results)
         if quiz_results
@@ -897,10 +773,8 @@ def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
     )
     return schema.UserStatsResponse(
         video_count=video_count,
-        analyzed_video_count=analyzed_video_count,
         remaining_points=user.points,
         completed_quizzes=completed_quizzes,
-        total_questions_count=total_questions_count,
         average_accuracy=round(average_accuracy, 1),
     )
 
