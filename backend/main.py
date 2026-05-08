@@ -365,10 +365,11 @@ class GradeResponse(BaseModel):
 def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(database.get_db)):
     try:
         answer_count = len(payload.answers)
-        # 獲取該影片最新的題目，確保順序與作答一致
+        # 增加 user_id 過濾，並抓取最新的題目紀錄
         questions = (
             db.query(models.QuizQuestion)
             .filter(models.QuizQuestion.video_id == video_id)
+            .filter(models.QuizQuestion.user_id == payload.user_id)
             .order_by(models.QuizQuestion.id.desc())
             .limit(answer_count)
             .all()
@@ -376,7 +377,7 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
         questions.reverse()
         
         if not questions:
-            raise HTTPException(status_code=404, detail="No questions found for this video")
+            raise HTTPException(status_code=404, detail="找不到對應的測驗紀錄，請重新產生測驗。")
         
         details = []
         correct_count = 0
@@ -398,33 +399,31 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
                         test_cases = [tc_str]
                 
                 if not test_cases:
-                    test_cases = ["print('No test cases provided')"]
+                    test_cases = ["print('No tests')"]
                 
-                # 準備腳本
                 ref_full_code = starter_code.replace("___", correct_answer_str)
                 user_full_code = user_answer_code
                 
                 is_all_passed = True
                 q_results = []
                 
-                # 執行前三個測試案例
+                # 執行測試
                 for test_case in test_cases[:3]:
-                    # 執行正確解答
-                    ref_script = f"{ref_full_code}\n\n{test_case}"
-                    ref_out, ref_err = code_compiler.execute_python_code(ref_script, timeout=5)
+                    # 效能優化：若已失敗則跳過後續執行
+                    if not is_all_passed:
+                        q_results.append({"test_case": test_case, "expected": "SKIPPED", "actual": "SKIPPED", "passed": False})
+                        continue
+
+                    ref_out, ref_err = code_compiler.execute_python_code(f"{ref_full_code}\n\n{test_case}", timeout=4)
+                    user_out, user_err = code_compiler.execute_python_code(f"{user_full_code}\n\n{test_case}", timeout=4)
                     
-                    # 執行使用者作答
-                    user_script = f"{user_full_code}\n\n{test_case}"
-                    user_out, user_err = code_compiler.execute_python_code(user_script, timeout=5)
-                    
-                    # 比對邏輯 (去空白、不區分大小寫的 True/False 關鍵字)
                     is_match = (ref_out.strip() == user_out.strip()) and not user_err
                     if not is_match:
                         is_all_passed = False
                     
                     q_results.append({
                         "test_case": test_case,
-                        "expected": ref_out.strip() or "None",
+                        "expected": ref_out.strip() or ("ERROR: " + ref_err if ref_err else "None"),
                         "actual": user_out.strip() or ("ERROR: " + user_err if user_err else "None"),
                         "passed": is_match
                     })
@@ -441,54 +440,36 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
                 details.append({
                     "question_id": q.id,
                     "passed": False,
-                    "error": str(e)
+                    "error": f"批改異常: {str(e)}"
                 })
         
         total_score = round((correct_count / len(questions)) * 100) if questions else 0
         return GradeResponse(total_score=total_score, details=details)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"CRITICAL GRADING ERROR: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"系統批改模組發生嚴重錯誤: {str(e)}")
 
 
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
 def generate_quiz_api(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
-    if video is None:
-        raise HTTPException(status_code=404, detail="Video not found")
-
-    title = video.title or "Untitled Video"
-    print(f"DEBUG: Generating quiz for video {video_id} ('{title}')")
+    if video is None: raise HTTPException(status_code=404, detail="Video not found")
     try:
-        quiz_response = learning_pipeline.generate_quiz(video.id, title, video.video_link)
-        
-        # 確保所有高品質欄位都被儲存
+        quiz_response = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link)
         for item in quiz_response.questions:
-            question_record = models.QuizQuestion(
-                user_id=user_id,
-                video_id=video.id,
-                question_content=item.question,
-                reference_answer=item.correct_answer,
-                accuracy=0,
-                options_json=json.dumps(item.options, ensure_ascii=False),
-                starter_code=item.starter_code,
-                test_cases_json=json.dumps(item.test_cases, ensure_ascii=False),
-                explanation=item.explanation,
-                reference_concept=item.reference_concept,
-                # source_time 與 source_excerpt 已由 pipeline 決定內容
-                source_time=item.source_time,
-                source_excerpt=item.source_excerpt,
-            )
-            db.add(question_record)
-        
+            db.add(models.QuizQuestion(user_id=user_id, video_id=video.id, question_content=item.question,
+                                       reference_answer=item.correct_answer, accuracy=0,
+                                       options_json=json.dumps(item.options, ensure_ascii=False),
+                                       starter_code=item.starter_code,
+                                       test_cases_json=json.dumps(item.test_cases, ensure_ascii=False),
+                                       explanation=item.explanation, reference_concept=item.reference_concept,
+                                       source_time=item.source_time, source_excerpt=item.source_excerpt))
         db.commit()
-        print(f"DEBUG: Generated and saved {len(quiz_response.questions)} questions")
         return quiz_response
     except Exception as exc:
-        print(f"DEBUG: Failed to generate quiz: {exc}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Quiz generation failed: {str(exc)}")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/api/quiz-results", response_model=schema.QuizResultResponse)
