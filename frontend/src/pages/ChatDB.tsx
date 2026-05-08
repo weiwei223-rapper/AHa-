@@ -67,6 +67,7 @@ const ChatDB: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([]);
   const [videosLoading, setVideosLoading] = useState(false);
   const [videosError, setVideosError] = useState('');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const userId = Number(localStorage.getItem('userId') || 0);
 
@@ -329,7 +330,7 @@ const ChatDB: React.FC = () => {
         message: trimmedInput,
         history: nextMessages,
         user_id: userId,
-        selected_video_id: activeSession.selectedVideoId ?? null,
+        video_id: activeSession.selectedVideoId ?? null,
       });
 
       let reply =
@@ -424,70 +425,86 @@ const ChatDB: React.FC = () => {
 
   return (
     <div className="chat-page">
-      <aside className="chat-sidebar">
-        <div className="chat-sidebar-top">
-          <div>
-            <div className="chat-sidebar-label">Workspace Chat</div>
-            <h2>歷史對話</h2>
-            <p>切換舊對話、延續問題，或開一個新的聊天視窗。</p>
-          </div>
-          <button className="chat-new-session" onClick={handleCreateSession} type="button">
-            + New Chat
-          </button>
-        </div>
-
-        <div className="chat-history-list">
-          {sessions.map((session) => {
-            const isActive = session.id === activeSession?.id;
-            const lastMessage = session.messages[session.messages.length - 1]?.content;
-            return (
+      <div className="chat-unified-scroll">
+        <aside className={`chat-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+          <div className="chat-sidebar-top">
+            <div>
+              <div className="chat-sidebar-label">Workspace Chat</div>
+              <h2>歷史對話</h2>
+              <p>切換舊對話、延續問題，或開一個新的聊天視窗。</p>
+            </div>
+            <div className="chat-sidebar-actions">
+              <button className="chat-new-session" onClick={handleCreateSession} type="button">
+                + New Chat
+              </button>
               <button
-                key={session.id}
-                className={`chat-history-card ${isActive ? 'active' : ''}`}
-                onClick={() => handleSelectSession(session.id)}
+                className="chat-sidebar-toggle"
+                onClick={() => setIsSidebarCollapsed((prev) => !prev)}
                 type="button"
+                aria-expanded={!isSidebarCollapsed}
+                aria-controls="chat-history-list"
               >
-                {session.isPersisted ? (
-                  <span
-                    className="chat-history-delete"
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Delete chat"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      void handleDeleteConversation(session.id);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
+                {isSidebarCollapsed ? '展開歷史' : '收合歷史'}
+              </button>
+            </div>
+          </div>
+
+          <div id="chat-history-list" className="chat-history-list">
+            {sessions.map((session) => {
+              const isActive = session.id === activeSession?.id;
+              const lastMessage = session.messages[session.messages.length - 1]?.content;
+              return (
+                <div key={session.id} className={`chat-history-item ${isActive ? 'active' : ''}`}>
+                  <button
+                    className="chat-history-card"
+                    onClick={() => handleSelectSession(session.id)}
+                    type="button"
+                  >
+                    <span className="chat-history-title">{session.title}</span>
+                    <span className="chat-history-preview">{lastMessage || '請先選擇影片'}</span>
+                    <span className="chat-history-time">{formatUpdatedAt(session.updatedAt)}</span>
+                  </button>
+                  {session.isPersisted ? (
+                    <button
+                      className="chat-history-delete"
+                      aria-label="Delete chat"
+                      onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         void handleDeleteConversation(session.id);
-                      }
-                    }}
-                  >
-                    ×
-                  </span>
-                ) : null}
+                      }}
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </aside>
 
-                <span className="chat-history-title">{session.title}</span>
-                <span className="chat-history-preview">{lastMessage || '請先選擇影片'}</span>
-                <span className="chat-history-time">{formatUpdatedAt(session.updatedAt)}</span>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-
-      <section className="chat-panel">
-        <div className="chat-thread-shell">
+        <section className="chat-panel">
+          <div className="chat-thread-shell">
           <div className="chat-thread-header">
             <div>
               <div className="chat-thread-eyebrow">Current Session</div>
               <h3>{activeSession?.title || 'New conversation'}</h3>
+              {activeSession?.selectedVideoTitle ? (
+                <div className="chat-session-source">
+                  <span>影片</span>
+                  <strong>{activeSession.selectedVideoTitle}</strong>
+                  {activeSession.selectedVideoId ? <em>#{activeSession.selectedVideoId}</em> : null}
+                </div>
+              ) : null}
             </div>
             <div className="chat-thread-meta">
-              {activeSession ? `Updated ${formatUpdatedAt(activeSession.updatedAt)}` : ''}
+              {activeSession ? (
+                <>
+                  <span>{activeSession.messages.length} messages</span>
+                  <span>Updated {formatUpdatedAt(activeSession.updatedAt)}</span>
+                </>
+              ) : null}
             </div>
           </div>
 
@@ -557,7 +574,7 @@ const ChatDB: React.FC = () => {
                     <div className="chat-avatar">AI</div>
                     <div className="chat-message-card typing">
                       <div className="chat-message-role">Assistant</div>
-                      <p>Thinking about your question...</p>
+                      <p>正在依照影片與題目整理回答...</p>
                     </div>
                   </article>
                 )}
@@ -585,8 +602,9 @@ const ChatDB: React.FC = () => {
               </div>
             </>
           )}
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
     </div>
   );
 };

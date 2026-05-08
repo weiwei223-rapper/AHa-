@@ -211,7 +211,7 @@ const Chat: React.FC = () => {
         message: trimmedInput,
         history: nextMessages,
         user_id: Number(localStorage.getItem('userId') || 0) || undefined,
-        selected_video_id: activeSession.selectedVideoId ?? null,
+        video_id: activeSession.selectedVideoId ?? null,
       });
 
       let reply =
@@ -436,3 +436,4 @@ const Chat: React.FC = () => {
 };
 
 export default ChatDB;
+export { Chat };
