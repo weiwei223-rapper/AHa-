@@ -17,6 +17,7 @@ class User(Base):
     password = Column(String)
     uid = Column(String, unique=True, index=True)
     points = Column(Integer, default=0)
+    role = Column(Integer, default=1, nullable=False)
 
     videos = relationship("Video", back_populates="uploader", cascade="all, delete-orphan")
     recharge_records = relationship("RechargeRecord", back_populates="user", cascade="all, delete-orphan")

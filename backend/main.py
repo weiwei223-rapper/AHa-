@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -50,10 +51,19 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
+def ensure_database_columns() -> None:
+    with database.engine.begin() as connection:
+        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role INTEGER DEFAULT 1"))
+        connection.execute(text("UPDATE users SET role = 1 WHERE role IS NULL"))
+        connection.execute(text("ALTER TABLE users ALTER COLUMN role SET DEFAULT 1"))
+        connection.execute(text("ALTER TABLE users ALTER COLUMN role SET NOT NULL"))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         models.Base.metadata.create_all(bind=database.engine)
+        ensure_database_columns()
         db = database.SessionLocal()
         try:
             user = db.query(models.User).filter(models.User.id == 1).first()
@@ -65,6 +75,7 @@ async def lifespan(app: FastAPI):
                     password=hash_password("password"),
                     uid="UID-20260419",
                     points=10000,
+                    role=1,
                 )
                 db.add(user)
                 db.commit()
@@ -99,6 +110,7 @@ class UserResponse(BaseModel):
     name: str
     uid: str
     points: int
+    role: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -201,6 +213,7 @@ def register_user(payload: RegisterRequest, db: Session = Depends(database.get_d
         password=hash_password(payload.password),
         uid=uid,
         points=0,
+        role=1,
     )
     db.add(new_user)
     db.commit()
