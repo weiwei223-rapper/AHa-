@@ -40,7 +40,8 @@ class QuestionTemplate:
 
 
 def _tokenize(text: str) -> set[str]:
-    terms = re.findall(r"[A-Za-z][A-Za-z0-9_']{2,}", text.lower())
+    # 支援英文字母與中文字符
+    terms = re.findall(r"[A-Za-z0-9_']{2,}|[\u4e00-\u9fa5]", text.lower())
     return {term for term in terms if term not in STOPWORDS}
 
 

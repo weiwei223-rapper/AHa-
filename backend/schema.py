@@ -60,6 +60,7 @@ class QuizQuestion(BaseModel):
     options: List[str] = []
     question_type: str = "fill-in-the-blank"
     explanation: Optional[str] = None
+    reference_concept: Optional[str] = None
     source_time: Optional[str] = None
     source_excerpt: Optional[str] = None
     starter_code: Optional[str] = None

@@ -65,9 +65,14 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json={
                 "contents": contents,
-                "generationConfig": {"temperature": 0.5, "maxOutputTokens": 2048},
+                "generationConfig": {
+                    "temperature": 0.5,
+                    "maxOutputTokens": 8192,
+                    "topP": 0.95,
+                    "topK": 40
+                },
             },
-            timeout=30,
+            timeout=120,
         )
         if not response.ok:
             raise ValueError(f"Gemini API error {response.status_code} for model '{model_name}': {response.text}")
@@ -294,48 +299,52 @@ def generate_chat_reply(message: str, history: list[dict], videos: list[dict] | 
     return "我現在無法連線到 AI 服務，但你可以先問我你想聚焦哪個影片主題，我再用已抓到的內容協助整理。"
 
 
+GREETING_WORDS = {"大家好", "歡迎來到", "我是", "上次影片", "今天我們", "嗨", "hello", "hi", "談到", "談過", "講過"}
+
 def _extract_transcript_snippets(transcript: str, limit: int = 5) -> list[str]:
-    snippets = re.split(r"(?<=[.!?。！？])\s+|\n+", transcript)
+    # 先把長度太短或明顯是廢話的過濾掉
+    raw_snippets = re.split(r"(?<=[.!?。！？])\s+|\n+", transcript)
     cleaned: list[str] = []
     seen: set[str] = set()
-    for snippet in snippets:
+    
+    for snippet in raw_snippets:
         normalized = re.sub(r"\s+", " ", snippet).strip(" -\t\r\n")
-        if len(normalized) < 18:
+        
+        # 門檻 1：長度必須超過 30 個字（確保有資訊量）
+        if len(normalized) < 30:
             continue
+            
+        # 門檻 2：不能包含過多招呼語
+        greeting_count = sum(1 for word in GREETING_WORDS if word in normalized)
+        if greeting_count > 1 and len(normalized) < 60:
+            continue
+        if any(normalized.startswith(word) for word in {"嗨", "大家", "各位", "今天"}):
+            if len(normalized) < 50:
+                continue
+        
         key = normalized.lower()
         if key in seen:
             continue
         seen.add(key)
-        cleaned.append(normalized[:120])
+        cleaned.append(normalized[:200])
         if len(cleaned) >= limit:
             break
     return cleaned
 
 
 def _pick_answer_from_snippet(snippet: str) -> str:
-    words = re.findall(r"[A-Za-z][A-Za-z']{2,}", snippet)
+    # 優先找關鍵技術詞
+    tech_keywords = ["bool", "int", "float", "str", "list", "dict", "tuple", "set", 
+                     "while", "for", "if", "else", "elif", "return", "def", "class",
+                     "True", "False", "None", "and", "or", "not", "is", "in"]
+    for kw in tech_keywords:
+        if f" {kw} " in f" {snippet} " or f"『{kw}』" in snippet or f"({kw})" in snippet:
+            return kw
+            
+    # 如果沒找到，找一段英文字
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_]{2,}", snippet)
     filtered = [word for word in words if word.lower() not in STOPWORDS]
-    if filtered:
-        return filtered[-1]
-    compact = re.sub(r"[^A-Za-z0-9]+", " ", snippet).strip()
-    return compact.split()[-1] if compact else "value"
-
-
-def _answer_for_template(template: question_bank.QuestionTemplate, keyword_pool: list[str]) -> str:
-    starter = template.starter_code
-    if ".___()" in starter:
-        return "strip"
-    if "return ___(" in starter:
-        return "int"
-    if "return [n for n in nums if ___]" in starter:
-        return "n % 2 == 0"
-    if "___ f'Hello, {name}'" in starter or '___ f"Hello, {name}"' in starter:
-        return "return"
-    if "if ___ else" in starter:
-        return "score >= 60"
-    if "if value == target:\n        ___" in starter:
-        return "continue"
-    return keyword_pool[0] if keyword_pool else "value"
+    return filtered[0] if filtered else "Solution"
 
 
 def generate_fallback_questions(
@@ -344,60 +353,52 @@ def generate_fallback_questions(
     outline: str = "",
     templates: list[question_bank.QuestionTemplate] | None = None,
 ) -> list[schema.QuizQuestion]:
-    snippets = _extract_transcript_snippets(transcript, limit=5) or _extract_transcript_snippets(outline, limit=5)
-    keyword_pool = _extract_keywords(f"{transcript}\n{outline}", limit=10)
+    # 這裡的邏輯必須確保即使 AI 斷線，出的題目也像 LeetCode
+    snippets = _extract_transcript_snippets(transcript, limit=8)
+    if not snippets:
+        snippets = [outline[:100]] if outline else [title]
+        
+    keyword_pool = _extract_keywords(f"{transcript}\n{outline}", limit=15)
     questions: list[schema.QuizQuestion] = []
-    used_starters: set[str] = set()
     used_answers: set[str] = set()
 
-    for index, snippet in enumerate(snippets, start=1):
-        if len(questions) >= 5:
-            break
+    # 1. 嘗試從片段中提取「邏輯判斷」題
+    for snippet in snippets:
+        if len(questions) >= 5: break
         answer = _pick_answer_from_snippet(snippet)
-        if answer.lower() in used_answers:
-            continue
+        if answer.lower() in used_answers or len(answer) < 2: continue
         used_answers.add(answer.lower())
-        variable_name = f"video_fact_{index}"
+        
+        starter_code = f"class Solution:\n    def validate_content(self, input_val):\n        # 補全邏輯使其符合影片描述：『{answer}』\n        # 預期：當符合該概念時回傳 True\n        return input_val == ___\n"
+        
         questions.append(
             schema.QuizQuestion(
-                question=f"根據影片內容，補上最符合這段描述的關鍵字。\n\n```python\n{variable_name} = \"___\"\n```",
+                question=f"影片中提到了關於『{answer}』的教學內容。請實作一個判斷函數，使其能正確識別這個關鍵概念。",
                 correct_answer=answer,
-                explanation="這題直接根據影片片段抽取關鍵詞，所以不同影片會得到不同答案。",
+                explanation=f"根據影片片段描述：『{snippet[:60]}...』，我們需要使用 {answer} 來完成邏輯。",
+                reference_concept=f"Python 技術點: {answer}",
                 question_type="fill-in-the-blank",
                 source_time="unknown",
                 source_excerpt=snippet,
-                starter_code=f'{variable_name} = "___"',
-                test_cases=[
-                    f'{variable_name} = "{answer}"\nassert {variable_name} == "{answer}"',
-                    f'{variable_name} = "{answer}"\nassert isinstance({variable_name}, str)',
-                ],
+                starter_code=starter_code,
+                test_cases=[f"assert Solution().validate_content({repr(answer)}) == True"]
             )
         )
 
-    for template in templates or []:
-        if len(questions) >= 5:
-            break
-        starter = template.starter_code.strip()
-        if not starter or starter in used_starters:
-            continue
-        used_starters.add(starter)
-        answer = _answer_for_template(template, keyword_pool)
-        if answer.lower() in used_answers:
-            continue
-        used_answers.add(answer.lower())
-        starter_code = starter.replace(answer, "___", 1) if answer in starter else starter
+    # 2. 補充 LeetCode 結構題
+    while len(questions) < 5 and keyword_pool:
+        kw = keyword_pool.pop(0)
+        if kw.lower() in used_answers or len(kw) < 3: continue
+        used_answers.add(kw.lower())
+        
         questions.append(
             schema.QuizQuestion(
-                question=(
-                    f"請依照影片內容，使用 LeetCode 題型骨架完成這題填空。\n\n```python\n{starter_code}\n```"
-                ),
-                correct_answer=answer,
-                explanation=f"這題套用了 LeetCode 模板 `{template.title}` 的程式骨架，但答案仍依影片內容或影片關鍵詞生成。",
-                question_type="fill-in-the-blank",
-                source_time="unknown",
-                source_excerpt=(snippets[0] if snippets else outline[:120] or title),
-                starter_code=starter_code,
-                test_cases=template.test_case_examples[:2] or ["assert True", "assert 1 == 1"],
+                question=f"請完成一個函數，回傳本影片《{title}》中強調的核心關鍵字：{kw}。",
+                correct_answer=kw,
+                explanation=f"這是這段教學影片中最具代表性的詞彙之一。",
+                reference_concept="課程重點回顧",
+                starter_code=f"class Solution:\n    def get_key_concept(self):\n        return ___",
+                test_cases=[f"assert Solution().get_key_concept() == {repr(kw)}"]
             )
         )
 
