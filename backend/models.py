@@ -71,6 +71,7 @@ class RechargeRecord(Base):
     order_id = Column(String, unique=True, index=True)
     amount = Column(Integer)
     points = Column(Integer, default=0)
+    balance_after = Column(Integer, nullable=True)
     plan_content = Column(String, nullable=True)
     payment_method = Column(String, nullable=True)
     plan_id = Column(String, nullable=True)

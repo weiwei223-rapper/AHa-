@@ -54,6 +54,7 @@ class RechargeRecordResponse(BaseModel):
     order_id: str
     amount: int
     points: int
+    balance_after: Optional[int] = None
     plan_content: Optional[str] = None
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None

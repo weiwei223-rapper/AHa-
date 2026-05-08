@@ -4,15 +4,12 @@ from typing import Any, Dict, List, Optional
 import hashlib
 import html
 import json
+import re
 from urllib.parse import quote, quote_plus
 
 import bcrypt
 from dotenv import load_dotenv
-<<<<<<< HEAD
-from fastapi import Depends, FastAPI, HTTPException, Request
-=======
-from fastapi import Depends, FastAPI, HTTPException, Query
->>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict
@@ -69,6 +66,7 @@ def ensure_database_columns() -> None:
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript_source VARCHAR",
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript_updated_at TIMESTAMP",
         "ALTER TABLE ai_feedbacks ADD COLUMN IF NOT EXISTS video_id INTEGER",
+        "ALTER TABLE recharge_records ADD COLUMN IF NOT EXISTS balance_after INTEGER",
     ]
     with database.engine.begin() as connection:
         for statement in schema_updates:
@@ -93,6 +91,20 @@ async def lifespan(app: FastAPI):
                     points=10000,
                 )
                 db.add(user)
+                db.flush()  # To get the user ID if needed, though it's set to 1
+                
+                # Create initial recharge record
+                record = models.RechargeRecord(
+                    user_id=1,
+                    date=datetime.utcnow().strftime("%Y/%m/%d"),
+                    order_id="INITIAL_POINTS",
+                    amount=0,
+                    points=10000,
+                    balance_after=10000,
+                    plan_content="Initial Welcome Points",
+                    payment_method="System",
+                )
+                db.add(record)
                 db.commit()
         finally:
             db.close()
@@ -136,8 +148,8 @@ class UserUpdate(BaseModel):
 
 
 class RechargeRequest(BaseModel):
-    points: int
-    price: int
+    points: Optional[int] = None
+    price: Optional[int] = 0
     plan_content: Optional[str] = None
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None
@@ -195,10 +207,12 @@ def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
 
 
 class RechargeRecordResponse(BaseModel):
+    id: int
     date: str
     order_id: str
     amount: int
     points: int
+    balance_after: Optional[int] = None
     plan_content: Optional[str] = None
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None
@@ -385,6 +399,28 @@ async def checkout_ecpay(request: Request):
     return HTMLResponse(content=form_html, status_code=200)
 
 
+def calculate_points_from_amount(amount: int) -> int:
+    """根據金額計算點數 (含優惠方案)"""
+    if amount == 299:
+        return 300
+    elif amount == 599:
+        return 650
+    elif amount == 999:
+        return 1100
+    return amount
+
+
+def get_plan_description(amount: int) -> str:
+    """根據金額獲取方案描述"""
+    if amount == 299:
+        return "NT$ 299 方案 (300 點)"
+    elif amount == 599:
+        return "NT$ 599 方案 (650 點)"
+    elif amount == 999:
+        return "NT$ 999 方案 (1100 點)"
+    return f"儲值 NT$ {amount}"
+
+
 @app.post("/ecpay/return", response_class=PlainTextResponse)
 async def ecpay_return(request: Request, db: Session = Depends(database.get_db)):
     form_data = await request.form()
@@ -405,42 +441,51 @@ async def ecpay_return(request: Request, db: Session = Depends(database.get_db))
 
     if rtn_code == "1":
         print(f"✅ 訂單 {merchant_trade_no} 付款成功！")
-        # 從 MerchantTradeNo 解析 user_id (格式: AHA{user_id}{timestamp})
+        if not merchant_trade_no:
+            print("❌ MerchantTradeNo 缺失，無法處理充值。")
+            return PlainTextResponse(content="1|OK", status_code=200)
+
         try:
-            # 假設 "AHA" 後面接著的是 user_id，timestamp 固定 10 位
-            user_id_str = merchant_trade_no[3:-10]
-            user_id = int(user_id_str)
+            match = re.match(r"^AHA(\d+)(\d{10})$", merchant_trade_no)
+            if not match:
+                raise ValueError("MerchantTradeNo 格式不正確")
+
+            user_id = int(match.group(1))
             user = db.query(models.User).filter(models.User.id == user_id).first()
-            if user:
-                # 根據金額對應點數 (與前端 rechargePlans 一致)
-                points_to_add = 0
-                if total_amount == 299:
-                    points_to_add = 300
-                elif total_amount == 599:
-                    points_to_add = 650
-                elif total_amount == 999:
-                    points_to_add = 1100
-                else:
-                    # 預設 1:1
-                    points_to_add = total_amount
-                
-                user.points += points_to_add
-                
-                # 建立儲值紀錄
-                record = models.RechargeRecord(
-                    user_id=user.id,
-                    date=datetime.utcnow().strftime("%Y/%m/%d"),
-                    order_id=merchant_trade_no,
-                    amount=total_amount,
-                    points=points_to_add,
-                    plan_content="ECPay Online Payment",
-                    payment_method=params.get("PaymentType", "ECPay"),
-                )
-                db.add(user)
-                db.add(record)
-                db.commit()
-                print(f"💰 已為使用者 {user.name} (ID: {user.id}) 增加 {points_to_add} 點數。")
+            if not user:
+                print(f"❌ 找不到使用者 ID={user_id}，無法記錄充值。")
+                return PlainTextResponse(content="1|OK", status_code=200)
+
+            # 已存在相同訂單號時不重複計入
+            existing_record = (
+                db.query(models.RechargeRecord)
+                .filter(models.RechargeRecord.order_id == merchant_trade_no)
+                .first()
+            )
+            if existing_record:
+                print(f"ℹ️ 訂單 {merchant_trade_no} 已存在，跳過重複紀錄。")
+                return PlainTextResponse(content="1|OK", status_code=200)
+
+            points_to_add = calculate_points_from_amount(total_amount)
+
+            user.points += points_to_add
+
+            record = models.RechargeRecord(
+                user_id=user.id,
+                date=datetime.utcnow().strftime("%Y/%m/%d"),
+                order_id=merchant_trade_no,
+                amount=total_amount,
+                points=points_to_add,
+                balance_after=user.points,
+                plan_content=get_plan_description(total_amount),
+                payment_method=params.get("PaymentType", "ECPay"),
+            )
+            db.add(user)
+            db.add(record)
+            db.commit()
+            print(f"💰 已為使用者 {user.name} (ID: {user.id}) 增加 {points_to_add} 點數。")
         except Exception as e:
+            db.rollback()
             print(f"❌ 解析訂單編號或更新點數失敗: {e}")
     else:
         print(f"❌ 訂單 {merchant_trade_no} 付款失敗，RtnCode={rtn_code}")
@@ -540,17 +585,24 @@ def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    points_to_add = payload.points
+    if points_to_add is None:
+        points_to_add = calculate_points_from_amount(payload.price)
+        
+    user.points += points_to_add
+        
     record = models.RechargeRecord(
         user_id=user.id,
         date=datetime.utcnow().strftime("%Y/%m/%d"),
         order_id=f"A{datetime.utcnow():%Y%m%d%H%M%S}",
         amount=payload.price,
-        points=payload.points,
-        plan_content=payload.plan_content,
+        points=points_to_add,
+        balance_after=user.points,
+        plan_content=payload.plan_content or get_plan_description(payload.price),
         payment_method=payload.payment_method,
         plan_id=payload.plan_id,
     )
-    user.points += payload.points
     db.add(record)
     db.add(user)
     db.commit()

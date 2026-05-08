@@ -27,7 +27,9 @@ type RechargeRecord = {
   order_id: string;
   amount: number;
   points?: number;
+  balance_after?: number;
   payment_method?: string;
+  plan_content?: string;
   plan_id?: string;
 };
 
@@ -76,7 +78,20 @@ const Profile = () => {
       });
       const historyResp = await api.get(`/users/${id}/recharge-records`);
       setHistory(historyResp.data);
-      setMessage("");
+      
+      // Check for payment success in URL
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("payment_status") === "success") {
+        const points = params.get("points");
+        setMessage(`🎉 付款成功！已成功儲值 ${points} 點。`);
+        setActiveTab("records");
+        setShowTopup(false);
+        // 清除 URL 參數，避免重新整理時重複顯示
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        setMessage("");
+      }
+
       refreshAchievements();
     } catch (error) {
       console.error(error);
@@ -218,7 +233,7 @@ const Profile = () => {
       TradeDesc: "AHA 點數充值",
       ItemName: `${plan.points} 點`,
       ReturnURL: `${API_BASE_URL}/ecpay/return`,
-      ClientBackURL: `${window.location.origin}/profile`,
+      ClientBackURL: `${window.location.origin}/profile?payment_status=success&points=${plan.points}`,
       ChoosePayment: "ALL",
       EncryptType: 1,
     };
@@ -429,6 +444,9 @@ const Profile = () => {
               <p style={{ color: '#10b981', marginTop: '8px' }}>
                 請在綠界結帳頁面完成付款，付款結果將回傳至後端。
               </p>
+              <p style={{ color: '#6b7280', marginTop: '8px' }}>
+                付款成功後，充值紀錄會顯示在 Recharge Records 頁籤中。
+              </p>
             </div>
 
             <div className="profile-plan-grid">
@@ -498,9 +516,11 @@ const Profile = () => {
                 <tr>
                   <th>Date</th>
                   <th>Order ID</th>
+                  <th>Description</th>
                   <th>Amount</th>
-                  <th>Points</th>
-                  <th>Payment</th>
+                  <th>Added</th>
+                  <th>Balance</th>
+                  <th>Method</th>
                 </tr>
               </thead>
               <tbody>
@@ -508,8 +528,10 @@ const Profile = () => {
                   <tr key={record.order_id}>
                     <td>{record.date}</td>
                     <td>{record.order_id}</td>
-                    <td>{record.amount}</td>
-                    <td>{record.points ?? "-"}</td>
+                    <td>{record.plan_content ?? "-"}</td>
+                    <td>NT$ {record.amount}</td>
+                    <td>+{record.points ?? 0}</td>
+                    <td>{record.balance_after ?? "-"}</td>
                     <td>{record.payment_method ?? "-"}</td>
                   </tr>
                 ))}
