@@ -94,7 +94,12 @@ export const codeAPI = {
 };
 
 export const chatAPI = {
-  sendMessage: (data: { message: string; history: { role: string; content: string }[] }) =>
+  sendMessage: (data: {
+    message: string;
+    history: { role: string; content: string }[];
+    user_id?: number;
+    selected_video_id?: number | null;
+  }) =>
     api.post('/api/chat', data),
 };
 

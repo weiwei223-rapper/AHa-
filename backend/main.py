@@ -6,6 +6,7 @@ import json
 import bcrypt
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import SQLAlchemyError
@@ -86,11 +87,28 @@ app.add_middleware(
         "http://localhost:5175",
         "http://localhost:5176",
         "http://localhost:5177",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175",
+        "http://127.0.0.1:5176",
+        "http://127.0.0.1:5177",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    print(f"Global exception caught: {exc}")
+    import traceback
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+    )
 
 
 class UserResponse(BaseModel):
@@ -153,6 +171,8 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
+    user_id: Optional[int] = None
+    selected_video_id: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
@@ -222,8 +242,22 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    recent_videos = db.query(models.Video).order_by(models.Video.created_at.desc()).limit(3).all()
-    video_context = [{"title": video.title, "video_link": video.video_link} for video in recent_videos]
+    selected_video = None
+    if payload.selected_video_id is not None:
+        selected_video_query = db.query(models.Video).filter(models.Video.id == payload.selected_video_id)
+        if payload.user_id is not None:
+            selected_video_query = selected_video_query.filter(models.Video.user_id == payload.user_id)
+        selected_video = selected_video_query.first()
+
+    if selected_video is not None:
+        context_videos = [selected_video]
+    else:
+        recent_video_query = db.query(models.Video)
+        if payload.user_id is not None:
+            recent_video_query = recent_video_query.filter(models.Video.user_id == payload.user_id)
+        context_videos = recent_video_query.order_by(models.Video.created_at.desc()).limit(3).all()
+
+    video_context = [{"title": video.title, "video_link": video.video_link} for video in context_videos]
 
     try:
         reply = ai_analyzer.generate_chat_reply(
@@ -598,4 +632,4 @@ def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

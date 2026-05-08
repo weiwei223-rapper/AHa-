@@ -65,9 +65,9 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json={
                 "contents": contents,
-                "generationConfig": {"temperature": 0.5, "maxOutputTokens": 2048},
+                "generationConfig": {"temperature": 0.5, "maxOutputTokens": 4096},
             },
-            timeout=30,
+            timeout=120,
         )
         if not response.ok:
             raise ValueError(f"Gemini API error {response.status_code} for model '{model_name}': {response.text}")

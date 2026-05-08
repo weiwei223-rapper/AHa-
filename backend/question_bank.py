@@ -15,6 +15,7 @@ LEETCODE_DATASET_PATH = (
     / "data"
     / "LeetCodeDataset-v0.3.1-train.jsonl.gz"
 )
+CURATED_TEMPLATES_PATH = Path(__file__).resolve().parent / "data" / "question_templates.jsonl"
 TOP_K = 4
 STOPWORDS = {
     "the", "and", "for", "with", "from", "into", "that", "this", "your", "have",
@@ -44,12 +45,46 @@ def _tokenize(text: str) -> set[str]:
     return {term for term in terms if term not in STOPWORDS}
 
 
-@lru_cache(maxsize=1)
-def load_templates() -> list[QuestionTemplate]:
-    templates: list[QuestionTemplate] = []
-    if not LEETCODE_DATASET_PATH.exists():
-        return templates
+def _template_from_curated_item(item: dict) -> QuestionTemplate:
+    return QuestionTemplate(
+        template_id=str(item.get("template_id", "")).strip(),
+        source=str(item.get("source", "curated")).strip() or "curated",
+        title=str(item.get("title", "Untitled template")).strip() or "Untitled template",
+        difficulty=str(item.get("difficulty", "unknown")).strip() or "unknown",
+        tags=[str(tag) for tag in item.get("tags", []) if str(tag).strip()],
+        pattern=str(item.get("pattern", "")).strip(),
+        starter_code=str(item.get("starter_code", "")).rstrip(),
+        answer_shape=str(item.get("answer_shape", "")).strip(),
+        test_case_examples=[str(case).strip() for case in item.get("test_case_examples", []) if str(case).strip()],
+        description=str(item.get("description", "")).strip(),
+    )
 
+
+def _load_curated_templates() -> list[QuestionTemplate]:
+    if not CURATED_TEMPLATES_PATH.exists():
+        return []
+
+    templates: list[QuestionTemplate] = []
+    with CURATED_TEMPLATES_PATH.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                template = _template_from_curated_item(json.loads(stripped))
+            except json.JSONDecodeError as exc:
+                print(f"Skipping malformed template line {line_number}: {exc}")
+                continue
+            if template.template_id and template.starter_code:
+                templates.append(template)
+    return templates
+
+
+def _load_leetcode_templates() -> list[QuestionTemplate]:
+    if not LEETCODE_DATASET_PATH.exists():
+        return []
+
+    templates: list[QuestionTemplate] = []
     with gzip.open(LEETCODE_DATASET_PATH, "rt", encoding="utf-8") as handle:
         for line in handle:
             item = json.loads(line)
@@ -76,6 +111,11 @@ def load_templates() -> list[QuestionTemplate]:
                 )
             )
     return templates
+
+
+@lru_cache(maxsize=1)
+def load_templates() -> list[QuestionTemplate]:
+    return [*_load_curated_templates(), *_load_leetcode_templates()]
 
 
 def retrieve_templates(title: str, topics: list[str], transcript_excerpt: str, top_k: int = TOP_K) -> list[QuestionTemplate]:
@@ -107,7 +147,7 @@ def retrieve_templates(title: str, topics: list[str], transcript_excerpt: str, t
 
 def format_templates_for_prompt(templates: list[QuestionTemplate]) -> str:
     if not templates:
-        return "No LeetCode reference templates found."
+        return "No reference templates found."
 
     blocks: list[str] = []
     for index, template in enumerate(templates, start=1):

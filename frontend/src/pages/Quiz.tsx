@@ -30,6 +30,21 @@ type QuizData = {
   questions: QuizQuestion[];
 };
 
+const stripEmbeddedCodeBlocks = (value: string) =>
+  value.replace(/```(?:python)?\s*[\s\S]*?```/gi, "").trim();
+
+const getQuestionPrompt = (question: QuizQuestion) => {
+  const prompt = question.starter_code
+    ? stripEmbeddedCodeBlocks(question.question)
+    : question.question.trim();
+  return prompt || question.question.trim();
+};
+
+const getInitialAnswer = (question: QuizQuestion) => {
+  const starterCode = question.starter_code?.trim() || "";
+  return starterCode && !starterCode.includes("___") ? starterCode : "";
+};
+
 const Quiz = () => {
   const [searchParams] = useSearchParams();
   const preferredVideoId = Number(searchParams.get("videoId") || 0);
@@ -39,6 +54,7 @@ const Quiz = () => {
   const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState<string[]>([]);
+  const [testPasses, setTestPasses] = useState<boolean[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -61,16 +77,20 @@ const Quiz = () => {
   }, [quiz, currentQuestionIndex]);
 
   useEffect(() => {
-    if (!preferredVideoId || videos.length === 0) {
+    if (!preferredVideoId || videos.length === 0 || loading || quiz) {
       return;
     }
     const target = videos.find((video) => video.id === preferredVideoId);
-    if (target && !target.outline) {
-      setOutlineWarning("Outline is not available for this video yet. Please generate an outline first.");
-    } else {
-      setOutlineWarning("");
+    if (target) {
+      if (!target.outline) {
+        setOutlineWarning("Outline is not available for this video yet. Please generate an outline first.");
+      } else {
+        setOutlineWarning("");
+        // Auto trigger generation if it hasn't been loaded
+        void handleGenerateQuiz(preferredVideoId);
+      }
     }
-  }, [preferredVideoId, videos]);
+  }, [preferredVideoId, videos, quiz, loading]);
 
   const currentQuestion = quiz?.questions[currentQuestionIndex] ?? null;
 
@@ -78,11 +98,12 @@ const Quiz = () => {
     if (!quiz) {
       return 0;
     }
-    return userAnswers.reduce((total, answer, index) => {
-      const correct = quiz.questions[index].correct_answer.trim();
-      return answer.trim() === correct ? total + 1 : total;
+    return quiz.questions.reduce((total, question, index) => {
+      const answer = userAnswers[index] || "";
+      const exactMatch = Boolean(answer.trim()) && answer.trim() === question.correct_answer.trim();
+      return testPasses[index] || exactMatch ? total + 1 : total;
     }, 0);
-  }, [quiz, userAnswers]);
+  }, [quiz, testPasses, userAnswers]);
 
   const fetchVideos = async () => {
     try {
@@ -111,7 +132,8 @@ const Quiz = () => {
       const nextQuiz = response.data as QuizData;
       setQuiz(nextQuiz);
       setCurrentQuestionIndex(0);
-      setUserAnswers(new Array(nextQuiz.questions.length).fill(""));
+      setUserAnswers(nextQuiz.questions.map(getInitialAnswer));
+      setTestPasses(new Array(nextQuiz.questions.length).fill(false));
       setShowResults(false);
     } catch (err: any) {
       console.error("Error generating quiz:", err);
@@ -125,6 +147,11 @@ const Quiz = () => {
     const next = [...userAnswers];
     next[currentQuestionIndex] = value;
     setUserAnswers(next);
+    setTestPasses((prev) => {
+      const nextPasses = [...prev];
+      nextPasses[currentQuestionIndex] = false;
+      return nextPasses;
+    });
   };
 
   const handlePrevious = () => {
@@ -163,9 +190,19 @@ const Quiz = () => {
 
       let executableCode = "";
 
-      // If there's starter code with ___ placeholder, replace it with user answer
+      // If there's starter code with ___ placeholder, handle fill-in-the-blank
       if (starterCode && starterCode.includes("___")) {
-        executableCode = starterCode.replace("___", userAnswer);
+        // If user answer contains |, treat as multiple answers to fill blanks in order
+        if (userAnswer.includes("|")) {
+          const answers = userAnswer.split("|").map((a) => a.trim());
+          executableCode = starterCode;
+          for (const answer of answers) {
+            executableCode = executableCode.replace("___", answer);
+          }
+        } else {
+          // Single blank or complete code already written
+          executableCode = starterCode.replace(/___/g, userAnswer);
+        }
       } else if (userAnswer) {
         // Otherwise use user code directly
         executableCode = userAnswer;
@@ -178,16 +215,34 @@ const Quiz = () => {
       }
 
       if (!executableCode.trim()) {
-        setCodeError("請先輸入程式碼");
+        setCodeError("請先輸入程式碼或填空答案");
+        setTestPasses((prev) => {
+          const next = [...prev];
+          next[currentQuestionIndex] = false;
+          return next;
+        });
         return;
       }
 
       const response = await codeAPI.executeCode({ code: executableCode });
       setCodeOutput(response.data.output);
       setCodeError(response.data.error);
+
+      // Update test pass status
+      const testPassed = !response.data.error && (testCases.length === 0 || response.data.output.includes("All tests passed"));
+      setTestPasses((prev) => {
+        const next = [...prev];
+        next[currentQuestionIndex] = testPassed;
+        return next;
+      });
     } catch (err: any) {
       console.error("Error executing code:", err);
       setCodeError(err.response?.data?.detail || "執行程式失敗");
+      setTestPasses((prev) => {
+        const next = [...prev];
+        next[currentQuestionIndex] = false;
+        return next;
+      });
     } finally {
       setCodeLoading(false);
     }
@@ -197,6 +252,7 @@ const Quiz = () => {
     setQuiz(null);
     setCurrentQuestionIndex(0);
     setUserAnswers([]);
+    setTestPasses([]);
     setShowResults(false);
     setCodeOutput("");
     setCodeError("");
@@ -226,12 +282,12 @@ const Quiz = () => {
             {quiz.questions.map((question, index) => (
               <article key={index} className="quiz-review-card">
                 <div className="quiz-review-status">
-                  {userAnswers[index].trim() === question.correct_answer.trim() ? "Correct" : "Review"}
+                  {testPasses[index] || userAnswers[index]?.trim() === question.correct_answer.trim() ? "Correct" : "Review"}
                 </div>
-                <h3>
-                  {index + 1}. {question.question}
-                </h3>
-                {question.starter_code && <pre className="code-snippet">{question.starter_code}</pre>}
+                <h3>{index + 1}. {getQuestionPrompt(question)}</h3>
+                {question.starter_code && (
+                  <pre className="code-snippet">{question.starter_code}</pre>
+                )}
                 <div style={{ marginTop: "12px" }}>
                   <p>
                     <strong>你的答案：</strong>
@@ -249,15 +305,6 @@ const Quiz = () => {
                     <strong>解析：</strong>
                     {question.explanation}
                   </p>
-                )}
-                {(question.source_time || question.source_excerpt) && (
-                  <div style={{ marginTop: "12px" }}>
-                    <p>
-                      <strong>出題依據：</strong>
-                      {question.source_time || "unknown"}
-                    </p>
-                    {question.source_excerpt && <pre className="code-snippet">{question.source_excerpt}</pre>}
-                  </div>
                 )}
               </article>
             ))}
@@ -340,26 +387,14 @@ const Quiz = () => {
             <div className="quiz-question-number">
               Question {currentQuestionIndex + 1} / {quiz.questions.length}
             </div>
-            <h2>{currentQuestion.question}</h2>
-
-            {(currentQuestion.source_time || currentQuestion.source_excerpt) && (
-              <div style={{ marginTop: "20px" }}>
-                <p className="page-eyebrow">出題依據</p>
-                <p>{currentQuestion.source_time || "unknown"}</p>
-                {currentQuestion.source_excerpt && <pre className="code-snippet">{currentQuestion.source_excerpt}</pre>}
-              </div>
+            <h2>{getQuestionPrompt(currentQuestion)}</h2>
+            {currentQuestion.starter_code && (
+              <pre className="code-snippet">{currentQuestion.starter_code}</pre>
             )}
           </div>
 
-          {currentQuestion.starter_code && (
-            <div>
-              <p className="page-eyebrow">Starter Code</p>
-              <pre className="code-snippet">{currentQuestion.starter_code}</pre>
-            </div>
-          )}
-
           <div style={{ marginTop: "20px" }}>
-            <p className="page-eyebrow">Your Solution</p>
+            <p className="page-eyebrow">作答區</p>
             <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
               <Editor
                 height="100%"
@@ -378,17 +413,6 @@ const Quiz = () => {
               />
             </div>
           </div>
-
-          {(currentQuestion.test_cases && currentQuestion.test_cases.length > 0) && (
-            <div>
-              <p className="page-eyebrow">Test Cases</p>
-              <article className="quiz-review-card">
-                <pre className="code-snippet">
-                  {currentQuestion.test_cases.join("\n")}
-                </pre>
-              </article>
-            </div>
-          )}
 
           {(codeOutput || codeError) && (
             <div>
@@ -431,14 +455,6 @@ const Quiz = () => {
               className="page-primary-button"
             >
               {codeLoading ? "Testing..." : "Test"}
-            </button>
-            <button
-              onClick={() => {
-                console.log("Submit clicked");
-              }}
-              className="page-primary-button"
-            >
-              Submit
             </button>
           </div>
         </section>

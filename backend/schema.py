@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class VideoCreate(BaseModel):
     video_link: str
@@ -17,12 +17,11 @@ class VideoResponse(BaseModel):
     title: Optional[str] = None
     outline: Optional[str] = None
     user_id: Optional[int] = None
-    cost_points: int
+    cost_points: Optional[int] = 0
     error_report: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True   # Pydantic v2
+    model_config = ConfigDict(from_attributes=True)
 
 class AIFeedbackCreate(BaseModel):
     user_id: int
@@ -38,8 +37,7 @@ class AIFeedbackResponse(BaseModel):
     error_report: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class RechargeRecordResponse(BaseModel):
     id: int
@@ -51,14 +49,13 @@ class RechargeRecordResponse(BaseModel):
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class QuizQuestion(BaseModel):
     question: str
     correct_answer: str
     options: List[str] = []
-    question_type: str = "fill-in-the-blank"
+    question_type: str = "coding-implementation"
     explanation: Optional[str] = None
     source_time: Optional[str] = None
     source_excerpt: Optional[str] = None
@@ -85,8 +82,7 @@ class QuizQuestionResponse(BaseModel):
     options: List[str] = []
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class QuizResponse(BaseModel):
     video_id: int
@@ -126,8 +122,7 @@ class QuizResultResponse(BaseModel):
     total_questions: int
     completed_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class GenerationRecordCreate(BaseModel):
     user_id: int
@@ -141,8 +136,7 @@ class GenerationRecordResponse(BaseModel):
     consumed_points: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UploadRecordCreate(BaseModel):
     user_id: int
@@ -156,8 +150,7 @@ class UploadRecordResponse(BaseModel):
     consumed_points: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserStatsResponse(BaseModel):
     video_count: int

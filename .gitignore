@@ -3,6 +3,13 @@ node_modules/
 .venv/
 venv/
 
+# Local environment and secrets
+.env
+.env.*
+backend/.env
+backend/API_key.env
+!*.example
+
 # Build artifacts
 dist/
 build/
@@ -13,6 +20,7 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+pytest-cache-files-*/
 .coverage
 htmlcov/
 

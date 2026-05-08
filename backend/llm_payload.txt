@@ -1,0 +1,4 @@
+[
+  {
+    "question": "函式回傳值\n\n請參考下列函數說明，完成 `greet` 函數。\n\n提示：函式需要回傳結果。",
+    "correct_answer": "def greet(name):\n    \"\"\"\n    name: string (字串)\n    return: string (字串),

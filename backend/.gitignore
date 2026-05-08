@@ -3,3 +3,7 @@ __pycache__/
 node_modules/
 venv/
 *.pyc
+.env
+API_key.env
+!.env.example
+!API_key.env.example

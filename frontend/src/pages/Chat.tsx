@@ -210,6 +210,8 @@ const Chat: React.FC = () => {
       const response = await chatAPI.sendMessage({
         message: trimmedInput,
         history: nextMessages,
+        user_id: Number(localStorage.getItem('userId') || 0) || undefined,
+        selected_video_id: activeSession.selectedVideoId ?? null,
       });
 
       let reply =

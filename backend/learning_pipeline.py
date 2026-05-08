@@ -206,17 +206,29 @@ def _extract_json_array(payload: str) -> list[dict[str, Any]]:
     start = payload.find("[")
     end = payload.rfind("]")
     if start == -1 or end == -1 or end <= start:
+        print(f"[DEBUG] JSON extraction failed: start={start}, end={end}")
+        print(f"[DEBUG] Payload (first 300 chars): {payload[:300]}")
         raise ValueError("No JSON array found in model response")
-    data = json.loads(payload[start:end + 1])
-    if not isinstance(data, list):
-        raise ValueError("Model response is not a JSON array")
-    return data
+    try:
+        data = json.loads(payload[start:end + 1])
+        if not isinstance(data, list):
+            raise ValueError("Model response is not a JSON array")
+        print(f"[DEBUG] Successfully extracted {len(data)} items from JSON")
+        return data
+    except json.JSONDecodeError as e:
+        print(f"[DEBUG] JSON parse error: {e}")
+        print(f"[DEBUG] Attempted to parse: {payload[start:min(end+1, start+500)]}")
+        raise ValueError(f"Failed to parse JSON array: {e}")
 
 
 def _normalize_test_cases(item: dict[str, Any]) -> list[str]:
     raw_cases = item.get("test_cases")
     if isinstance(raw_cases, list):
-        return [str(case).strip() for case in raw_cases if str(case).strip()]
+        return [
+            str(case).strip()
+            for case in raw_cases
+            if str(case).strip().startswith("assert")
+        ]
 
     if isinstance(raw_cases, str):
         lines = [line.strip() for line in re.split(r"\r?\n", raw_cases) if line.strip()]
@@ -275,17 +287,21 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
     question_type = str(item.get("question_type") or "fill-in-the-blank").strip() or "fill-in-the-blank"
     test_cases = _normalize_test_cases(item)
 
-    if starter_code and "___" not in starter_code and correct_answer:
+    # Debug output
+    print(f"[NORMALIZE] Q: q_len={len(question)}, ans_len={len(correct_answer)}, code_len={len(starter_code)}, type={question_type}")
+    
+    if question_type == "fill-in-the-blank" and starter_code and "___" not in starter_code and correct_answer:
+        print(f"[NORMALIZE] Replacing {repr(correct_answer)} with ___ in starter_code")
         starter_code = starter_code.replace(correct_answer, "___", 1)
-
-    if starter_code and "___" in starter_code and starter_code not in question:
-        question = f"{question}\n\n```python\n{starter_code}\n```".strip()
 
     if not explanation and source_excerpt:
         explanation = f"這題根據影片內容出題：{source_excerpt}"
 
-    if not test_cases and starter_code and correct_answer:
+    if not test_cases and question_type == "fill-in-the-blank" and starter_code and correct_answer:
+        print(f"[NORMALIZE] Generating fallback test cases")
         test_cases = _build_fallback_test_cases(starter_code, correct_answer)
+
+    print(f"[NORMALIZE] Result: blanks={'___' in (starter_code or '')}, tests={len(test_cases)}")
 
     return schema.QuizQuestion(
         question=question,
@@ -313,8 +329,31 @@ def generate_quiz(video_id: int, title: str, video_link: str, outline: str | Non
     template_context = question_bank.format_templates_for_prompt(reference_templates)
 
     prompt = f"""
-You are a Python quiz designer for learning videos.
-Generate exactly 5 fill-in-the-blank Python questions based on the video content.
+You are AHa!'s Python exercise designer for learning videos.
+Generate exactly 5 Python fill-in-the-blank coding exercises based on the video content.
+
+Each exercise should have:
+- A clear problem title (e.g., "經典迴圈數字處理 (Palindrome Number)")
+- A detailed problem description with learning context
+- A code skeleton with 1-3 specific blank points marked as ___ (1) ___ , ___ (2) ___, etc.
+- Each blank point has a clear answer
+
+Example format:
+"第 1 題：找因數
+
+請完成一個函數來找出某個整數的所有因數。
+
+參考概念：for 迴圈、取餘數 (%)
+
+def find_factors(n):
+    factors = []
+    for i in range(1, n + 1):
+        if ___ (1) ___:
+            factors.append(i)
+    return ___ (2) ___
+
+* (1) 填空內容：n % i == 0
+* (2) 填空內容：factors"
 
 You must use the video content as the semantic source, and use the retrieved LeetCode/TQC templates as style and structure references.
 
@@ -331,39 +370,56 @@ Retrieved LeetCode/TQC templates:
 {template_context}
 
 Requirements:
-1. Use Traditional Chinese for `question` and `explanation`.
-2. The factual meaning of each question must come from the video content, not outside knowledge.
-3. The code skeleton and test-case style should clearly resemble the retrieved LeetCode/TQC templates.
-4. Return exactly 5 items.
-5. Each item must include a `starter_code` field with `___`.
-6. `correct_answer` must be the exact text that replaces `___`.
-7. Each item must include 2 to 4 assert-style test cases.
-8. `question_type` must be `fill-in-the-blank`.
-9. `source_time` should be `unknown` if not available.
-10. `source_excerpt` must quote the most relevant video text from the transcript or outline.
-11. At least 3 questions should obviously follow one of the retrieved templates.
-12. Do not add any extra text outside the JSON array.
-13. Use plain JSON only, without markdown fences or explanatory text.
+1. Use Traditional Chinese for question text and explanation.
+2. Each `question` must contain the problem title, description, and full code skeleton with numbered blank points.
+3. The blank points must be marked as ___ (1) ___, ___ (2) ___, etc.
+4. After the code block, list each answer on a new line: "* (1) 填空內容：answer1" etc.
+5. The factual meaning of each question must come from the video content, not outside knowledge.
+6. `correct_answer` should be a concatenated string of all answers separated by | separator, e.g., "n % i == 0|factors".
+7. `starter_code` should be the code skeleton with blank points, identical to what appears in the question.
+8. `test_cases` must contain 4 to 8 assert-style tests that verify all blank points are correct. Use complete code that fills all blanks.
+9. `question_type` must be `fill-in-the-blank`.
+10. `source_time` should be `unknown` if not available.
+11. `source_excerpt` must quote the most relevant video text.
+12. At least 3 questions should obviously follow one of the retrieved templates.
+13. Do not add any extra text outside the JSON array.
+14. Use plain JSON only, without markdown fences.
 
-JSON schema:
+Return format:
 [
   {{
-    "question": "題目文字",
-    "correct_answer": "正確答案",
+    "question": "完整的題目描述（包含程式碼框架和填空點）",
+    "correct_answer": "answer1|answer2|answer3",
+    "starter_code": "包含 ___ (1) ___ 標記的程式碼框架",
     "explanation": "簡短解析",
     "question_type": "fill-in-the-blank",
-    "source_time": "00:10-00:42 or unknown",
-    "source_excerpt": "影片原文片段",
-    "starter_code": "包含 ___ 的 Python 程式片段",
-    "test_cases": ["assert ...", "assert ..."]
+    "source_time": "unknown",
+    "source_excerpt": "影片相關內容片段",
+    "test_cases": ["assert ...", "assert ...", "assert ..."]
   }}
 ]
 """
 
     try:
+        print(f"\n=== Generating quiz for video: {title} ===")
+        print(f"Outline length: {len(video_outline)} chars")
+        print(f"Retrieved chunks: {len(analysis.retrieved_chunks)}")
+        print(f"Reference templates: {len(reference_templates)}")
+        
         payload = _call_llm(prompt)
+        print(f"LLM Response length: {len(payload)} chars")
+        print(f"LLM Response (first 500 chars): {payload[:500]}...")
+        
         raw_questions = _extract_json_array(payload)
+        print(f"Extracted {len(raw_questions)} raw questions")
+        
         questions = [_normalize_question(item) for item in raw_questions]
+        print(f"Normalized {len(questions)} questions")
+        
+        for idx, q in enumerate(questions, 1):
+            has_blanks = "___" in (q.starter_code or "")
+            test_count = len(q.test_cases)
+            print(f"  Q{idx}: blanks={has_blanks}, tests={test_count}, correct_answer_len={len(q.correct_answer)}")
 
         valid_questions = [
             question
@@ -374,9 +430,12 @@ JSON schema:
             and "___" in (question.starter_code or "")
             and len(question.test_cases) >= 2
         ]
+        print(f"Valid questions: {len(valid_questions)}/5")
+        
         if len(valid_questions) != 5:
-            raise ValueError("Model did not return 5 valid fill-in-the-blank questions")
+            raise ValueError(f"Model did not return 5 valid fill-in-the-blank questions (got {len(valid_questions)})")
 
+        print(f"✓ Quiz generated successfully")
         return schema.QuizResponse(
             video_id=video_id,
             video_title=title,
@@ -384,7 +443,12 @@ JSON schema:
             questions=valid_questions,
         )
     except Exception as exc:
-        print(f"Quiz generation fallback for {title}: {exc}")
+        import traceback
+        print(f"\n✗ Quiz generation failed for {title}")
+        print(f"Error: {exc}")
+        print(f"Traceback:\n{traceback.format_exc()}")
+        print(f"Falling back to simple fallback questions...\n")
+        
         fallback_questions = ai_analyzer.generate_fallback_questions(
             title,
             transcript=analysis.transcript_excerpt,

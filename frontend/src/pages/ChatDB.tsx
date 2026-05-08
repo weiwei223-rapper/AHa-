@@ -301,6 +301,8 @@ const ChatDB: React.FC = () => {
       const response = await chatAPI.sendMessage({
         message: trimmedInput,
         history: nextMessages,
+        user_id: userId,
+        selected_video_id: activeSession.selectedVideoId ?? null,
       });
 
       let reply =
