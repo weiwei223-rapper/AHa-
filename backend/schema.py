@@ -118,6 +118,11 @@ class QuizResultCreate(BaseModel):
     video_id: int
     score: int
     total_questions: int = 5
+    title: Optional[str] = None # 新增標題欄位
+    details_json: Optional[str] = None # 儲存詳細批改細節
+
+class QuizResultUpdate(BaseModel):
+    title: str
 
 class QuizResultResponse(BaseModel):
     id: int
@@ -125,6 +130,8 @@ class QuizResultResponse(BaseModel):
     video_id: int
     score: int
     total_questions: int
+    title: Optional[str] = None
+    details_json: Optional[str] = None
     completed_at: datetime
 
     class Config:

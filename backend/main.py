@@ -351,7 +351,6 @@ def delete_chat_conversation(conversation_id: str, user_id: int = Query(...), db
 
 
 class GradeRequest(BaseModel):
-    video_id: int
     user_id: int
     answers: List[str]
 
@@ -475,12 +474,58 @@ def generate_quiz_api(video_id: int, user_id: int = 1, db: Session = Depends(dat
 @app.post("/api/quiz-results", response_model=schema.QuizResultResponse)
 def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(database.get_db)):
     user_id = payload.user_id or 1
-    quiz_result = models.QuizResult(user_id=user_id, video_id=payload.video_id, score=payload.score,
-                                    total_questions=payload.total_questions)
+    # 如果沒給標題，預設使用影片標題
+    title = payload.title
+    if not title:
+        video = db.query(models.Video).filter(models.Video.id == payload.video_id).first()
+        title = video.title if video else f"Quiz Result {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+
+    quiz_result = models.QuizResult(
+        user_id=user_id, 
+        video_id=payload.video_id, 
+        score=payload.score,
+        total_questions=payload.total_questions,
+        title=title,
+        details_json=payload.details_json
+    )
     db.add(quiz_result)
     db.commit()
     db.refresh(quiz_result)
     return quiz_result
+
+
+@app.delete("/api/quiz-results/{result_id}")
+def delete_quiz_result(result_id: int, db: Session = Depends(database.get_db)):
+    result = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    db.delete(result)
+    db.commit()
+    return {"message": "Result deleted successfully"}
+
+
+@app.patch("/api/quiz-results/{result_id}", response_model=schema.QuizResultResponse)
+def update_quiz_result(result_id: int, payload: schema.QuizResultUpdate, db: Session = Depends(database.get_db)):
+    result = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    result.title = payload.title
+    db.commit()
+    db.refresh(result)
+    return result
+
+
+@app.get("/api/quiz-results", response_model=List[schema.QuizResultResponse])
+def get_quiz_results(user_id: int = 1, db: Session = Depends(database.get_db)):
+    results = (
+        db.query(models.QuizResult)
+        .filter(models.QuizResult.user_id == user_id)
+        .order_by(models.QuizResult.completed_at.desc())
+        .all()
+    )
+    # 由於 schema 需要 video_title，我們可以動態補齊或修改 schema
+    # 這裡直接回傳，Pydantic 會處理關聯 (如果 models 有設定)
+    return results
 
 
 @app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)

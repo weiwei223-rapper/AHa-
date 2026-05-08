@@ -74,11 +74,15 @@ export const quizAPI = {
   createQuestion: (data: { user_id: number; video_id: number; question_content: string; reference_answer: string; options: string[]; answer_record?: string | null; accuracy?: number }) =>
     api.post('/api/quiz-questions', data),
   getQuestions: () => api.get('/api/quiz-questions'),
-  createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number }) =>
+  getResults: (userId: number) => api.get('/api/quiz-results', { params: { user_id: userId } }),
+  deleteResult: (resultId: number) => api.delete(`/api/quiz-results/${resultId}`),
+  updateResult: (resultId: number, data: { title: string }) => api.patch(`/api/quiz-results/${resultId}`, data),
+  createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number; details_json?: string }) =>
     api.post('/api/quiz-results', data),
   gradeQuiz: (videoId: number, data: { user_id: number; answers: string[] }) =>
     api.post(`/api/quizzes/${videoId}/grade`, data),
-};
+  };
+
 
 export const uploadAPI = {
   createUpload: (data: { user_id: number; video_id: number; consumed_points: number }) =>

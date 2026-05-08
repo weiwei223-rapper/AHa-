@@ -7,6 +7,7 @@ import Layout from "./component/Layout.tsx";
 import ChatFloatingWidget from "./component/ChatFloatingWidget.tsx";
 import Profile from "./pages/Profile.tsx"
 import Quiz from "./pages/Quiz.tsx";
+import Review from "./pages/Review.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
 import Chat from "./pages/Chat.tsx";
 import {Route,Routes} from "react-router-dom";
@@ -48,6 +49,7 @@ function App (){
                 <Route path="/Video" element={<Video VideoName={"python"}/>} />
                 <Route path="/Profile" element={<Profile />} />
                 <Route path="/Quiz" element={<Quiz />} />
+                <Route path="/Review" element={<Review />} />
                 <Route path="/Chat" element={<Chat />} />
               </Route>
             </Routes>
