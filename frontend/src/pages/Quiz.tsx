@@ -356,11 +356,18 @@ const Quiz = () => {
           <div style={{ marginTop: "20px" }}>
             <p className="page-eyebrow">Python Editor (填入 ___ 處內容)</p>
             <style>{`
-              .monaco-editor .suggest-widget {
-                color: white !important;
+              /* NUCLEAR FIX for Monaco Suggestion Widget */
+              .monaco-editor .suggest-widget,
+              .monaco-editor .suggest-widget *,
+              .monaco-editor .suggest-widget .monaco-list-row,
+              .monaco-editor .suggest-widget .monaco-list-row * {
+                color: #ffffff !important;
+                background-color: #1e1e1e !important;
               }
-              .monaco-editor .suggest-widget .monaco-list-row .label-name {
-                color: white !important;
+              .monaco-editor .suggest-widget .monaco-list-row.focused,
+              .monaco-editor .suggest-widget .monaco-list-row.focused * {
+                background-color: #2b415e !important;
+                color: #ffffff !important;
               }
             `}</style>
             <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>

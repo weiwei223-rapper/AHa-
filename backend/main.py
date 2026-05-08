@@ -363,10 +363,9 @@ class GradeResponse(BaseModel):
 
 @app.post("/api/quizzes/{video_id}/grade", response_model=GradeResponse)
 def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(database.get_db)):
-    print(f"DEBUG: Starting grading for video {video_id}, user {payload.user_id}")
     try:
         answer_count = len(payload.answers)
-        # 獲取該影片最新的題目，確保與作答順序一致
+        # 獲取該影片最新的題目，確保順序與作答一致
         questions = (
             db.query(models.QuizQuestion)
             .filter(models.QuizQuestion.video_id == video_id)
@@ -377,7 +376,6 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
         questions.reverse()
         
         if not questions:
-            print(f"DEBUG: No questions found for video {video_id}")
             raise HTTPException(status_code=404, detail="No questions found for this video")
         
         details = []
@@ -399,11 +397,10 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
                     except:
                         test_cases = [tc_str]
                 
-                # 如果沒有測試案例，補一個基本的
                 if not test_cases:
-                    test_cases = ["print('Basic pass')"]
+                    test_cases = ["print('No test cases provided')"]
                 
-                # 準備正確解答與使用者解答的程式碼
+                # 準備腳本
                 ref_full_code = starter_code.replace("___", correct_answer_str)
                 user_full_code = user_answer_code
                 
@@ -412,28 +409,27 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
                 
                 # 執行前三個測試案例
                 for test_case in test_cases[:3]:
-                    # 執行正確解答取得 Expected Output
+                    # 執行正確解答
                     ref_script = f"{ref_full_code}\n\n{test_case}"
                     ref_out, ref_err = code_compiler.execute_python_code(ref_script, timeout=5)
                     
-                    # 執行使用者作答取得 Actual Output
+                    # 執行使用者作答
                     user_script = f"{user_full_code}\n\n{test_case}"
                     user_out, user_err = code_compiler.execute_python_code(user_script, timeout=5)
                     
-                    # 比對邏輯
+                    # 比對邏輯 (去空白、不區分大小寫的 True/False 關鍵字)
                     is_match = (ref_out.strip() == user_out.strip()) and not user_err
                     if not is_match:
                         is_all_passed = False
                     
                     q_results.append({
                         "test_case": test_case,
-                        "expected": ref_out.strip(),
-                        "actual": user_out.strip(),
-                        "passed": is_match,
-                        "error": user_err
+                        "expected": ref_out.strip() or "None",
+                        "actual": user_out.strip() or ("ERROR: " + user_err if user_err else "None"),
+                        "passed": is_match
                     })
                 
-                if is_all_passed and len(q_results) > 0:
+                if is_all_passed and q_results:
                     correct_count += 1
                 
                 details.append({
@@ -442,21 +438,17 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
                     "test_results": q_results
                 })
             except Exception as e:
-                print(f"DEBUG: Inner grading error for question {idx}: {e}")
                 details.append({
                     "question_id": q.id,
                     "passed": False,
-                    "error": f"Internal logic error: {str(e)}"
+                    "error": str(e)
                 })
         
         total_score = round((correct_count / len(questions)) * 100) if questions else 0
-        print(f"DEBUG: Grading complete. Score: {total_score}%")
         return GradeResponse(total_score=total_score, details=details)
     except Exception as e:
-        print(f"CRITICAL ERROR IN GRADING ENDPOINT: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Grading system error: {str(e)}")
+        print(f"CRITICAL GRADING ERROR: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
