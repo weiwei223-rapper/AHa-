@@ -78,6 +78,9 @@ const Review = () => {
               <div className={`quiz-review-status ${detail.passed ? "correct" : "review"}`}>
                 {detail.passed ? "Logic Correct" : "Logic Failed"}
               </div>
+              {detail.question_text && (
+                <h3 style={{ marginTop: "12px", fontSize: "1.1em" }}>{detail.question_text}</h3>
+              )}
               <div style={{ marginTop: "12px" }}>
                 <p><strong>驗證詳情：</strong></p>
                 <ul style={{ listStyle: "none", padding: 0 }}>

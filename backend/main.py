@@ -429,15 +429,19 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
                 
                 if is_all_passed and q_results:
                     correct_count += 1
-                
+
                 details.append({
                     "question_id": q.id,
+                    "question_text": q.question_content, # 保存題目敘述
+                    "user_answer": user_answer_code,     # 保存使用者當時的完整代碼
                     "passed": is_all_passed,
                     "test_results": q_results
                 })
             except Exception as e:
                 details.append({
                     "question_id": q.id,
+                    "question_text": q.question_content,
+                    "user_answer": user_answer_code,
                     "passed": False,
                     "error": f"批改異常: {str(e)}"
                 })
