@@ -8,17 +8,9 @@ from urllib.parse import quote, quote_plus
 
 import bcrypt
 from dotenv import load_dotenv
-<<<<<<< HEAD
-from fastapi import Depends, FastAPI, HTTPException, Request
-=======
-from fastapi import Depends, FastAPI, HTTPException, Query
-<<<<<<< HEAD
-from fastapi.responses import JSONResponse
-=======
->>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
->>>>>>> 452c40aa138d8c43818489822b2bd8246273c04c
+from fastapi import Depends, FastAPI, HTTPException, Request, Query
+from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -252,11 +244,7 @@ class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
     user_id: Optional[int] = None
-<<<<<<< HEAD
-    selected_video_id: Optional[int] = None
-=======
     video_id: Optional[int] = None
->>>>>>> 452c40aa138d8c43818489822b2bd8246273c04c
 
 
 class ChatResponse(BaseModel):
@@ -479,24 +467,6 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-<<<<<<< HEAD
-    selected_video = None
-    if payload.selected_video_id is not None:
-        selected_video_query = db.query(models.Video).filter(models.Video.id == payload.selected_video_id)
-        if payload.user_id is not None:
-            selected_video_query = selected_video_query.filter(models.Video.user_id == payload.user_id)
-        selected_video = selected_video_query.first()
-
-    if selected_video is not None:
-        context_videos = [selected_video]
-    else:
-        recent_video_query = db.query(models.Video)
-        if payload.user_id is not None:
-            recent_video_query = recent_video_query.filter(models.Video.user_id == payload.user_id)
-        context_videos = recent_video_query.order_by(models.Video.created_at.desc()).limit(3).all()
-
-    video_context = [{"title": video.title, "video_link": video.video_link} for video in context_videos]
-=======
     video_context: dict | list[dict]
     if payload.video_id is not None:
         video_query = db.query(models.Video).filter(models.Video.id == payload.video_id)
@@ -520,7 +490,6 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
             }
             for video in recent_videos
         ]
->>>>>>> 452c40aa138d8c43818489822b2bd8246273c04c
 
     try:
         reply = ai_analyzer.generate_chat_reply(
@@ -910,4 +879,4 @@ def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

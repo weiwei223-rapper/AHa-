@@ -329,53 +329,20 @@ def generate_quiz(video_id: int, title: str, video_link: str, outline: str | Non
     template_context = question_bank.format_templates_for_prompt(reference_templates)
 
     prompt = f"""
-<<<<<<< HEAD
-You are AHa!'s Python exercise designer for learning videos.
-Generate exactly 5 Python fill-in-the-blank coding exercises based on the video content.
-
-Each exercise should have:
-- A clear problem title (e.g., "經典迴圈數字處理 (Palindrome Number)")
-- A detailed problem description with learning context
-- A code skeleton with 1-3 specific blank points marked as ___ (1) ___ , ___ (2) ___, etc.
-- Each blank point has a clear answer
-
-Example format:
-"第 1 題：找因數
-
-請完成一個函數來找出某個整數的所有因數。
-
-參考概念：for 迴圈、取餘數 (%)
-
-def find_factors(n):
-    factors = []
-    for i in range(1, n + 1):
-        if ___ (1) ___:
-            factors.append(i)
-    return ___ (2) ___
-
-* (1) 填空內容：n % i == 0
-* (2) 填空內容：factors"
-=======
 你是一位專業的 Python 教學設計師。
 請根據提供的影片內容，生成 5 題高品質的「填空式」程式練習題。
->>>>>>> 452c40aa138d8c43818489822b2bd8246273c04c
 
 這些題目必須：
 1. **真實反映影片內容**：題目場景與教學重點必須來自影片逐字稿與大綱。
 2. **合理的難度與教學價值**：如果影片是基礎教學，請出基礎題；如果是進階，則出進階題。
-3. **優質的程式碼範本**：`starter_code` 應包含具備教學價值的 Python 片段，將關鍵部分置換為 `___`。
+3. **優質的程式碼範本**：`starter_code` 應包含具備教學價值的 Python 片段，將關鍵部分置換為 `___ (1) ___` 等。
 4. **教學引導**：`explanation` 應詳細說明為何答案是該選項，並連結到影片中的具體概念。
 
 影片標題：
 {title}
 
-<<<<<<< HEAD
-Video outline:
-{video_outline}
-=======
 影片重點摘要：
-{analysis.outline_markdown}
->>>>>>> 452c40aa138d8c43818489822b2bd8246273c04c
+{video_outline}
 
 影片內容證據（逐字稿片段）：
 {retrieved_context}
@@ -383,57 +350,31 @@ Video outline:
 參考程式模式（僅供結構參考，若難度不符請自行調整）：
 {template_context}
 
-<<<<<<< HEAD
-Requirements:
-1. Use Traditional Chinese for question text and explanation.
-2. Each `question` must contain the problem title, description, and full code skeleton with numbered blank points.
-3. The blank points must be marked as ___ (1) ___, ___ (2) ___, etc.
-4. After the code block, list each answer on a new line: "* (1) 填空內容：answer1" etc.
-5. The factual meaning of each question must come from the video content, not outside knowledge.
-6. `correct_answer` should be a concatenated string of all answers separated by | separator, e.g., "n % i == 0|factors".
-7. `starter_code` should be the code skeleton with blank points, identical to what appears in the question.
-8. `test_cases` must contain 4 to 8 assert-style tests that verify all blank points are correct. Use complete code that fills all blanks.
-9. `question_type` must be `fill-in-the-blank`.
-10. `source_time` should be `unknown` if not available.
-11. `source_excerpt` must quote the most relevant video text.
-12. At least 3 questions should obviously follow one of the retrieved templates.
-13. Do not add any extra text outside the JSON array.
-14. Use plain JSON only, without markdown fences.
+要求細節：
+1. 使用繁體中文編寫題目文字與解析。
+2. 每題 `question` 必須包含題目名稱、描述以及完整的程式碼骨架（含編號填空點）。
+3. 填空點必須標記為 ___ (1) ___ , ___ (2) ___ 等。
+4. 在程式碼區塊之後，請逐行列表每個填空的答案："* (1) 填空內容：答案1" 等。
+5. 題目內容必須源自影片，而非外部知識。
+6. `correct_answer` 應為所有填空答案的組合，以 | 分隔，例如 "答案1|答案2"。
+7. `starter_code` 應為包含填空點標記的程式碼骨架，與 `question` 中的相同。
+8. `test_cases` 必須包含 4 到 8 個 `assert` 風格的測試案例，用來驗證所有填空點。
+9. `question_type` 必須為 `fill-in-the-blank`。
+10. `source_excerpt` 必須引用影片中最相關的原話。
+11. 至少 3 題應明顯遵循所提供的參考模板之一。
+12. 請直接回傳純 JSON 陣列，不要添加任何 Markdown 標籤或額外文字。
 
-Return format:
+回傳格式：
 [
   {{
     "question": "完整的題目描述（包含程式碼框架和填空點）",
-    "correct_answer": "answer1|answer2|answer3",
+    "correct_answer": "答案1|答案2|答案3",
     "starter_code": "包含 ___ (1) ___ 標記的程式碼框架",
     "explanation": "簡短解析",
     "question_type": "fill-in-the-blank",
     "source_time": "unknown",
     "source_excerpt": "影片相關內容片段",
     "test_cases": ["assert ...", "assert ...", "assert ..."]
-=======
-要求細節：
-1. 使用繁體中文編寫 `question` 和 `explanation`。
-2. 題目數量：正好 5 題。
-3. 每題必須包含 `starter_code`，其中包含一個 `___`。
-4. `correct_answer` 必須是取代 `___` 的精確文字。
-5. 每題必須包含 2 到 4 個 `assert` 風格的測試案例（`test_cases`），用來驗證程式邏輯。
-6. `source_excerpt` 必須引用影片中最相關的原話，作為出題依據。
-7. **嚴禁生搬硬套**：如果參考模式（LeetCode）難度與影片不符，請優先以影片內容出題，維持「合理性」。
-8. 回傳格式：純 JSON 陣列。
-
-回傳格式範例：
-[
-  {{
-    "question": "在 Python 中，我們可以使用什麼關鍵字來定義函數？",
-    "correct_answer": "def",
-    "explanation": "影片中提到定義函數的語法是使用 def 關鍵字，後接函數名稱。",
-    "question_type": "fill-in-the-blank",
-    "source_time": "02:15",
-    "source_excerpt": "接著我們使用 def 來宣告一個新的功能...",
-    "starter_code": "___ my_function():\n    print('Hello')",
-    "test_cases": ["# 這裡不一定需要執行，但請提供邏輯檢查說明"]
->>>>>>> 452c40aa138d8c43818489822b2bd8246273c04c
   }}
 ]
 """

@@ -59,18 +59,6 @@ def init_gemini() -> str:
 def generate_text_with_gemini(contents: list[dict], system_instruction: str | None = None, model: str = DEFAULT_GEMINI_MODEL) -> str:
     api_key = init_gemini()
     model_name = model.replace("models/", "")
-<<<<<<< HEAD
-    
-    payload = {
-        "contents": contents,
-        "generationConfig": {"temperature": 0.5, "maxOutputTokens": 2048},
-    }
-    
-    if system_instruction:
-        payload["system_instruction"] = {
-            "parts": [{"text": system_instruction}]
-        }
-=======
     system_parts: list[dict] = []
     gemini_contents: list[dict] = []
     for item in contents:
@@ -92,26 +80,13 @@ def generate_text_with_gemini(contents: list[dict], system_instruction: str | No
     }
     if system_parts:
         request_payload["systemInstruction"] = {"parts": system_parts}
->>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
 
     try:
         response = requests.post(
             GEMINI_API_URL.format(model=model_name),
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-<<<<<<< HEAD
-            json={
-                "contents": contents,
-                "generationConfig": {"temperature": 0.5, "maxOutputTokens": 4096},
-            },
-            timeout=120,
-=======
-<<<<<<< HEAD
-            json=payload,
-=======
             json=request_payload,
->>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
-            timeout=30,
->>>>>>> 452c40aa138d8c43818489822b2bd8246273c04c
+            timeout=120,
         )
         if not response.ok:
             raise ValueError(f"Gemini API error {response.status_code} for model '{model_name}': {response.text}")
