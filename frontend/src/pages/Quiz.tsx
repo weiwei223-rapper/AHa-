@@ -8,6 +8,7 @@ type VideoItem = {
   id: number;
   video_link: string;
   title?: string | null;
+  outline?: string | null;
   created_at: string;
 };
 
@@ -41,6 +42,7 @@ const Quiz = () => {
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [outlineWarning, setOutlineWarning] = useState("");
 
   const [codeOutput, setCodeOutput] = useState("");
   const [codeError, setCodeError] = useState("");
@@ -63,8 +65,10 @@ const Quiz = () => {
       return;
     }
     const target = videos.find((video) => video.id === preferredVideoId);
-    if (target) {
-      void handleGenerateQuiz(target.id);
+    if (target && !target.outline) {
+      setOutlineWarning("Outline is not available for this video yet. Please generate an outline first.");
+    } else {
+      setOutlineWarning("");
     }
   }, [preferredVideoId, videos]);
 
@@ -91,10 +95,19 @@ const Quiz = () => {
   };
 
   const handleGenerateQuiz = async (videoId: number) => {
+    const video = videos.find((v) => v.id === videoId);
+
+    if (!video || !video.outline) {
+      setOutlineWarning("Outline is not available for this video yet. Please generate an outline first.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
+    setOutlineWarning("");
     try {
-      const response = await videoAPI.generateQuiz(videoId, userId);
+      const response = await videoAPI.generateQuiz(videoId, userId, video.outline);
       const nextQuiz = response.data as QuizData;
       setQuiz(nextQuiz);
       setCurrentQuestionIndex(0);
@@ -270,13 +283,25 @@ const Quiz = () => {
       </section>
 
       {error && <div className="page-error">{error}</div>}
+      {outlineWarning && <div className="page-error">{outlineWarning}</div>}
       {loading && <div className="page-loading">正在分析影片並產生填空題...</div>}
 
       <section className="video-library-grid">
         {videos.map((video) => (
           <article key={video.id} className="video-library-card">
             <div className="video-library-top">
-              <div className="video-library-badge">Quiz Source</div>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+                <div className="video-library-badge">Quiz Source</div>
+                {video.outline ? (
+                  <div style={{ display: "inline-flex", width: "fit-content", borderRadius: "999px", padding: "6px 10px", background: "rgba(34, 197, 94, 0.15)", color: "#86efac", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    ✓ Outline
+                  </div>
+                ) : (
+                  <div style={{ display: "inline-flex", width: "fit-content", borderRadius: "999px", padding: "6px 10px", background: "rgba(248, 113, 113, 0.15)", color: "#fecaca", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    ✗ No Outline
+                  </div>
+                )}
+              </div>
               <h3>{video.title || "Untitled Video"}</h3>
               <p className="video-library-description">
                 Added at {new Date(video.created_at).toLocaleString("zh-TW")}
@@ -285,8 +310,9 @@ const Quiz = () => {
             <div className="video-library-actions">
               <button
                 onClick={() => void handleGenerateQuiz(video.id)}
-                disabled={loading}
+                disabled={loading || !video.outline}
                 className="page-primary-button"
+                title={!video.outline ? "Outline is not available for this video. Please generate an outline first." : ""}
               >
                 Generate Quiz
               </button>

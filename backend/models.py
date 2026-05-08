@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, DateTime
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -33,7 +33,10 @@ class Video(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     video_link = Column(String, nullable=False)
     title = Column(String, nullable=True)
-    outline = Column(String, nullable=True)
+    outline = Column(Text, nullable=True)
+    transcript = Column(Text, nullable=True)
+    transcript_source = Column(String, nullable=True)
+    transcript_updated_at = Column(DateTime, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     cost_points = Column(Integer, default=0)
     error_report = Column(String, nullable=True)
@@ -50,6 +53,7 @@ class AIFeedback(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=True)
     ai_message = Column(String)
     user_message = Column(String)
     error_report = Column(String, nullable=True)

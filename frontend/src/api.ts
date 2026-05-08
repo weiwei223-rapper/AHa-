@@ -65,17 +65,21 @@ export const userAPI = {
 
 export const videoAPI = {
   getVideos: (userId: number) => api.get('/api/videos', { params: { user_id: userId } }),
+  getVideo: (videoId: number) => api.get(`/api/videos/${videoId}`),
   createVideo: (data: { video_link: string; title?: string | null; outline?: string | null; user_id?: number; cost_points?: number; error_report?: string | null }) =>
     api.post('/api/videos', data),
   deleteVideo: (videoId: number) => api.delete(`/api/videos/${videoId}`),
   analyzeVideo: (videoId: number) => api.get(`/api/videos/${videoId}/analysis`),
-  generateQuiz: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId } }),
+  generateQuiz: (videoId: number, userId: number, outline?: string | null) =>
+    api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, outline: outline || undefined } }),
 };
 
 export const feedbackAPI = {
-  createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null }) =>
+  createFeedback: (data: { user_id: number; video_id?: number | null; ai_message: string; user_message: string; error_report?: string | null }) =>
     api.post('/api/feedbacks', data),
   getFeedbacks: () => api.get('/api/feedbacks'),
+  deleteConversation: (conversationId: string, userId: number) =>
+    api.delete(`/api/feedbacks/conversations/${conversationId}`, { params: { user_id: userId } }),
 };
 
 export const quizAPI = {
@@ -102,7 +106,7 @@ export const codeAPI = {
 };
 
 export const chatAPI = {
-  sendMessage: (data: { message: string; history: { role: string; content: string }[] }) =>
+  sendMessage: (data: { message: string; history: { role: string; content: string }[]; user_id?: number; video_id?: number | null }) =>
     api.post('/api/chat', data),
 };
 

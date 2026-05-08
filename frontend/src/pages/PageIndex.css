@@ -997,6 +997,27 @@ button:hover span:after {
   text-align: left;
   display: grid;
   gap: 8px;
+  position: relative;
+}
+
+.chat-history-delete {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(43, 193, 241, 0.18);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chat-history-delete:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 .chat-history-card:hover,
 .chat-history-card.active {
@@ -1024,7 +1045,7 @@ button:hover span:after {
 }
 .chat-panel {
   display: grid;
-  gap: 20px;
+  gap: 0;
 }
 .chat-hero {
   background:
@@ -1077,6 +1098,95 @@ button:hover span:after {
   padding: 24px;
   display: grid;
   gap: 18px;
+}
+
+.chat-video-picker {
+  display: grid;
+  gap: 16px;
+}
+
+.chat-video-picker-head {
+  display: grid;
+  gap: 6px;
+}
+
+.chat-video-picker-title {
+  color: white;
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.chat-video-picker-subtitle {
+  color: #8da3bd;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.chat-video-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chat-video-picker-refresh {
+  border-radius: 999px;
+  padding: 10px 14px;
+  border: 1px solid rgba(43, 193, 241, 0.24);
+  background: transparent;
+  color: #dbeafe;
+}
+
+.chat-video-picker-refresh:hover {
+  background: rgba(17, 49, 75, 0.82);
+}
+
+.chat-video-picker-error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.32);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+
+.chat-video-picker-list {
+  display: grid;
+  gap: 12px;
+}
+
+.chat-video-picker-empty {
+  color: #8da3bd;
+  border: 1px dashed rgba(43, 193, 241, 0.2);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(9, 17, 29, 0.52);
+}
+
+.chat-video-card {
+  text-align: left;
+  width: 100%;
+  border-radius: 20px;
+  border: 1px solid rgba(43, 193, 241, 0.16);
+  background: rgba(9, 17, 29, 0.76);
+  color: #dbeafe;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.chat-video-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(43, 193, 241, 0.42);
+  background: linear-gradient(180deg, rgba(16, 48, 71, 0.92), rgba(10, 21, 33, 0.92));
+}
+
+.chat-video-card-title {
+  font-weight: 800;
+  color: white;
+}
+
+.chat-video-card-meta {
+  color: #8da3bd;
+  font-size: 12px;
 }
 .chat-thread-header {
   display: flex;

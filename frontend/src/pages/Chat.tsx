@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { chatAPI } from '../api';
+import { chatAPI, videoAPI } from '../api';
 import './PageIndex.css';
+import ChatDB from './ChatDB';
 
 type MessageRole = 'user' | 'assistant';
 
@@ -14,6 +15,8 @@ interface ChatSession {
   title: string;
   updatedAt: string;
   messages: Message[];
+  selectedVideoId?: number | null;
+  selectedVideoTitle?: string | null;
 }
 
 const STORAGE_KEY = 'aha-chat-history-v1';
@@ -35,12 +38,9 @@ const createEmptySession = (): ChatSession => ({
   id: createSessionId(),
   title: 'New conversation',
   updatedAt: new Date().toISOString(),
-  messages: [
-    {
-      role: 'assistant',
-      content: 'Hello! I am your AI study assistant. Ask about your video content, quiz ideas, or learning notes.'
-    }
-  ]
+  messages: [],
+  selectedVideoId: null,
+  selectedVideoTitle: null,
 });
 
 const formatUpdatedAt = (value: string) => {
@@ -62,6 +62,9 @@ const Chat: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [videos, setVideos] = useState<Array<{ id: number; title?: string | null }>>([]);
+  const [videosLoading, setVideosLoading] = useState(false);
+  const [videosError, setVideosError] = useState('');
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -92,6 +95,10 @@ const Chat: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    void fetchVideos();
+  }, []);
+
+  useEffect(() => {
     if (sessions.length === 0) {
       return;
     }
@@ -101,6 +108,30 @@ const Chat: React.FC = () => {
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null;
+
+  const fetchVideos = async () => {
+    const userId = Number(localStorage.getItem('userId') || 0);
+    if (!userId) {
+      setVideos([]);
+      setVideosError('請先登入以載入影片列表。');
+      return;
+    }
+
+    setVideosLoading(true);
+    setVideosError('');
+    try {
+      const response = await videoAPI.getVideos(userId);
+      const rawVideos = (response.data ?? []) as Array<{ id: number; title?: string | null }>;
+      setVideos(rawVideos);
+    } catch (requestError: unknown) {
+      console.error('Error fetching videos:', requestError);
+      const errorObject = requestError as { response?: { data?: { detail?: string } } };
+      setVideosError(errorObject.response?.data?.detail || '無法載入影片列表');
+      setVideos([]);
+    } finally {
+      setVideosLoading(false);
+    }
+  };
 
   const updateSession = (sessionId: string, nextMessages: Message[]) => {
     const nextUpdatedAt = new Date().toISOString();
@@ -114,6 +145,34 @@ const Chat: React.FC = () => {
                 messages: nextMessages,
                 title: buildSessionTitle(nextMessages),
                 updatedAt: nextUpdatedAt
+              }
+            : session
+        )
+        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+    );
+  };
+
+  const updateSessionSelection = (sessionId: string, videoId: number, videoTitle: string) => {
+    const nextUpdatedAt = new Date().toISOString();
+    const greeting: Message = {
+      role: 'assistant',
+      content: `你好！我是你的 AI 學習助理。關於「${videoTitle}」，你有什麼問題想問嗎？`,
+    };
+
+    setSessions((prev) =>
+      prev
+        .map((session) =>
+          session.id === sessionId
+            ? {
+                ...session,
+                selectedVideoId: videoId,
+                selectedVideoTitle: videoTitle,
+                updatedAt: nextUpdatedAt,
+                messages: session.messages.length === 0 ? [greeting] : session.messages,
+                title:
+                  session.title === 'New conversation'
+                    ? `「${videoTitle}」`
+                    : session.title,
               }
             : session
         )
@@ -136,6 +195,7 @@ const Chat: React.FC = () => {
 
   const handleSend = async () => {
     if (!activeSession || !input.trim() || loading) return;
+    if (!activeSession.selectedVideoId) return;
 
     const trimmedInput = input.trim();
     const userMessage: Message = { role: 'user', content: trimmedInput };
@@ -195,6 +255,14 @@ const Chat: React.FC = () => {
     }
   };
 
+  const handleSelectVideo = (videoId: number) => {
+    if (!activeSession) return;
+    const selected = videos.find((video) => video.id === videoId);
+    const title = (selected?.title || `Video #${videoId}`).toString();
+    updateSessionSelection(activeSession.id, videoId, title);
+    setError('');
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -234,6 +302,7 @@ const Chat: React.FC = () => {
       </aside>
 
       <section className="chat-panel">
+<<<<<<< HEAD
         <div className="chat-hero">
           <div className="chat-hero-copy">
             <div className="chat-hero-label">Powered by Gemini</div>
@@ -254,6 +323,8 @@ const Chat: React.FC = () => {
           </div>
         </div>
 
+=======
+>>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
         <div className="chat-thread-shell">
           <div className="chat-thread-header">
             <div>
@@ -265,6 +336,7 @@ const Chat: React.FC = () => {
             </div>
           </div>
 
+<<<<<<< HEAD
           <div className="chat-thread">
             {activeSession?.messages.map((message, index) => (
               <article
@@ -305,17 +377,107 @@ const Chat: React.FC = () => {
             <div className="chat-composer-footer">
               <div className="chat-composer-hint">
                 可以詢問影片內容整理、重點摘要、題目解析或延伸學習方向。
+=======
+          {!activeSession?.selectedVideoId ? (
+            <div className="chat-video-picker">
+              <div className="chat-video-picker-head">
+                <div className="chat-video-picker-title">請選擇要討論的影片</div>
+                <div className="chat-video-picker-subtitle">
+                  選定後我會用該影片作為上下文，幫你整理重點、回答問題與延伸學習。
+                </div>
+>>>>>>> 2b80bac7bdbc95e0983b6a93da895847b6394599
               </div>
-              <button className="chat-send-button" onClick={handleSend} disabled={loading || !input.trim()}>
-                {loading ? 'Sending...' : 'Send Message'}
-              </button>
+
+              {videosError && <div className="chat-video-picker-error">{videosError}</div>}
+
+              <div className="chat-video-picker-actions">
+                <button
+                  className="chat-video-picker-refresh"
+                  onClick={() => void fetchVideos()}
+                  disabled={videosLoading}
+                  type="button"
+                >
+                  {videosLoading ? '載入中...' : '重新載入影片'}
+                </button>
+              </div>
+
+              <div className="chat-video-picker-list" role="list">
+                {!videosLoading && videos.length === 0 ? (
+                  <div className="chat-video-picker-empty">
+                    目前沒有可用影片。請先到 Video 頁上傳影片後再回來。
+                  </div>
+                ) : (
+                  videos.map((video) => (
+                    <button
+                      key={video.id}
+                      className="chat-video-card"
+                      onClick={() => handleSelectVideo(video.id)}
+                      type="button"
+                      role="listitem"
+                    >
+                      <div className="chat-video-card-title">{video.title || `Video #${video.id}`}</div>
+                      <div className="chat-video-card-meta">ID: {video.id}</div>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
-            {error && <div className="chat-error-banner">{error}</div>}
-          </div>
+          ) : (
+            <>
+              <div className="chat-thread">
+                {activeSession?.messages.map((message, index) => (
+                  <article
+                    key={`${message.role}-${index}`}
+                    className={`chat-message-row ${message.role === 'user' ? 'user' : 'assistant'}`}
+                  >
+                    <div className="chat-avatar">{message.role === 'user' ? 'You' : 'AI'}</div>
+                    <div className="chat-message-card">
+                      <div className="chat-message-role">
+                        {message.role === 'user' ? 'You' : 'Assistant'}
+                      </div>
+                      <p>{message.content}</p>
+                    </div>
+                  </article>
+                ))}
+
+                {loading && (
+                  <article className="chat-message-row assistant">
+                    <div className="chat-avatar">AI</div>
+                    <div className="chat-message-card typing">
+                      <div className="chat-message-role">Assistant</div>
+                      <p>Thinking about your question...</p>
+                    </div>
+                  </article>
+                )}
+              </div>
+
+              <div className="chat-composer">
+                <textarea
+                  className="chat-composer-input"
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="輸入問題，按 Enter 送出，Shift + Enter 換行"
+                  rows={4}
+                  disabled={loading || !activeSession}
+                />
+                <div className="chat-composer-footer">
+                  <div className="chat-composer-hint">
+                    可以詢問影片內容整理、重點摘要、題目解析或延伸學習方向。
+                  </div>
+                  <button className="chat-send-button" onClick={handleSend} disabled={loading || !input.trim()}>
+                    {loading ? 'Sending...' : 'Send Message'}
+                  </button>
+                </div>
+                {error && <div className="chat-error-banner">{error}</div>}
+              </div>
+            </>
+          )}
         </div>
       </section>
     </div>
   );
 };
 
-export default Chat;
+export default ChatDB;
+export { Chat };
