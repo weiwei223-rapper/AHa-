@@ -133,6 +133,10 @@ class PythonCodeCompiler:
         Returns:
             Tuple of (stdout, stderr)
         """
+        # 增加 UTF-8 宣告以防止 Windows 環境下的編碼錯誤
+        if not code.startswith("# -*- coding: utf-8 -*-"):
+            code = "# -*- coding: utf-8 -*-\n" + code
+
         # Validate code first
         is_valid, error = self.compile(code)
         if not is_valid:
@@ -141,19 +145,25 @@ class PythonCodeCompiler:
         exec_timeout = timeout or self.timeout
         
         try:
-            # Create temporary file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            # Create temporary file with explicit utf-8 encoding
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as f:
                 f.write(code)
                 temp_file = f.name
             
             try:
+                # Prepare environment with UTF-8 encoding
+                env = os.environ.copy()
+                env["PYTHONIOENCODING"] = "utf-8"
+
                 # Execute the code
                 result = subprocess.run(
                     [sys.executable, temp_file],
                     capture_output=True,
                     text=True,
                     timeout=exec_timeout,
-                    cwd=os.path.dirname(temp_file)
+                    cwd=os.path.dirname(temp_file),
+                    encoding='utf-8',
+                    env=env
                 )
                 
                 # Capture output and error

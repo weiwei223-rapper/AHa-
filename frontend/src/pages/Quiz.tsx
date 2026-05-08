@@ -165,11 +165,20 @@ const Quiz = () => {
         video_id: quiz.video_id,
         score: total_score,
         total_questions: quiz.questions.length,
+        details_json: JSON.stringify(details), // 保存詳細作答與比對詳情
       });
       setShowResults(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error grading quiz:", err);
-      setError("批改過程中發生錯誤，請稍後再試。");
+      let msg = "未知錯誤";
+      if (err.response?.data?.detail) {
+        msg = typeof err.response.data.detail === 'string' 
+          ? err.response.data.detail 
+          : JSON.stringify(err.response.data.detail);
+      } else if (err.message) {
+        msg = err.message;
+      }
+      setError(`批改失敗: ${msg}`);
     } finally {
       setGrading(false);
       setLoading(false);
@@ -356,17 +365,22 @@ const Quiz = () => {
           <div style={{ marginTop: "20px" }}>
             <p className="page-eyebrow">Python Editor (填入 ___ 處內容)</p>
             <style>{`
-              /* NUCLEAR FIX for Monaco Suggestion Widget */
+              /* ULTIMATE Monaco Suggestion Widget Fix */
               .monaco-editor .suggest-widget,
-              .monaco-editor .suggest-widget *,
+              .monaco-editor .suggest-widget .monaco-list,
               .monaco-editor .suggest-widget .monaco-list-row,
-              .monaco-editor .suggest-widget .monaco-list-row * {
+              .monaco-editor .suggest-widget .monaco-list-row .label-name,
+              .monaco-editor .suggest-widget .monaco-list-row .details-label,
+              .monaco-editor .suggest-widget .monaco-list-row .read-more {
                 color: #ffffff !important;
                 background-color: #1e1e1e !important;
               }
-              .monaco-editor .suggest-widget .monaco-list-row.focused,
-              .monaco-editor .suggest-widget .monaco-list-row.focused * {
+              .monaco-editor .suggest-widget .monaco-list-row:hover,
+              .monaco-editor .suggest-widget .monaco-list-row.focused {
                 background-color: #2b415e !important;
+              }
+              .monaco-editor .suggest-widget .monaco-list-row.focused .label-name,
+              .monaco-editor .suggest-widget .monaco-list-row.focused .details-label {
                 color: #ffffff !important;
               }
             `}</style>
