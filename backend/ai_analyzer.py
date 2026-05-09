@@ -1,188 +1,184 @@
-"""
-AI-powered video content analyzer using Google Gemini API
-Analyzes video content and generates quiz questions
-"""
-
 import os
+import requests
 import json
-from typing import List
-from dotenv import load_dotenv
-import google.generativeai as genai
-import schema
+from typing import Optional
+from urllib.parse import urlparse, parse_qs
 
-# Load environment variables
-load_dotenv(dotenv_path="./API_key.env")
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable, CouldNotRetrieveTranscript
 
-def init_gemini():
-    """Initialize Gemini AI client"""
-    api_key = os.getenv("AI_API_KEY")
+# Configuration
+DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+def init_gemini() -> str:
+    api_key = (os.getenv("AI_API_KEY") or "").strip()
     if not api_key:
         raise ValueError("AI_API_KEY not found in environment variables")
-    genai.configure(api_key=api_key)
-    return genai
+    return api_key
 
-def extract_video_metadata(video_link: str, title: str) -> dict:
-    """Extract metadata about the video from its link"""
-    metadata = {
-        "is_youtube": "youtube.com" in video_link or "youtu.be" in video_link,
-        "is_playlist": "playlist" in video_link,
-        "video_link": video_link,
-        "title": title,
-    }
-    return metadata
 
-def analyze_video_content_with_ai(video_link: str, title: str) -> List[schema.QuizQuestion]:
-    """
-    Analyze video content using Gemini AI and generate quiz questions
+def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> str:
+    api_key = init_gemini()
+    model_name = model.replace("models/", "")
     
-    Args:
-        video_link: URL of the video
-        title: Title of the video
-        
-    Returns:
-        List of quiz questions
-    """
-    try:
-        # Initialize Gemini
-        init_gemini()
-        model = genai.GenerativeModel('gemini-pro')
-        
-        # Extract metadata
-        metadata = extract_video_metadata(video_link, title)
-        
-        # Create a detailed prompt for quiz generation
-        prompt = f"""
-Based on the following video information, generate 5 multiple-choice quiz questions in Traditional Chinese.
-
-Video Title: {title}
-Video Link: {video_link}
-
-Requirements:
-1. Create 5 quiz questions that test understanding of the video content
-2. Each question should have 4 multiple-choice options
-3. Include the index (0-3) of the correct answer
-4. Questions should be educational and challenging
-5. Return ONLY a valid JSON array with no additional text
-
-For playlist/course videos: Focus on learning objectives and key concepts
-For tutorial videos: Focus on practical skills and implementation details
-For general videos: Focus on main topics and takeaways
-
-JSON format:
-[
-  {{
-    "question": "Question text in Traditional Chinese",
-    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-    "correct_answer": 0
-  }},
-  ...
-]
-
-Please generate the quiz questions now:
-"""
-        
-        # Generate quiz questions
-        response = model.generate_content(prompt)
-        
-        if not response.text:
-            raise ValueError("Empty response from Gemini AI")
-        
-        # Parse the JSON response
-        quiz_data = parse_ai_response(response.text)
-        
-        # Convert to schema objects
-        questions = []
-        for item in quiz_data:
-            question = schema.QuizQuestion(
-                question=item.get("question", ""),
-                options=item.get("options", []),
-                correct_answer=item.get("correct_answer", 0)
-            )
-            questions.append(question)
-        
-        return questions
-        
-    except Exception as e:
-        print(f"Error analyzing video with AI: {e}")
-        # Fallback to basic questions if AI fails
-        return generate_fallback_questions(title)
-
-def parse_ai_response(response_text: str) -> List[dict]:
-    """
-    Parse the AI response and extract JSON
-    
-    Args:
-        response_text: Raw response from Gemini API
-        
-    Returns:
-        List of question dictionaries
-    """
-    try:
-        # Try to extract JSON from the response
-        # Sometimes the AI includes extra text before/after JSON
-        start_idx = response_text.find('[')
-        end_idx = response_text.rfind(']') + 1
-        
-        if start_idx == -1 or end_idx == 0:
-            raise ValueError("No JSON array found in response")
-        
-        json_str = response_text[start_idx:end_idx]
-        quiz_data = json.loads(json_str)
-        
-        # Validate the data structure
-        if not isinstance(quiz_data, list) or len(quiz_data) == 0:
-            raise ValueError("Invalid quiz data structure")
-        
-        # Ensure each question has required fields
-        for item in quiz_data:
-            if not all(key in item for key in ["question", "options", "correct_answer"]):
-                raise ValueError("Missing required fields in question")
-            if len(item["options"]) != 4:
-                raise ValueError("Each question must have exactly 4 options")
-        
-        return quiz_data
-        
-    except json.JSONDecodeError as e:
-        print(f"JSON parsing error: {e}")
-        raise ValueError(f"Failed to parse AI response as JSON: {e}")
-    except Exception as e:
-        print(f"Error parsing AI response: {e}")
-        raise
-
-def generate_fallback_questions(title: str) -> List[schema.QuizQuestion]:
-    """
-    Generate basic fallback questions if AI analysis fails
-    
-    Args:
-        title: Video title
-        
-    Returns:
-        List of basic quiz questions
-    """
-    return [
-        schema.QuizQuestion(
-            question=f"關於 '{title}' 的影片，你獲得什麼主要知識？",
-            options=["新知識", "新技能", "新觀點", "理論概念"],
-            correct_answer=0
-        ),
-        schema.QuizQuestion(
-            question=f"這個 '{title}' 影片適合什麼學習者？",
-            options=["初學者", "進階者", "專家", "所有人"],
-            correct_answer=3
-        ),
-        schema.QuizQuestion(
-            question=f"你會推薦 '{title}' 這個影片嗎？",
-            options=["會", "可能會", "不確定", "不會"],
-            correct_answer=0
-        ),
-        schema.QuizQuestion(
-            question=f"'{title}' 影片內容的難度？",
-            options=["簡單", "中等", "困難", "非常困難"],
-            correct_answer=1
-        ),
-        schema.QuizQuestion(
-            question=f"看完 '{title}' 後，你想學習什麼？",
-            options=["相關進階課題", "實踐應用", "進一步深化", "保持現狀"],
-            correct_answer=0
+    system_parts: list[dict] = []
+    gemini_contents: list[dict] = []
+    for item in contents:
+        role = item.get("role", "user")
+        parts = item.get("parts", [])
+        if role == "system":
+            system_parts.extend(parts)
+            continue
+        gemini_contents.append(
+            {
+                "role": "model" if role == "assistant" else "user",
+                "parts": parts,
+            }
         )
-    ]
+
+    request_payload = {
+        "contents": gemini_contents,
+        "generationConfig": {
+            "temperature": 0.5, 
+            "maxOutputTokens": 8192,
+            "topP": 0.95,
+            "topK": 40
+        },
+    }
+    if system_parts:
+        request_payload["systemInstruction"] = {"parts": system_parts}
+
+    try:
+        response = requests.post(
+            GEMINI_API_URL.format(model=model_name),
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json=request_payload,
+            timeout=120,
+        )
+        if not response.ok:
+            raise ValueError(f"Gemini API error {response.status_code} for model '{model_name}': {response.text}")
+        data = response.json()
+        candidates = data.get("candidates", [])
+        if not candidates:
+            raise ValueError(f"No candidates returned from Gemini: {data}")
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if not parts:
+            raise ValueError(f"No content parts returned from Gemini: {data}")
+        text = "".join(part.get("text", "") for part in parts).strip()
+        if not text:
+            raise ValueError("Empty response text from Gemini")
+        return text
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Gemini API request failed: {str(e)}")
+
+
+def analyze_code(code: str, language: str) -> str:
+    prompt = f"""You are an expert programmer. Analyze the following {language} code and provide:
+1. A brief summary of what the code does.
+2. Potential issues or bugs.
+3. Suggestions for optimization or improvement.
+
+Code:
+```{language}
+{code}
+```"""
+    contents = [{"role": "user", "parts": [{"text": prompt}]}]
+    return generate_text_with_gemini(contents)
+
+
+def generate_learning_content(topic: str, context: Optional[str] = None) -> str:
+    prompt = f"Explain the concept of '{topic}' in the context of computer science and programming."
+    if context:
+        prompt += f"\nAdditional context: {context}"
+    prompt += "\nProvide a clear explanation with examples where appropriate."
+    contents = [{"role": "user", "parts": [{"text": prompt}]}]
+    return generate_text_with_gemini(contents)
+
+
+def generate_quiz(content: str, num_questions: int = 5) -> list[dict]:
+    prompt = f"""Based on the following content, generate {num_questions} multiple-choice questions for a quiz.
+Each question should have 4 options and exactly one correct answer.
+Format the output as a JSON array of objects, where each object has:
+- question: The question text
+- options: An array of 4 strings
+- correct_answer: The index of the correct option (0-3)
+- explanation: A brief explanation of the correct answer
+
+Content:
+{content}
+"""
+    contents = [{"role": "user", "parts": [{"text": prompt}]}]
+    response_text = generate_text_with_gemini(contents)
+    
+    # Extract JSON if the model wrapped it in markdown
+    if "```json" in response_text:
+        response_text = response_text.split("```json")[1].split("```")[0].strip()
+    elif "```" in response_text:
+        response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+    try:
+        return json.loads(response_text)
+    except json.JSONDecodeError:
+        # Fallback: try to find something that looks like a JSON array
+        start = response_text.find("[")
+        end = response_text.rfind("]") + 1
+        if start != -1 and end != 0:
+            try:
+                return json.loads(response_text[start:end])
+            except:
+                pass
+        raise ValueError("Failed to parse quiz JSON from Gemini response")
+
+def get_chat_response(messages: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> str:
+    """
+    Get a response from Gemini for a list of chat messages.
+    messages: List of dicts with 'role' (user/assistant/system) and 'content' (str)
+    """
+    contents = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        # Gemini expects 'parts' to be a list of dictionaries with 'text'
+        contents.append({
+            "role": role,
+            "parts": [{"text": content}]
+        })
+    
+    return generate_text_with_gemini(contents, model=model)
+
+
+def _extract_youtube_video_id(url: str) -> Optional[str]:
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        hostname = hostname.lower()
+        if hostname in ("youtu.be", "www.youtu.be"):
+            return parsed.path.lstrip("/")
+        if hostname in ("youtube.com", "www.youtube.com", "m.youtube.com"):
+            if parsed.path == "/watch":
+                return parse_qs(parsed.query).get("v", [None])[0]
+            if parsed.path.startswith("/embed/") or parsed.path.startswith("/v/"):
+                return parsed.path.split("/")[2]
+    except Exception:
+        return None
+    return None
+
+
+def fetch_video_transcript(video_link: str) -> Optional[str]:
+    """Fetch transcript for a YouTube video link."""
+    video_id = _extract_youtube_video_id(video_link)
+    if not video_id:
+        return None
+
+    try:
+        transcript_items = YouTubeTranscriptApi.get_transcript(
+            video_id,
+            languages=["zh-Hant", "zh-TW", "zh-Hans", "en"]
+        )
+        return "\n".join(item.get("text", "") for item in transcript_items).strip()
+    except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable, CouldNotRetrieveTranscript):
+        return None
+    except Exception:
+        return None

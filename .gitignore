@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+
+# Local environment and secrets
+.env
+.env.*
+backend/.env
+backend/API_key.env
+!*.example
+
+# Build artifacts
+dist/
+build/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+pytest-cache-files-*/
+.coverage
+htmlcov/
+
+# Editor folders
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

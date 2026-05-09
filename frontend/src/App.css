@@ -1,34 +1,263 @@
-.sidenav {
-  height: 100%;
-  width: 160px;
+.workspace-shell {
+  min-height: 100vh;
+}
+
+.workspace-sidebar {
+  width: 240px;
   position: fixed;
-  z-index: 1;
   top: 0;
   left: 0;
-  background-color: #111;
-  overflow-x: hidden;
-  padding-top: 20px;
+  bottom: 0;
+  padding: 28px 20px;
+  background:
+    radial-gradient(circle at top left, rgba(43, 193, 241, 0.12), transparent 28%),
+    linear-gradient(180deg, #09111d 0%, #0d1524 100%);
+  border-right: 1px solid rgba(43, 193, 241, 0.14);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  z-index: 10;
 }
 
-.sidenav a {
-  padding: 6px 8px 6px 16px;
-  text-decoration: none;
-  font-size: 25px;
-  color: #818181;
+.workspace-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 6px 20px;
+  border-bottom: 1px solid rgba(43, 193, 241, 0.12);
+}
+
+.workspace-brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #2bc1f1, #0ea5e9);
+  color: #05111d;
+  font-weight: 900;
+}
+
+.workspace-brand strong {
   display: block;
+  color: white;
+  font-size: 18px;
 }
 
-.sidenav a:hover {
-  color: #f1f1f1;
+.workspace-brand span {
+  display: block;
+  color: #8da3bd;
+  font-size: 12px;
+  margin-top: 2px;
 }
 
-
-.main {
-  margin-left: 160px;
-  padding: 0px 10px;
+.workspace-nav-group {
+  display: grid;
+  gap: 10px;
 }
 
-@media screen and (max-height: 450px) {
-  .sidenav {padding-top: 15px;}
-  .sidenav a {font-size: 18px;}
+.workspace-nav-link,
+.workspace-logout-button {
+  width: 100%;
+  text-decoration: none;
+  box-sizing: border-box;
+  border-radius: 16px;
+  padding: 14px 16px;
+  color: #cfe4fb;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  transition: all 0.25s ease;
+}
+
+.workspace-nav-link:hover,
+.workspace-nav-link.active {
+  background: linear-gradient(135deg, rgba(18, 61, 88, 0.95), rgba(10, 25, 39, 0.95));
+  border-color: rgba(43, 193, 241, 0.34);
+  color: white;
+}
+
+.workspace-logout-button {
+  margin-top: auto;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: rgba(127, 29, 29, 0.12);
+  color: #fecaca;
+}
+
+.workspace-logout-button:hover {
+  background: rgba(127, 29, 29, 0.3);
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+.workspace-main {
+  margin-left: 240px;
+  min-height: 100vh;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+@media screen and (max-width: 900px) {
+  .workspace-sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+  }
+
+  .workspace-main {
+    margin-left: 0;
+    padding: 18px;
+  }
+}
+
+/* Global Chat FAB + drawer (persists across routes) */
+.chat-fab-button {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 9999;
+
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: 1px solid rgba(43, 193, 241, 0.35);
+  background: linear-gradient(135deg, #2bc1f1, #38bdf8);
+  color: #05111d;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.chat-fab-button:hover {
+  filter: brightness(1.06);
+}
+
+.chat-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.chat-drawer-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 9999;
+
+  height: 100vh;
+  width: 440px;
+  max-width: 100vw;
+
+  background:
+    radial-gradient(circle at top right, rgba(43, 193, 241, 0.18), transparent 26%),
+    linear-gradient(180deg, #0d1524, #09111d 75%);
+  border-left: 1px solid rgba(43, 193, 241, 0.18);
+  box-shadow: -20px 0 80px rgba(0, 0, 0, 0.4);
+
+  transform: translateX(100%);
+  transition: transform 0.28s ease;
+
+  display: flex;
+  flex-direction: column;
+  pointer-events: none; /* allow clicks to pass through while closed */
+}
+
+.chat-drawer.open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.chat-drawer-header {
+  height: 64px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-bottom: 1px solid rgba(43, 193, 241, 0.16);
+}
+
+.chat-drawer-title-label {
+  color: white;
+  font-weight: 800;
+}
+
+.chat-drawer-close {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(43, 193, 241, 0.16);
+  background: rgba(255, 255, 255, 0.02);
+  color: white;
+  cursor: pointer;
+}
+
+.chat-drawer-close:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chat-drawer-body {
+  flex: 1;
+  min-height: 0; /* allows child scroll containers to work */
+  overflow: auto;
+  padding: 0; /* Chat page handles its own internal spacing */
+}
+
+/* Render the existing Chat page in "drawer mode" */
+.chat-drawer .chat-page {
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: 1fr;
+}
+
+.chat-drawer .chat-sidebar {
+  position: static;
+  top: auto;
+  min-height: auto;
+}
+
+.chat-drawer .chat-thread-shell {
+  border-radius: 22px;
+}
+
+/* Fix Monaco Suggestion Widget Visibility */
+.monaco-editor .suggest-widget,
+.monaco-editor .suggest-widget * {
+  color: #ffffff !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row:hover,
+.monaco-editor .suggest-widget .monaco-list-row.focused {
+  background-color: #2b415e !important;
+  color: #ffffff !important;
+}
+
+/* ULTIMATE Fix for Monaco Suggestion Visibility */
+.monaco-editor .suggest-widget, 
+.monaco-editor .suggest-widget *,
+.monaco-editor .suggest-widget .monaco-list-row,
+.monaco-editor .suggest-widget .monaco-list-row * {
+  color: #ffffff !important;
+  background-color: #1e1e1e !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row.focused,
+.monaco-editor .suggest-widget .monaco-list-row.focused * {
+  background-color: #2b415e !important;
+  color: #ffffff !important;
 }

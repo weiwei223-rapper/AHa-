@@ -1,307 +1,464 @@
 import "./PageIndex.css";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import Editor from "@monaco-editor/react";
+import { codeAPI, quizAPI, videoAPI } from "../api";
 
-type Video = {
+type VideoItem = {
   id: number;
   video_link: string;
   title?: string | null;
+  outline?: string | null;
   created_at: string;
 };
 
 type QuizQuestion = {
   question: string;
-  options: string[];
-  correct_answer: number;
+  correct_answer: string;
+  explanation?: string | null;
+  reference_concept?: string | null;
+  question_type?: string;
+  source_time?: string | null;
+  source_excerpt?: string | null;
+  starter_code?: string | null;
+  test_cases?: string[];
 };
 
-type Quiz = {
+type QuizData = {
   video_id: number;
   video_title: string;
+  quiz_type?: string;
   questions: QuizQuestion[];
 };
 
-type QuizResult = {
-  videoId: number;
-  score: number;
-  totalQuestions: number;
-  percentage: number;
-  completedAt: string;
-};
-
-const QUIZ_RESULTS_KEY = "quizResults";
-
 const Quiz = () => {
   const [searchParams] = useSearchParams();
-  const videoIdFromUrl = searchParams.get('videoId');
-  
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const preferredVideoId = Number(searchParams.get("videoId") || 0);
+  const userId = Number(localStorage.getItem("userId") || 1);
+
+  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
+  const [userAnswers, setUserAnswers] = useState<string[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [resultSaved, setResultSaved] = useState(false);
+  const [outlineWarning, setOutlineWarning] = useState("");
 
-  // 載入影片列表
+  const [codeOutput, setCodeOutput] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [codeLoading, setCodeLoading] = useState(false);
+
   useEffect(() => {
-    fetchVideos();
+    void fetchVideos();
   }, []);
 
-  // 如果 URL 中有 videoId，自動生成該影片的測驗
   useEffect(() => {
-    if (videoIdFromUrl && videos.length > 0) {
-      const video = videos.find(v => v.id === parseInt(videoIdFromUrl));
-      if (video) {
-        generateQuiz(video);
-      }
+    if (!quiz) {
+      return;
     }
-  }, [videoIdFromUrl, videos]);
+    setCodeOutput("");
+    setCodeError("");
+  }, [quiz, currentQuestionIndex]);
+
+  useEffect(() => {
+    if (!preferredVideoId || videos.length === 0) {
+      return;
+    }
+    const target = videos.find((video) => video.id === preferredVideoId);
+    if (target && !target.outline) {
+      setOutlineWarning("Outline is not available for this video yet. Please generate an outline first.");
+    } else {
+      setOutlineWarning("");
+    }
+  }, [preferredVideoId, videos]);
+
+  const currentQuestion = quiz?.questions[currentQuestionIndex] ?? null;
+
+  const score = useMemo(() => {
+    if (!quiz) {
+      return 0;
+    }
+    return userAnswers.reduce((total, answer, index) => {
+      const correct = quiz.questions[index].correct_answer.trim();
+      // If the answer is the full code, we should check if it contains the correct_answer in place of ___
+      // But for simplicity, we'll check if the answer (which was pre-filled with starter_code) now contains the correct_answer
+      return answer.trim().includes(correct) ? total + 1 : total;
+    }, 0);
+  }, [quiz, userAnswers]);
 
   const fetchVideos = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/videos");
-      if (!res.ok) throw new Error("無法取得影片列表");
-      const data: Video[] = await res.json();
-      setVideos(data);
+      const response = await videoAPI.getVideos(userId);
+      setVideos(response.data);
     } catch (err: any) {
-      console.error(err);
-      setError("載入影片失敗");
+      console.error("Error fetching videos:", err);
+      setError(err.response?.data?.detail || "無法載入影片列表");
     }
   };
 
-  const generateQuiz = async (video: Video) => {
+  const handleGenerateQuiz = async (videoId: number) => {
+    const video = videos.find((v) => v.id === videoId);
+
+    if (!video || !video.outline) {
+      setOutlineWarning("Outline is not available for this video yet. Please generate an outline first.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
+    setOutlineWarning("");
     try {
-      const res = await fetch(`http://localhost:8000/api/videos/${video.id}/quiz`);
-      if (!res.ok) throw new Error("無法產生測驗題目");
-      const data: Quiz = await res.json();
-      setQuiz(data);
+      const response = await videoAPI.generateQuiz(videoId, userId, video.outline);
+      const nextQuiz = response.data as QuizData;
+      setQuiz(nextQuiz);
       setCurrentQuestionIndex(0);
-      setSelectedAnswers(new Array(data.questions.length).fill(-1));
+      setUserAnswers(nextQuiz.questions.map(q => q.starter_code || ""));
       setShowResults(false);
-      setResultSaved(false);
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "產生測驗失敗");
+      console.error("Error generating quiz:", err);
+      setError(err.response?.data?.detail || "無法產生影片填空題");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAnswerSelect = (questionIndex: number, answerIndex: number) => {
-    const newAnswers = [...selectedAnswers];
-    newAnswers[questionIndex] = answerIndex;
-    setSelectedAnswers(newAnswers);
-  };
-
-  const saveQuizResult = async (score: number, totalQuestions: number) => {
-    if (!quiz) return;
-
-    try {
-      const res = await fetch("http://localhost:8000/api/quiz-results", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          video_id: quiz.video_id,
-          score: score,
-          total_questions: totalQuestions
-        }),
-      });
-
-      if (!res.ok) {
-        console.error("Failed to save quiz result");
-      }
-    } catch (err) {
-      console.error("Error saving quiz result:", err);
-    }
-  };
-
-  const handleNext = () => {
-    if (currentQuestionIndex < (quiz?.questions.length || 0) - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    } else {
-      // Quiz completed - save result
-      const score = calculateScore();
-      if (quiz) {
-        saveQuizResult(score, quiz.questions.length);
-      }
-      setShowResults(true);
-    }
+  const handleAnswerChange = (value: string) => {
+    const next = [...userAnswers];
+    next[currentQuestionIndex] = value;
+    setUserAnswers(next);
   };
 
   const handlePrevious = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1);
+    setCurrentQuestionIndex((prev) => Math.max(prev - 1, 0));
+  };
+
+  const [grading, setGrading] = useState(false);
+  const [gradeDetails, setGradeDetails] = useState<any[]>([]);
+  const [backendScore, setBackendScore] = useState(0);
+
+  const handleNext = async () => {
+    if (!quiz) {
+      return;
     }
-  };
-
-  const calculateScore = () => {
-    if (!quiz) return 0;
-    let correct = 0;
-    selectedAnswers.forEach((answer, index) => {
-      if (answer === quiz.questions[index].correct_answer) {
-        correct++;
-      }
-    });
-    return correct;
-  };
-
-  useEffect(() => {
-    if (!showResults || !quiz || resultSaved) {
+    if (currentQuestionIndex < quiz.questions.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
       return;
     }
 
-    const score = calculateScore();
-    const totalQuestions = quiz.questions.length;
-    const percentage = Math.round((score / totalQuestions) * 100);
-    const nextResult: QuizResult = {
-      videoId: quiz.video_id,
-      score,
-      totalQuestions,
-      percentage,
-      completedAt: new Date().toISOString(),
-    };
-
+    setGrading(true);
+    setLoading(true);
     try {
-      const raw = localStorage.getItem(QUIZ_RESULTS_KEY);
-      const existingResults: QuizResult[] = raw ? JSON.parse(raw) : [];
-      const safeResults = Array.isArray(existingResults) ? existingResults : [];
-      localStorage.setItem(QUIZ_RESULTS_KEY, JSON.stringify([nextResult, ...safeResults]));
-      setResultSaved(true);
-    } catch (storageError) {
-      console.error("Failed to save quiz result:", storageError);
+      // 呼叫後端進行邏輯批改
+      const gradeRes = await quizAPI.gradeQuiz(quiz.video_id, {
+        user_id: userId,
+        answers: userAnswers,
+      });
+
+      const { total_score, details } = gradeRes.data;
+      setBackendScore(total_score);
+      setGradeDetails(details);
+
+      await quizAPI.createResult({
+        user_id: userId,
+        video_id: quiz.video_id,
+        score: total_score,
+        total_questions: quiz.questions.length,
+        details_json: JSON.stringify(details), // 保存詳細作答與比對詳情
+      });
+      setShowResults(true);
+    } catch (err: any) {
+      console.error("Error grading quiz:", err);
+      let msg = "未知錯誤";
+      if (err.response?.data?.detail) {
+        msg = typeof err.response.data.detail === 'string' 
+          ? err.response.data.detail 
+          : JSON.stringify(err.response.data.detail);
+      } else if (err.message) {
+        msg = err.message;
+      }
+      setError(`批改失敗: ${msg}`);
+    } finally {
+      setGrading(false);
+      setLoading(false);
     }
-  }, [showResults, quiz, resultSaved, selectedAnswers]);
+  };
+
+  const executeCode = async () => {
+    setCodeLoading(true);
+    setCodeOutput("");
+    setCodeError("");
+    try {
+      const userCode = userAnswers[currentQuestionIndex];
+      const testBlock = currentQuestion?.test_cases?.join("\n") || "";
+      const script = testBlock ? `${userCode}\n\n${testBlock}\nprint("All tests passed")` : userCode;
+      const response = await codeAPI.executeCode({ code: script });
+      setCodeOutput(response.data.output);
+      setCodeError(response.data.error);
+    } catch (err: any) {
+      console.error("Error executing code:", err);
+      setCodeError(err.response?.data?.detail || "執行程式失敗");
+    } finally {
+      setCodeLoading(false);
+    }
+  };
 
   const resetQuiz = () => {
     setQuiz(null);
     setCurrentQuestionIndex(0);
-    setSelectedAnswers([]);
+    setUserAnswers([]);
     setShowResults(false);
-    setResultSaved(false);
+    setCodeOutput("");
+    setCodeError("");
   };
 
   if (showResults && quiz) {
-    const score = calculateScore();
-    const totalQuestions = quiz.questions.length;
-    const percentage = Math.round((score / totalQuestions) * 100);
-
     return (
-      <div className="main">
-        <div className="quiz-container">
-          <h1>測驗結果</h1>
-          <h2>影片：{quiz.video_title}</h2>
-          <div className="score-display">
-            <h3>得分：{score}/{totalQuestions} ({percentage}%)</h3>
-            {percentage >= 80 && <p>🎉 優秀！</p>}
-            {percentage >= 60 && percentage < 80 && <p>👍 不錯！</p>}
-            {percentage < 60 && <p>💪 繼續努力！</p>}
+      <div className="page-shell">
+        <section className="page-hero">
+          <div>
+            <div className="page-eyebrow">Quiz Result</div>
+            <h1>{quiz.video_title}</h1>
+            <p>這份題目是根據影片內容產生的程式填空題，系統已透過 3 個測試案例進行邏輯驗證。</p>
+          </div>
+          <div className="page-hero-metric">
+            <span>Score</span>
+            <strong>{backendScore}%</strong>
+            <p>
+              {gradeDetails.filter(d => d.passed).length} / {quiz.questions.length} Passed
+            </p>
+          </div>
+        </section>
+
+        <section className="panel-card">
+          <div className="quiz-review-list">
+            {quiz.questions.map((question, index) => {
+              const detail = gradeDetails[index];
+              return (
+                <article key={index} className="quiz-review-card">
+                  <div className={`quiz-review-status ${detail?.passed ? "correct" : "review"}`}>
+                    {detail?.passed ? "Logic Correct" : "Logic Failed"}
+                  </div>
+                  <h3>
+                    {index + 1}. {question.question}
+                  </h3>
+                  {question.reference_concept && (
+                    <p style={{ color: "#38bdf8", fontWeight: "bold", margin: "8px 0" }}>
+                      {question.reference_concept}
+                    </p>
+                  )}
+
+                  <div style={{ marginTop: "12px" }}>
+                    <p><strong>驗證詳情：</strong></p>
+                    <ul style={{ listStyle: "none", padding: 0 }}>
+                      {detail?.test_results?.map((res: any, i: number) => (
+                        <li key={i} style={{ color: res.passed ? "#4ade80" : "#fb7185", fontSize: "0.9em", marginBottom: "4px" }}>
+                          Test {i+1}: {res.passed ? "✓ Passed" : `✗ Failed (Expected: ${res.expected}, Actual: ${res.actual})`}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div style={{ marginTop: "12px" }}>
+                    <p><strong>你的作答：</strong></p>
+                    <pre className="code-snippet">{userAnswers[index] || "未作答"}</pre>
+                  </div>
+
+                  {question.explanation && (
+                    <p style={{ marginTop: "12px" }}>
+                      <strong>解析：</strong>
+                      {question.explanation}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
           </div>
 
-          <div className="results-review">
-            <h3>答案回顧：</h3>
-            {quiz.questions.map((question, index) => (
-              <div key={index} className="question-review">
-                <p><strong>問題 {index + 1}：</strong> {question.question}</p>
-                <p>你的答案：{selectedAnswers[index] !== undefined && selectedAnswers[index] !== -1 ? question.options[selectedAnswers[index]] : "未作答"}</p>
-                <p>正確答案：{question.options[question.correct_answer]}</p>
-                <p className={selectedAnswers[index] === question.correct_answer ? "correct" : "incorrect"}>
-                  {selectedAnswers[index] === question.correct_answer ? "✓ 正確" : selectedAnswers[index] !== undefined && selectedAnswers[index] !== -1 ? "✗ 錯誤" : "未作答"}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <button onClick={resetQuiz} className="reset-btn">重新選擇影片</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (quiz && !showResults) {
-    const currentQuestion = quiz.questions[currentQuestionIndex];
-
-    return (
-      <div className="main">
-        <div className="quiz-container">
-          <h1>影片測驗</h1>
-          <h2>{quiz.video_title}</h2>
-          <div className="progress">
-            問題 {currentQuestionIndex + 1} / {quiz.questions.length}
-          </div>
-
-          <div className="question">
-            <h3>{currentQuestion.question}</h3>
-            <div className="options">
-              {currentQuestion.options.map((option, index) => (
-                <label key={index} className="option">
-                  <input
-                    type="radio"
-                    name={`question-${currentQuestionIndex}`}
-                    value={index}
-                    checked={selectedAnswers[currentQuestionIndex] === index}
-                    onChange={() => handleAnswerSelect(currentQuestionIndex, index)}
-                  />
-                  {option}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="navigation">
-            <button
-              onClick={handlePrevious}
-              disabled={currentQuestionIndex === 0}
-              className="nav-btn"
-            >
-              上一題
-            </button>
-            <button
-              onClick={handleNext}
-              disabled={selectedAnswers[currentQuestionIndex] === -1}
-              className="nav-btn"
-            >
-              {currentQuestionIndex === quiz.questions.length - 1 ? "完成測驗" : "下一題"}
+          <div className="quiz-nav-row">
+            <button onClick={resetQuiz} className="page-primary-button">
+              回到影片列表
             </button>
           </div>
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="main">
-      <div className="quiz-container">
-        <h1>影片測驗</h1>
-        <p>選擇一個影片來開始測驗：</p>
-
-        {error && <div className="error">{error}</div>}
-
-        {loading && <div className="loading">載入中...</div>}
-
-        <div className="video-list">
-          {videos.length === 0 ? (
-            <p>目前沒有影片，請先上傳影片。</p>
-          ) : (
-            videos.map((video) => (
-              <div key={video.id} className="video-item">
-                <h3>{video.title || "未命名影片"}</h3>
-                <p>上傳時間：{new Date(video.created_at).toLocaleString()}</p>
-                <button
-                  onClick={() => generateQuiz(video)}
-                  disabled={loading}
-                  className="quiz-btn"
-                >
-                  開始測驗
-                </button>
-              </div>
-            ))
-          )}
+    <div className="page-shell">
+      <section className="page-hero">
+        <div>
+          <div className="page-eyebrow">Video Quiz</div>
+          <h1>影片程式填空題</h1>
+          <p>系統會依照影片逐字稿與摘要，並參考 LeetCode 題庫，生成 Python 程式填空題。</p>
         </div>
-      </div>
+        <div className="page-hero-metric">
+          <span>Sources</span>
+          <strong>{videos.length}</strong>
+          <p>{quiz?.quiz_type || "waiting"}</p>
+        </div>
+      </section>
+
+      {error && <div className="page-error">{error}</div>}
+      {outlineWarning && <div className="page-error">{outlineWarning}</div>}
+      {loading && <div className="page-loading">正在分析影片並產生填空題...</div>}
+
+      <section className="video-library-grid">
+        {videos.map((video) => (
+          <article key={video.id} className="video-library-card">
+            <div className="video-library-top">
+              <div style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+                <div className="video-library-badge">Quiz Source</div>
+                {video.outline ? (
+                  <div style={{ display: "inline-flex", width: "fit-content", borderRadius: "999px", padding: "6px 10px", background: "rgba(34, 197, 94, 0.15)", color: "#86efac", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    ✓ Outline
+                  </div>
+                ) : (
+                  <div style={{ display: "inline-flex", width: "fit-content", borderRadius: "999px", padding: "6px 10px", background: "rgba(248, 113, 113, 0.15)", color: "#fecaca", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    ✗ No Outline
+                  </div>
+                )}
+              </div>
+              <h3>{video.title || "Untitled Video"}</h3>
+              <p className="video-library-description">
+                Added at {new Date(video.created_at).toLocaleString("zh-TW")}
+              </p>
+            </div>
+            <div className="video-library-actions">
+              <button
+                onClick={() => void handleGenerateQuiz(video.id)}
+                disabled={loading || !video.outline}
+                className="page-primary-button"
+                title={!video.outline ? "Outline is not available for this video. Please generate an outline first." : ""}
+              >
+                Generate Quiz
+              </button>
+            </div>
+          </article>
+        ))}
+
+        {videos.length === 0 && (
+          <div className="empty-state-card">
+            <h3>目前沒有影片</h3>
+            <p>先到 Learning Material 新增影片，才能產生和影片內容相關的填空題。</p>
+          </div>
+        )}
+      </section>
+
+      {quiz && currentQuestion && (
+        <section className="panel-card">
+          <div className="quiz-question-card">
+            <div className="quiz-question-number">
+              Question {currentQuestionIndex + 1} / {quiz.questions.length}
+            </div>
+            <h2>{currentQuestion.question}</h2>
+
+            {currentQuestion.reference_concept && (
+              <p style={{ color: "#38bdf8", fontSize: "1.1em", fontWeight: "bold", marginTop: "10px" }}>
+                {currentQuestion.reference_concept}
+              </p>
+            )}
+          </div>
+
+          <div style={{ marginTop: "20px" }}>
+            <p className="page-eyebrow">Python Editor (填入 ___ 處內容)</p>
+            <style>{`
+              /* ULTIMATE Monaco Suggestion Widget Fix */
+              .monaco-editor .suggest-widget,
+              .monaco-editor .suggest-widget .monaco-list,
+              .monaco-editor .suggest-widget .monaco-list-row,
+              .monaco-editor .suggest-widget .monaco-list-row .label-name,
+              .monaco-editor .suggest-widget .monaco-list-row .details-label,
+              .monaco-editor .suggest-widget .monaco-list-row .read-more {
+                color: #ffffff !important;
+                background-color: #1e1e1e !important;
+              }
+              .monaco-editor .suggest-widget .monaco-list-row:hover,
+              .monaco-editor .suggest-widget .monaco-list-row.focused {
+                background-color: #2b415e !important;
+              }
+              .monaco-editor .suggest-widget .monaco-list-row.focused .label-name,
+              .monaco-editor .suggest-widget .monaco-list-row.focused .details-label {
+                color: #ffffff !important;
+              }
+            `}</style>
+            <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
+              <Editor
+                height="100%"
+                language="python"
+                value={userAnswers[currentQuestionIndex]}
+                onChange={(value) => handleAnswerChange(value || "")}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  lineNumbers: "on",
+                  roundedSelection: false,
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+              />
+            </div>
+          </div>
+
+          {(currentQuestion.test_cases && currentQuestion.test_cases.length > 0) && (
+            <div>
+              <p className="page-eyebrow">Test Cases</p>
+              <article className="quiz-review-card">
+                <pre className="code-snippet">
+                  {currentQuestion.test_cases.join("\n")}
+                </pre>
+              </article>
+            </div>
+          )}
+
+          {(codeOutput || codeError) && (
+            <div>
+              {codeOutput && (
+                <div>
+                  <p className="page-eyebrow">Output</p>
+                  <article className="quiz-review-card">
+                    <pre className="code-snippet">{codeOutput}</pre>
+                  </article>
+                </div>
+              )}
+              {codeError && (
+                <div>
+                  <p className="page-eyebrow">Error</p>
+                  <article className="quiz-review-card">
+                    <pre className="code-snippet">{codeError}</pre>
+                  </article>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end" }} className="unified-control-bar">
+            <button
+              onClick={handlePrevious}
+              disabled={currentQuestionIndex === 0}
+              className="page-secondary-button"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => void handleNext()}
+              className="page-primary-button"
+            >
+              {currentQuestionIndex === quiz.questions.length - 1 ? "Finish" : "Next"}
+            </button>
+            <button
+              onClick={() => void executeCode()}
+              disabled={codeLoading}
+              className="page-primary-button"
+            >
+              {codeLoading ? "Testing..." : "Test"}
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 };
