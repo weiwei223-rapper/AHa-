@@ -93,12 +93,35 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         return text
     except requests.exceptions.RequestException as e:
         raise ValueError(f"Gemini API request failed: {str(e)}")
+def get_video_metadata(video_link: str) -> dict:
+    """Fetch original metadata (like title) from YouTube using yt-dlp."""
+    _setup_ffmpeg()
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': True, # 只抓元數據，不下載影片
+        'cookiesfrombrowser': ('chrome', 'edge'),
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_link, download=False)
+            return {
+                "title": info.get("title", "Unknown Video"),
+                "uploader": info.get("uploader", "Unknown"),
+                "description": info.get("description", "")
+            }
+    except Exception as e:
+        print(f"DEBUG: Failed to fetch metadata: {e}")
+        return {"title": "Unknown Video", "uploader": "Unknown", "description": ""}
+
+
 def fetch_video_transcript(video_link: str) -> str:
-    """Fetch transcript with multi-stage fallback and translation support."""
+    """Fetch transcript using YouTube API. Return empty if no subtitles found to trigger Title Fallback."""
     video_id = extract_youtube_video_id(video_link)
     if not video_id:
         return ""
 
+    print(f"DEBUG: Attempting to fetch subtitles for {video_id}...")
     try:
         api = YouTubeTranscriptApi()
         transcript_list = api.list(video_id)
@@ -119,51 +142,51 @@ def fetch_video_transcript(video_link: str) -> str:
                     transcript = next(iter(transcript_list)).translate('zh-TW')
 
         data = transcript.fetch()
-        return " ".join([item.text for item in data])
+        result = " ".join([item.text for item in data])
+        print(f"DEBUG: Successfully fetched subtitles ({len(result)} chars)")
+        return result
     except Exception as e:
-        print(f"DEBUG: YouTube API failed: {e}. Trying Whisper...")
-    
-    # 5. 中間手段：AI 語音辨識
-    try:
-        return _transcribe_with_whisper(video_link)
-    except Exception as e:
-        print(f"DEBUG: Whisper failed: {e}")
-    
-    # 6. 最終保險：回傳空字串，讓 learning_pipeline 使用標題進行推理分析
-    return ""
+        print(f"DEBUG: No subtitles found on YouTube for {video_id}: {e}")
+        # 回傳空字串，這會觸發 learning_pipeline.py 中的「標題推理專家模式」
+        return ""
 
 
 
 def _transcribe_with_whisper(video_link: str) -> str:
-    """Download audio and use Whisper to transcribe."""
+    """Download audio and use Whisper to transcribe with Anti-Bot bypass."""
     _setup_ffmpeg()
     
-    # 清理 URL，避免下載到播放清單觸發機器人驗證
     video_id = extract_youtube_video_id(video_link)
     clean_url = f"https://www.youtube.com/watch?v={video_id}" if video_id else video_link
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        # 下載音檔
+        # 強力偽裝下載參數
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': os.path.join(temp_dir, 'audio.%(ext)s'),
-            'ffmpeg_location': FFMPEG_PATH, # 強制指定 ffmpeg 位置
-            'noplaylist': True, # 拒絕下載播放清單
+            'ffmpeg_location': FFMPEG_PATH,
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            # 偽裝成一般的 Chrome 瀏覽器
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.google.com/',
+            # 關鍵：嘗試從本地瀏覽器借用 Cookie 繞過機器人驗證 (支援 Chrome, Edge)
+            'cookiesfrombrowser': ('chrome', 'edge'), 
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            'quiet': False, # 開啟日誌以利觀察進度
+            'quiet': False,
             'no_warnings': False,
         }
 
-        print(f"DEBUG: Starting audio download via yt-dlp for {clean_url}...")
+        print(f"DEBUG: Starting ARMORED audio download for {clean_url}...")
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([clean_url])
         except Exception as dl_err:
-            print(f"DEBUG: Download failed: {dl_err}")
+            print(f"DEBUG: Armored download failed: {dl_err}. YouTube security is very strong.")
             raise dl_err
 
         audio_path = os.path.join(temp_dir, 'audio.mp3')

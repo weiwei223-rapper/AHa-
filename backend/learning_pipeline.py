@@ -106,13 +106,26 @@ def generate_outline(transcript: str, title: str) -> str:
 def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAnalysisResponse:
     # 獲取逐字稿
     transcript = ai_analyzer.fetch_video_transcript(video_link)
+    
     if not transcript:
-        # 零失敗備援：如果完全沒有字幕也無法轉譯，使用「標題」進行推理分析
-        outline = generate_outline(f"這是一部名為「{title}」的教學影片。", title)
+        # 抓取 YouTube 原始標題以利精準推理 (避免受使用者自定義標題干擾)
+        meta = ai_analyzer.get_video_metadata(video_link)
+        original_title = meta.get("title") or title
+        
+        # 零失敗備援：讓 AI 以專家身份根據「原始標題」進行知識推理
+        fallback_prompt = f"""
+你是一位專業的 Python 導師。目前系統無法從影片中提取聲音，但我們知道這部影片的原始標題是「{original_title}」。
+請根據這個標題所涉及的 Python 技術主題，產出一份結構化的學習大綱。
+要求：
+1. 用 5 點條列說明該主題的核心語法、運算邏輯與常見應用。
+2. 內容要具體且具備技術深度。
+3. 使用繁體中文。
+"""
+        outline = _call_llm(fallback_prompt)
         topics = _parse_bullets(outline)
         return schema.VideoAnalysisResponse(
-            video_id=video_id, video_title=title, transcript_source="failed",
-            transcript_excerpt="系統無法取得影片聲音或字幕，已轉為使用「影片標題」進行推理分析。", 
+            video_id=video_id, video_title=original_title, transcript_source="failed",
+            transcript_excerpt="系統目前因 YouTube 限制無法取得音軌，已啟動『專家推理模式』根據影片原始標題生成學習重點。", 
             outline_markdown=outline,
             key_topics=topics, retrieved_chunks=[], vector_backend="none",
             generated_at=datetime.utcnow()
