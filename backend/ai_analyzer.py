@@ -93,6 +93,23 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         return text
     except requests.exceptions.RequestException as e:
         raise ValueError(f"Gemini API request failed: {str(e)}")
+def get_chat_response(messages: list[dict]) -> str:
+    """Send chat history to Gemini and get a response."""
+    # Convert our internal message format to Gemini's format
+    gemini_history = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if role == "system":
+            gemini_history.append({"role": "system", "parts": [{"text": content}]})
+        elif role == "assistant":
+            gemini_history.append({"role": "assistant", "parts": [{"text": content}]})
+        else:
+            gemini_history.append({"role": "user", "parts": [{"text": content}]})
+    
+    return generate_text_with_gemini(gemini_history)
+
+
 def is_python_related(title: str, transcript: str) -> bool:
     """Use Gemini to determine if the content is related to Python programming."""
     prompt = f"""
