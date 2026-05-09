@@ -147,6 +147,11 @@ const Quiz = () => {
       return;
     }
 
+    // 防重複點擊：若已在批改中，直接返回
+    if (grading) {
+      return;
+    }
+
     setGrading(true);
     setLoading(true);
     try {
