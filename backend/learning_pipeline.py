@@ -13,6 +13,14 @@ except ImportError:
     import question_bank
     import schema
 
+try:
+    from langchain_community.document_loaders import YoutubeLoader
+except ImportError:
+    YoutubeLoader = None
+
+OUTLINE_CHUNK_SIZE = 4000
+OUTLINE_CHUNK_OVERLAP = 400
+
 @dataclass
 class TranscriptResult:
     transcript: str
@@ -22,24 +30,19 @@ def _call_llm(prompt: str) -> str:
     return ai_analyzer.generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
 
 def _extract_json_array(payload: str) -> list[dict[str, Any]]:
-    # 移除所有 Markdown
     payload = re.sub(r"```[a-z]*|```", "", payload).strip()
-    
-    # 尋找 [ ... ] 或 { ... }
     arr_match = re.search(r"\[.*\]", payload, re.DOTALL)
     if arr_match:
         try:
             return json.loads(arr_match.group(0))
         except:
             pass
-            
     obj_match = re.search(r"\{.*\}", payload, re.DOTALL)
     if obj_match:
         try:
             return [json.loads(obj_match.group(0))]
         except:
             pass
-            
     raise ValueError(f"Could not extract JSON from AI response")
 
 def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
@@ -50,23 +53,77 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
         reference_concept=str(item.get("reference_concept") or "Python"),
         question_type="fill-in-the-blank",
         source_time="unknown",
-        source_excerpt=None, # 已移除出題依據
+        source_excerpt=None,
         starter_code=str(item.get("starter_code") or ""),
         test_cases=item.get("test_cases") or ["assert True"],
     )
 
+def _parse_bullets(markdown: str) -> list[str]:
+    topics: list[str] = []
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("- ", "* ")):
+            topic = stripped[2:].strip()
+            if topic:
+                topics.append(topic)
+    return topics[:8]
+
+def generate_outline(transcript: str, title: str) -> str:
+    if not transcript.strip():
+        return "- 無法取得影片逐字稿\n- 目前不能生成可靠的影片摘要"
+
+    # 簡單分段處理
+    chunks = [transcript[i:i+OUTLINE_CHUNK_SIZE] for i in range(0, len(transcript), OUTLINE_CHUNK_SIZE - OUTLINE_CHUNK_OVERLAP)]
+    chunk_summaries: list[str] = []
+
+    for index, chunk in enumerate(chunks, start=1):
+        prompt = f"""
+請用繁體中文整理以下影片逐字稿片段。
+要求：
+1. 用 3 到 5 點條列。
+2. 每點聚焦在這段內容的具體重點。
+3. 不要補外部知識。
+
+影片標題：{title}
+片段：{index}/{len(chunks)}
+逐字稿：
+{chunk}
+"""
+        chunk_summaries.append(_call_llm(prompt))
+
+    merged_prompt = f"""
+請把以下分段摘要整合成一份影片重點整理，使用繁體中文 Markdown 條列。
+要求：
+1. 產出 4 到 8 點。
+2. 每點精簡明確。
+
+影片標題：{title}
+分段摘要：
+{chr(10).join(chunk_summaries)}
+"""
+    return _call_llm(merged_prompt)
+
 def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAnalysisResponse:
     # 獲取逐字稿
-    transcript = ai_analyzer.fetch_video_transcript(video_link) or "無逐字稿"
-    outline = f"- 影片標題：{title}\n- 內容摘要：Python 程式教學"
+    transcript = ai_analyzer.fetch_video_transcript(video_link)
+    if not transcript:
+        return schema.VideoAnalysisResponse(
+            video_id=video_id, video_title=title, transcript_source="failed",
+            transcript_excerpt="無逐字稿", outline_markdown="- 無法取得逐字稿",
+            key_topics=[], retrieved_chunks=[], vector_backend="none",
+            generated_at=datetime.utcnow()
+        )
+    
+    outline = generate_outline(transcript, title)
+    topics = _parse_bullets(outline)
     
     return schema.VideoAnalysisResponse(
         video_id=video_id, 
         video_title=title, 
         transcript_source="direct",
-        transcript_excerpt=transcript[:500], 
+        transcript_excerpt=transcript[:1000], 
         outline_markdown=outline,
-        key_topics=[title], 
+        key_topics=topics, 
         retrieved_chunks=[], 
         vector_backend="simple",
         generated_at=datetime.utcnow()
@@ -80,16 +137,17 @@ def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResp
 你是一位親切的 Python 導師。請根據影片內容產出 5 題「直覺式」的程式填空題。
 
 影片標題：{title}
-影片內容：{analysis.transcript_excerpt}
+大綱：{analysis.outline_markdown}
+影片部分內容：{analysis.transcript_excerpt}
 
 出題要求：
 1. **不要**使用 'class Solution' 物件導向結構。
 2. 使用直覺的「變數運算」或「簡單函式」風格。
-3. **嚴禁使用 input() 函式**（因為自動批改系統無法輸入）。請改用預設變數值或函式參數。
+3. **嚴禁使用 input() 函式**。
 4. 程式碼中必須包含清晰的中文注釋，標註填空處（例如：# --- 請在此處填寫 ---）。
 5. 填空處請使用唯一的 `___`。
 6. 題目敘述要包含：場景設定、輸入輸出說明。
-7. 提供 **精確 3 個** 測試案例 (test_cases)，每個案例應為一行程式碼，並使用 `print()` 輸出結果以便系統比對。
+7. 提供 **精確 3 個** 測試案例 (test_cases)，每個案例應為一行程式碼，並使用 `print()` 輸出結果。
 8. 使用繁體中文。
 
 JSON 範例格式：
@@ -99,8 +157,8 @@ JSON 範例格式：
     "reference_concept": "技術點 (例如：比較運算子)",
     "correct_answer": "答案內容",
     "explanation": "解析為何填寫此內容",
-    "starter_code": "score = 80\\n# --- 請在下方補全「大於等於 60」的邏輯 ---\\nis_pass = ___\\nprint(is_pass)",
-    "test_cases": ["print(80 >= 60)", "print(50 >= 60)", "print(60 >= 60)"]
+    "starter_code": "def check(score):\\n    # --- 請在下方補全邏輯 ---\\n    is_pass = ___\\n    return is_pass",
+    "test_cases": ["print(check(80))", "print(check(50))", "print(check(60))"]
   }}
 ]
 """

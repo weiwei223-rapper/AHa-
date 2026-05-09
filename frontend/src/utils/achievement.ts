@@ -149,42 +149,25 @@ const loginPoints: Record<number, number> = {
 
 export const buildAchievements = (params: {
   videoCount: number;
-  totalVideoCount?: number; // 新增
   questionCount: number;
   loginStreakDays: number;
   totalLoginDays: number;
 }): AchievementItem[] => {
-  const { videoCount, totalVideoCount = 1, questionCount, loginStreakDays, totalLoginDays } = params;
+  const { videoCount, questionCount, loginStreakDays, totalLoginDays } = params;
   const achievements: AchievementItem[] = [];
 
-  // 動態調整影片里程碑
-  const dynamicVideoMilestones = [1];
-  if (totalVideoCount > 1 && totalVideoCount < 5) {
-    if (!dynamicVideoMilestones.includes(totalVideoCount)) dynamicVideoMilestones.push(totalVideoCount);
-  } else if (totalVideoCount >= 5) {
-    dynamicVideoMilestones.push(5);
-    if (totalVideoCount > 5 && totalVideoCount < 10) {
-      if (!dynamicVideoMilestones.includes(totalVideoCount)) dynamicVideoMilestones.push(totalVideoCount);
-    } else if (totalVideoCount >= 10) {
-      dynamicVideoMilestones.push(10);
-      if (totalVideoCount > 10) {
-        if (!dynamicVideoMilestones.includes(totalVideoCount)) dynamicVideoMilestones.push(totalVideoCount);
-      }
-    }
-  }
-
-  dynamicVideoMilestones.sort((a, b) => a - b).forEach((threshold) => {
-    const isTotal = threshold === totalVideoCount && totalVideoCount > 1;
+  // 使用固定的影片里程碑，不再動態調整
+  videoMilestones.forEach((threshold) => {
     achievements.push({
       key: `video-${threshold}`,
       category: 'video',
-      title: isTotal ? '全能學習者' : videoTitles[threshold] || '影片里程碑',
-      description: isTotal ? `完成所有 ${threshold} 部影片分析` : `完成 ${threshold} 部影片分析並建立知識樹`,
-      points: isTotal ? 500 : 200,
+      title: videoTitles[threshold] || '影片里程碑',
+      description: `完成 ${threshold} 部影片分析並建立知識樹`,
+      points: 200,
       threshold,
       unlocked: videoCount >= threshold,
       progress: `${Math.min(videoCount, threshold)}/${threshold}`,
-      badgeImage: `/achievements/video-${threshold > 10 ? 10 : threshold}.png`,
+      badgeImage: `/achievements/video-${threshold}.png`,
     });
   });
 

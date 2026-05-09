@@ -107,7 +107,6 @@ const Profile = () => {
 
     const allAchievements = buildAchievements({
       videoCount,
-      totalVideoCount,
       questionCount,
       loginStreakDays: currentLoginMeta.consecutiveLoginDays,
       totalLoginDays: currentLoginMeta.totalLoginDays,
