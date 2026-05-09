@@ -160,21 +160,19 @@
   z-index: 9999;
 
   height: 100vh;
-  width: 440px;
+  width: 440px; /* Revert to original width */
   max-width: 100vw;
 
-  background:
-    radial-gradient(circle at top right, rgba(43, 193, 241, 0.18), transparent 26%),
-    linear-gradient(180deg, #0d1524, #09111d 75%);
-  border-left: 1px solid rgba(43, 193, 241, 0.18);
-  box-shadow: -20px 0 80px rgba(0, 0, 0, 0.4);
+  background: var(--chat-bg-main, #0d1524) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: -20px 0 80px rgba(0, 0, 0, 0.5);
 
   transform: translateX(100%);
   transition: transform 0.28s ease;
 
   display: flex;
   flex-direction: column;
-  pointer-events: none; /* allow clicks to pass through while closed */
+  pointer-events: none;
 }
 
 .chat-drawer.open {
@@ -188,8 +186,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-
-  border-bottom: 1px solid rgba(43, 193, 241, 0.16);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
 }
 
 .chat-drawer-title-label {
@@ -201,21 +199,18 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  border: 1px solid rgba(43, 193, 241, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.02);
   color: white;
   cursor: pointer;
 }
 
-.chat-drawer-close:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
 .chat-drawer-body {
   flex: 1;
-  min-height: 0; /* allows child scroll containers to work */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
-  padding: 0; /* Chat page handles its own internal spacing */
 }
 
 /* Render the existing Chat page in "drawer mode" */

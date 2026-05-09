@@ -16,7 +16,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-load_dotenv()
+load_dotenv()  # Load standard .env
+load_dotenv("API_key.env")  # Load AI API key if in separate file
 
 try:
     from . import ai_analyzer, code_compiler, database, learning_pipeline, models, schema
@@ -230,6 +231,8 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
+    user_id: Optional[int] = None
+    video_id: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
@@ -418,14 +421,39 @@ def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
     user_message = payload.message.strip()
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-    recent_videos = db.query(models.Video).order_by(models.Video.created_at.desc()).limit(3).all()
-    video_context = [{"title": video.title, "video_link": video.video_link} for video in recent_videos]
+
+    system_content = "你是一個專業的 AI 學習助理，負責協助使用者理解影片內容、解答疑問並提供延伸學習建議。"
+    
+    if payload.video_id:
+        video = db.query(models.Video).filter(models.Video.id == payload.video_id).first()
+        if video:
+            video_context = f"目前討論的影片標題是「{video.title}」。\n"
+            if video.outline:
+                video_context += f"影片大綱：\n{video.outline}\n"
+            if video.transcript:
+                # 限制逐字稿長度以避免超出 Token 限制，優先取前 8000 字
+                video_context += f"影片逐字稿內容：\n{video.transcript[:8000]}\n"
+            
+            system_content += f"\n\n{video_context}\n請務必根據以上提供的影片資訊來回答使用者的問題。如果問題與影片無關，請先嘗試從影片角度切入，或禮貌地提醒使用者該對話是圍繞著此影片展開的。"
+
+    history_payload = []
+    # 加入系統指令
+    history_payload.append({"role": "system", "content": system_content})
+    
+    # 加入歷史對話
+    for item in payload.history:
+        history_payload.append({"role": item.role, "content": item.content})
+    
+    # 加入最新訊息（如果 history 最後一筆不是最新訊息）
+    if not payload.history or payload.history[-1].content != user_message:
+        history_payload.append({"role": "user", "content": user_message})
+
     try:
-        reply = ai_analyzer.get_chat_response([{"role": item.role, "content": item.content} for item in payload.history] + [{"role": "user", "content": user_message}])
+        reply = ai_analyzer.get_chat_response(history_payload)
         return ChatResponse(reply=reply)
     except Exception as exc:
         print(f"Chat error: {exc}")
-        return ChatResponse(reply="Sorry, I'm having trouble connecting to the AI service right now.")
+        return ChatResponse(reply="抱歉，我目前無法連線到 AI 服務。請稍後再試。")
 
 
 @app.post("/api/execute-code", response_model=CodeExecutionResponse)
