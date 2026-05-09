@@ -2,18 +2,30 @@ import os
 import requests
 import json
 import re
+import tempfile
+import yt_dlp
 from typing import Optional, List, Any
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 from dotenv import load_dotenv
+from faster_whisper import WhisperModel
 
 # Configuration
 DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
+# Whisper 語音辨識設定 (使用 tiny 模型極速辨識，適合 CPU)
+WHISPER_MODEL_SIZE = "tiny"
+WHISPER_DEVICE = "cpu"
+FFMPEG_PATH = r"C:\Users\user\AppData\Roaming\anythingllm-desktop\storage\engines\ffmpeg\windows-x64"
 
 STOPWORDS = {"the", "a", "an", "and", "or", "but", "if", "then", "else", "when", "at", "from", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once"}
 GREETING_WORDS = {"大家好", "歡迎來到", "我是", "上次影片", "今天我們", "嗨", "hello", "hi", "談到", "談過", "講過"}
+
+def _setup_ffmpeg():
+    """Ensure ffmpeg is in path for the current process."""
+    if FFMPEG_PATH not in os.environ["PATH"]:
+        os.environ["PATH"] += os.pathsep + FFMPEG_PATH
 
 def init_gemini() -> str:
     # 優先載入專屬金鑰檔
@@ -21,7 +33,7 @@ def init_gemini() -> str:
     load_dotenv(env_path)
     # 也嘗試載入標準 .env
     load_dotenv()
-    
+
     api_key = (os.getenv("AI_API_KEY") or "").strip()
     if not api_key:
         raise ValueError("AI_API_KEY not found in environment variables")
@@ -31,7 +43,7 @@ def init_gemini() -> str:
 def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> str:
     api_key = init_gemini()
     model_name = model.replace("models/", "")
-    
+
     system_parts: list[dict] = []
     gemini_contents: list[dict] = []
     for item in contents:
@@ -64,7 +76,7 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
             GEMINI_API_URL.format(model=model_name),
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json=request_payload,
-            timeout=120,
+            timeout=300,
         )
         if not response.ok:
             raise ValueError(f"Gemini API error {response.status_code} for model '{model_name}': {response.text}")
@@ -81,36 +93,143 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         return text
     except requests.exceptions.RequestException as e:
         raise ValueError(f"Gemini API request failed: {str(e)}")
+def get_video_title(video_link: str) -> Optional[str]:
+    """Resiliently fetch the actual YouTube video title."""
+    # 方法 1: 使用 yt-dlp (最全面，但易被擋)
+    _setup_ffmpeg()
+    ydl_opts = {
+        'quiet': True, 'no_warnings': True, 'extract_flat': True,
+        'cookiesfrombrowser': ('chrome', 'edge'),
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_link, download=False)
+            t = info.get("title")
+            if t and "Unknown" not in t: return t
+    except:
+        pass
+
+    # 方法 2: 直接爬取 HTML (輕量級，不易被擋)
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        response = requests.get(video_link, headers=headers, timeout=10)
+        if response.ok:
+            # 找 <title> 標籤
+            title_match = re.search(r"<title>(.*?)</title>", response.text)
+            if title_match:
+                raw_title = title_match.group(1)
+                # 移除 " - YouTube" 尾綴
+                return raw_title.replace(" - YouTube", "").strip()
+    except:
+        pass
+    
+    return None
 
 
 def fetch_video_transcript(video_link: str) -> str:
-    """Fetch transcript from YouTube or other sources."""
+    """Fetch transcript using YouTube API. Return empty if no subtitles found to trigger Title Fallback."""
     video_id = extract_youtube_video_id(video_link)
     if not video_id:
         return ""
 
+    print(f"DEBUG: Attempting to fetch subtitles for {video_id}...")
     try:
-        # 實例化 API 類別（在此版本中為實例方法）
         api = YouTubeTranscriptApi()
-        data = api.fetch(
-            video_id, 
-            languages=['zh-TW', 'zh-Hant', 'zh-Hans', 'zh', 'en']
-        )
-        # 在此版本中，data 是物件列表，需使用 .text 訪問
-        return " ".join([item.text for item in data])
-    except Exception as e:
-        print(f"Transcript fetch failed for {video_id}: {e}")
-        # 嘗試不指定語言
+        transcript_list = api.list(video_id)
+        
+        # 1. 優先找繁體中文 (zh-TW, zh-Hant)
         try:
-            api = YouTubeTranscriptApi()
-            data = api.fetch(video_id)
-            return " ".join([item.text for item in data])
-        except Exception as e2:
-            print(f"Default transcript fetch also failed: {e2}")
-            return ""
+            transcript = transcript_list.find_transcript(['zh-TW', 'zh-Hant'])
+        except:
+            # 2. 找其他形式的中文
+            try:
+                transcript = transcript_list.find_transcript(['zh-Hans', 'zh', 'zh-CN'])
+            except:
+                # 3. 找英文並自動翻譯成繁中
+                try:
+                    transcript = transcript_list.find_transcript(['en']).translate('zh-TW')
+                except:
+                    # 4. 隨便抓一個可用的並翻譯
+                    transcript = next(iter(transcript_list)).translate('zh-TW')
+
+        data = transcript.fetch()
+        result = " ".join([item.text for item in data])
+        print(f"DEBUG: Successfully fetched subtitles ({len(result)} chars)")
+        return result
+    except Exception as e:
+        print(f"DEBUG: No subtitles found on YouTube for {video_id}: {e}")
+        # 回傳空字串，這會觸發 learning_pipeline.py 中的「標題推理專家模式」
+        return ""
+
+
+
+def _transcribe_with_whisper(video_link: str) -> str:
+    """Download audio and use Whisper to transcribe with Anti-Bot bypass."""
+    _setup_ffmpeg()
+    
+    video_id = extract_youtube_video_id(video_link)
+    clean_url = f"https://www.youtube.com/watch?v={video_id}" if video_id else video_link
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # 強力偽裝下載參數
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(temp_dir, 'audio.%(ext)s'),
+            'ffmpeg_location': FFMPEG_PATH,
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            # 偽裝成一般的 Chrome 瀏覽器
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.google.com/',
+            # 關鍵：嘗試從本地瀏覽器借用 Cookie 繞過機器人驗證 (支援 Chrome, Edge)
+            'cookiesfrombrowser': ('chrome', 'edge'), 
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': False,
+            'no_warnings': False,
+        }
+
+        print(f"DEBUG: Starting ARMORED audio download for {clean_url}...")
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([clean_url])
+        except Exception as dl_err:
+            print(f"DEBUG: Armored download failed: {dl_err}. YouTube security is very strong.")
+            raise dl_err
+
+        audio_path = os.path.join(temp_dir, 'audio.mp3')
+        if not os.path.exists(audio_path):
+            print(f"DEBUG: audio.mp3 not found at {audio_path}")
+            raise FileNotFoundError("Audio extraction failed")
+
+        print("DEBUG: Initializing Whisper AI model (tiny)...")
+        # 增加載入模型時的錯誤捕捉
+        try:
+            model = WhisperModel(WHISPER_MODEL_SIZE, device=WHISPER_DEVICE, compute_type="float32")
+        except Exception as model_err:
+            print(f"DEBUG: Whisper model load failed: {model_err}")
+            raise model_err
+        
+        print("DEBUG: Transcribing audio (this may take a while)...")
+        segments, info = model.transcribe(audio_path, beam_size=5)
+        
+        # 遍歷 segments 時印出進度
+        transcript_parts = []
+        for i, segment in enumerate(segments):
+            transcript_parts.append(segment.text)
+            if i % 10 == 0:
+                print(f"DEBUG: Transcribing... segment {i}")
+        
+        transcript_text = " ".join(transcript_parts)
+        print(f"DEBUG: AI Transcription complete. Detected language: {info.language}")
+        return transcript_text
 
 
 def extract_youtube_video_id(video_link: str) -> str | None:
+
     patterns = [
         r"(?:youtube\.com/watch\?v=)([^&#]+)",
         r"(?:youtu\.be/)([^?&#]+)",

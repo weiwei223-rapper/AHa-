@@ -26,7 +26,7 @@ export async function getErrorMessage(response: Response, fallback: string): Pro
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // 60 seconds timeout
+  timeout: 300000, // 300 seconds timeout (5 minutes)
 });
 
 // Auth APIs
