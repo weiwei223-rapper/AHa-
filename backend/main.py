@@ -12,9 +12,9 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import text, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 load_dotenv()  # Load standard .env
 load_dotenv("API_key.env")  # Load AI API key if in separate file
@@ -787,9 +787,18 @@ def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
     # 因為 r.score 已經是百分比 (0-100)，直接取平均值即可
     avg_acc = (sum(r.score for r in quiz_results) / len(quiz_results)) if quiz_results else 0.0
     
+    total_videos = db.query(models.Video).filter(models.Video.user_id == user_id).count()
+    analyzed_videos = db.query(models.Video).filter(
+        models.Video.user_id == user_id,
+        or_(models.Video.outline != None, models.Video.transcript != None)
+    ).count()
+    total_questions = db.query(models.QuizQuestion).filter(models.QuizQuestion.user_id == user_id).count()
+
     return schema.UserStatsResponse(
-        video_count=db.query(models.Video).filter(models.Video.user_id == user_id).count(),
-        remaining_points=user.points, 
+        video_count=total_videos,
+        analyzed_video_count=analyzed_videos,
+        total_questions_count=total_questions,
+        remaining_points=user.points,
         completed_quizzes=len(quiz_results),
         average_accuracy=round(avg_acc, 1)
     )

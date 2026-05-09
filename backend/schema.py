@@ -170,6 +170,8 @@ class UploadRecordResponse(BaseModel):
 
 class UserStatsResponse(BaseModel):
     video_count: int
+    analyzed_video_count: int
+    total_questions_count: int
     remaining_points: int
     completed_quizzes: int
     average_accuracy: float
