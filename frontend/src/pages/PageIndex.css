@@ -1160,7 +1160,8 @@ button:hover span:after {
   padding: 0;
   display: flex;
   flex-direction: column;
-  height: 600px; /* Fixed height for scrollable content */
+  flex: 1; /* Allow shell to fill available space */
+  min-height: 0; /* Important for flex children to allow shrinking/scrolling */
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.16);
   box-shadow: 0 18px 52px rgba(0, 0, 0, 0.26);
@@ -1174,6 +1175,7 @@ button:hover span:after {
   gap: 12px;
   padding: 12px 14px;
   scroll-behavior: smooth;
+  min-height: 0;
 }
 
 .chat-video-picker {
@@ -2227,4 +2229,204 @@ body {
 .chat-history-list::-webkit-scrollbar-thumb {
   background: rgba(34, 211, 238, 0.3);
   border-radius: 10px;
+}
+
+/* ========================================================= */
+/* PROFESSIONAL CHAT UI OVERHAUL (V2)                        */
+/* ========================================================= */
+
+:root {
+  --chat-bg-main: #060a12;
+  --chat-panel-surface: #0b121f;
+  --chat-accent-glow: rgba(56, 189, 248, 0.35);
+  --chat-user-gradient: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --chat-ai-surface: rgba(30, 41, 59, 0.5);
+  --chat-text-bright: #f1f5f9;
+  --chat-text-dim: #94a3b8;
+  --chat-glass-border: rgba(255, 255, 255, 0.06);
+}
+
+.chat-page {
+  background: var(--chat-bg-main) !important;
+  color: var(--chat-text-bright) !important;
+}
+
+.chat-panel {
+  background: var(--chat-bg-main) !important;
+}
+
+/* Sidebar & History Improvements */
+.chat-sidebar {
+  background: #090f1a !important;
+  border-right: 1px solid var(--chat-glass-border) !important;
+}
+
+.chat-sidebar-label {
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #38bdf8 !important;
+  font-weight: 800 !important;
+}
+
+.chat-history-card {
+  background: rgba(15, 23, 42, 0.4) !important;
+  border: 1px solid var(--chat-glass-border) !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  overflow: hidden !important;
+}
+
+.chat-history-item:hover .chat-history-card,
+.chat-history-item.active .chat-history-card {
+  background: rgba(30, 41, 59, 0.7) !important;
+  border-color: var(--chat-accent-glow) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
+  transform: translateY(-2px);
+}
+
+.chat-history-title {
+  font-weight: 600 !important;
+  color: #fff !important;
+}
+
+/* Chat Thread Glassmorphism */
+.chat-thread-shell {
+  background: var(--chat-panel-surface) !important;
+  border-radius: 24px !important;
+  border: 1px solid var(--chat-glass-border) !important;
+  box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(12px);
+  margin: 10px 16px 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: calc(100vh - 180px) !important; 
+  min-height: 600px !important;
+  overflow: hidden !important;
+}
+
+.chat-thread {
+  flex: 1 !important; 
+  overflow-y: auto !important; /* Internal scrolling for messages */
+  padding: 24px !important;
+  min-height: 0 !important;
+}
+
+.chat-composer {
+  flex-shrink: 0 !important;
+  background: rgba(11, 18, 31, 0.9) !important; /* Slightly more opaque for sticky feel */
+  border-bottom-left-radius: 24px;
+  border-bottom-right-radius: 24px;
+}
+
+.chat-thread-header {
+  padding: 18px 24px !important;
+  background: rgba(11, 18, 31, 0.8) !important;
+  backdrop-filter: blur(8px);
+}
+
+.chat-thread-header h3 {
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+}
+
+/* Message Bubble Refinement */
+.chat-message-row {
+  margin-bottom: 20px;
+  gap: 16px !important;
+}
+
+.chat-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 50% !important;
+  font-size: 11px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: #1e293b !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.chat-message-row:not(.user) .chat-avatar {
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9) !important;
+  color: #fff !important;
+}
+
+.chat-message-card {
+  border-radius: 18px !important;
+  padding: 14px 20px !important;
+  background: var(--chat-ai-surface) !important;
+  border: 1px solid var(--chat-glass-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  color: #e2e8f0 !important;
+  font-size: 14.5px !important;
+  line-height: 1.65 !important;
+  max-width: 88% !important;
+}
+
+.chat-message-row.user .chat-message-card {
+  background: var(--chat-user-gradient) !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.2) !important;
+}
+
+/* Professional Composer */
+.chat-composer {
+  background: rgba(11, 18, 31, 0.6) !important;
+  padding: 20px 24px !important;
+  border-top: 1px solid var(--chat-glass-border) !important;
+}
+
+.chat-composer-input {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 16px !important;
+  padding: 14px 18px !important;
+  font-size: 14px;
+  line-height: 1.6;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  resize: none !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
+}
+
+.chat-composer-input:focus {
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  background: rgba(0, 0, 0, 0.35) !important;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.1), 0 8px 24px rgba(0, 0, 0, 0.2) !important;
+}
+
+.chat-send-button {
+  border-radius: 12px !important;
+  padding: 0 28px !important;
+  background: var(--chat-user-gradient) !important;
+  color: white !important;
+  font-weight: 700 !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3) !important;
+}
+
+.chat-send-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4) !important;
+}
+
+/* Custom Scrollbars */
+.chat-thread::-webkit-scrollbar,
+.chat-panel::-webkit-scrollbar,
+.chat-history-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.chat-thread::-webkit-scrollbar-thumb,
+.chat-panel::-webkit-scrollbar-thumb,
+.chat-history-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-radius: 10px;
+}
+
+.chat-thread::-webkit-scrollbar-thumb:hover,
+.chat-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.4) !important;
 }

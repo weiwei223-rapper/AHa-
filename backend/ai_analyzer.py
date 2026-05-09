@@ -4,7 +4,7 @@ import json
 from typing import Optional
 
 # Configuration
-DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 def init_gemini() -> str:

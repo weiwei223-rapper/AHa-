@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { chatAPI, feedbackAPI, videoAPI } from '../api';
 import './PageIndex.css';
 
@@ -69,7 +69,25 @@ const ChatDB: React.FC = () => {
   const [videosError, setVideosError] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const userId = Number(localStorage.getItem('userId') || 0);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [sessions, loading]);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    }
+  }, [input]);
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? sessions[0] ?? null,
@@ -431,7 +449,6 @@ const ChatDB: React.FC = () => {
             <div>
               <div className="chat-sidebar-label">Workspace Chat</div>
               <h2>歷史對話</h2>
-              <p>切換舊對話、延續問題，或開一個新的聊天視窗。</p>
             </div>
             <div className="chat-sidebar-actions">
               <button className="chat-new-session" onClick={handleCreateSession} type="button">
@@ -578,16 +595,17 @@ const ChatDB: React.FC = () => {
                     </div>
                   </article>
                 )}
+                <div ref={messagesEndRef} />
               </div>
 
               <div className="chat-composer">
                 <textarea
+                  ref={textareaRef}
                   className="chat-composer-input"
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="輸入問題，按 Enter 送出，Shift + Enter 換行"
-                  rows={4}
                   disabled={loading || !activeSession}
                 />
                 <div className="chat-composer-footer">

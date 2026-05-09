@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { chatAPI, videoAPI } from '../api';
 import './PageIndex.css';
 import ChatDB from './ChatDB';
@@ -66,6 +66,24 @@ const Chat: React.FC = () => {
   const [videosLoading, setVideosLoading] = useState(false);
   const [videosError, setVideosError] = useState('');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [sessions, loading]);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    }
+  }, [input]);
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -212,7 +230,7 @@ const Chat: React.FC = () => {
         message: trimmedInput,
         history: nextMessages,
         user_id: Number(localStorage.getItem('userId') || 0) || undefined,
-        selected_video_id: activeSession.selectedVideoId ?? null,
+        video_id: activeSession.selectedVideoId ?? null,
       });
 
       let reply =
@@ -261,8 +279,25 @@ const Chat: React.FC = () => {
   const handleSelectVideo = (videoId: number) => {
     if (!activeSession) return;
     const selected = videos.find((video) => video.id === videoId);
-    const title = (selected?.title || `Video #${videoId}`).toString();
-    updateSessionSelection(activeSession.id, videoId, title);
+    const videoTitle = (selected?.title || `Video #${videoId}`).toString();
+    
+    const greeting = `你好！我是你的 AI 學習助理。關於「${videoTitle}」，你有什麼問題想問嗎？`;
+    const greetingMessage: Message = { role: 'assistant', content: greeting };
+
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === activeSession.id
+          ? {
+            ...session,
+            selectedVideoId: videoId,
+            selectedVideoTitle: videoTitle,
+            title: videoTitle,
+            messages: session.messages.length === 0 ? [greetingMessage] : session.messages,
+            updatedAt: new Date().toISOString()
+          }
+          : session
+      )
+    );
     setError('');
   };
 
@@ -316,9 +351,6 @@ const Chat: React.FC = () => {
           <div className="chat-hero-copy">
             <div className="chat-hero-label">Powered by Gemini</div>
             <h1>聊天工作台</h1>
-            <p>
-              用側欄管理歷史紀錄，在主畫面專注追問影片內容、測驗重點與學習摘要。
-            </p>
           </div>
           <div className="chat-hero-stats">
             <div className="chat-stat-card">
@@ -413,16 +445,17 @@ const Chat: React.FC = () => {
                     </div>
                   </article>
                 )}
+                <div ref={messagesEndRef} />
               </div>
 
               <div className="chat-composer">
                 <textarea
+                  ref={textareaRef}
                   className="chat-composer-input"
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="輸入問題，按 Enter 送出，Shift + Enter 換行"
-                  rows={4}
                   disabled={loading || !activeSession}
                 />
                 <div className="chat-composer-footer">
