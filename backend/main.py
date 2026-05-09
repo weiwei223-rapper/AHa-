@@ -538,6 +538,7 @@ def analyze_video(video_id: int, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=404, detail="Video not found")
     try:
         title = video.title or "Untitled Video"
+        print(f"DEBUG: Analyzing video {video_id}: {title}")
         analysis = learning_pipeline.analyze_video(video.id, title, video.video_link)
         if analysis.outline_markdown and analysis.outline_markdown != video.outline:
             video.outline = analysis.outline_markdown
@@ -546,7 +547,10 @@ def analyze_video(video_id: int, db: Session = Depends(database.get_db)):
             db.refresh(video)
         return analysis
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        print(f"CRITICAL ERROR in analyze_video: {exc}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"分析失敗: {str(exc)}")
 
 
 @app.post("/api/videos", response_model=schema.VideoResponse)

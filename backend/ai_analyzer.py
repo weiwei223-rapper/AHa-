@@ -2,18 +2,30 @@ import os
 import requests
 import json
 import re
+import tempfile
+import yt_dlp
 from typing import Optional, List, Any
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 from dotenv import load_dotenv
+from faster_whisper import WhisperModel
 
 # Configuration
 DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
+# Whisper 語音辨識設定 (使用 tiny 模型極速辨識，適合 CPU)
+WHISPER_MODEL_SIZE = "tiny"
+WHISPER_DEVICE = "cpu"
+FFMPEG_PATH = r"C:\Users\user\AppData\Roaming\anythingllm-desktop\storage\engines\ffmpeg\windows-x64"
 
 STOPWORDS = {"the", "a", "an", "and", "or", "but", "if", "then", "else", "when", "at", "from", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once"}
 GREETING_WORDS = {"大家好", "歡迎來到", "我是", "上次影片", "今天我們", "嗨", "hello", "hi", "談到", "談過", "講過"}
+
+def _setup_ffmpeg():
+    """Ensure ffmpeg is in path for the current process."""
+    if FFMPEG_PATH not in os.environ["PATH"]:
+        os.environ["PATH"] += os.pathsep + FFMPEG_PATH
 
 def init_gemini() -> str:
     # 優先載入專屬金鑰檔
@@ -21,7 +33,7 @@ def init_gemini() -> str:
     load_dotenv(env_path)
     # 也嘗試載入標準 .env
     load_dotenv()
-    
+
     api_key = (os.getenv("AI_API_KEY") or "").strip()
     if not api_key:
         raise ValueError("AI_API_KEY not found in environment variables")
@@ -31,7 +43,7 @@ def init_gemini() -> str:
 def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> str:
     api_key = init_gemini()
     model_name = model.replace("models/", "")
-    
+
     system_parts: list[dict] = []
     gemini_contents: list[dict] = []
     for item in contents:
@@ -64,7 +76,7 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
             GEMINI_API_URL.format(model=model_name),
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json=request_payload,
-            timeout=120,
+            timeout=300,
         )
         if not response.ok:
             raise ValueError(f"Gemini API error {response.status_code} for model '{model_name}': {response.text}")
@@ -81,36 +93,109 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         return text
     except requests.exceptions.RequestException as e:
         raise ValueError(f"Gemini API request failed: {str(e)}")
-
-
 def fetch_video_transcript(video_link: str) -> str:
-    """Fetch transcript from YouTube or other sources."""
+    """Fetch transcript with multi-stage fallback and translation support."""
     video_id = extract_youtube_video_id(video_link)
     if not video_id:
         return ""
 
     try:
-        # 實例化 API 類別（在此版本中為實例方法）
         api = YouTubeTranscriptApi()
-        data = api.fetch(
-            video_id, 
-            languages=['zh-TW', 'zh-Hant', 'zh-Hans', 'zh', 'en']
-        )
-        # 在此版本中，data 是物件列表，需使用 .text 訪問
+        transcript_list = api.list(video_id)
+        
+        # 1. 優先找繁體中文 (zh-TW, zh-Hant)
+        try:
+            transcript = transcript_list.find_transcript(['zh-TW', 'zh-Hant'])
+        except:
+            # 2. 找其他形式的中文
+            try:
+                transcript = transcript_list.find_transcript(['zh-Hans', 'zh', 'zh-CN'])
+            except:
+                # 3. 找英文並自動翻譯成繁中
+                try:
+                    transcript = transcript_list.find_transcript(['en']).translate('zh-TW')
+                except:
+                    # 4. 隨便抓一個可用的並翻譯
+                    transcript = next(iter(transcript_list)).translate('zh-TW')
+
+        data = transcript.fetch()
         return " ".join([item.text for item in data])
     except Exception as e:
-        print(f"Transcript fetch failed for {video_id}: {e}")
-        # 嘗試不指定語言
+        print(f"DEBUG: YouTube API failed: {e}. Trying Whisper...")
+    
+    # 5. 中間手段：AI 語音辨識
+    try:
+        return _transcribe_with_whisper(video_link)
+    except Exception as e:
+        print(f"DEBUG: Whisper failed: {e}")
+    
+    # 6. 最終保險：回傳空字串，讓 learning_pipeline 使用標題進行推理分析
+    return ""
+
+
+
+def _transcribe_with_whisper(video_link: str) -> str:
+    """Download audio and use Whisper to transcribe."""
+    _setup_ffmpeg()
+    
+    # 清理 URL，避免下載到播放清單觸發機器人驗證
+    video_id = extract_youtube_video_id(video_link)
+    clean_url = f"https://www.youtube.com/watch?v={video_id}" if video_id else video_link
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # 下載音檔
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(temp_dir, 'audio.%(ext)s'),
+            'ffmpeg_location': FFMPEG_PATH, # 強制指定 ffmpeg 位置
+            'noplaylist': True, # 拒絕下載播放清單
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': False, # 開啟日誌以利觀察進度
+            'no_warnings': False,
+        }
+
+        print(f"DEBUG: Starting audio download via yt-dlp for {clean_url}...")
         try:
-            api = YouTubeTranscriptApi()
-            data = api.fetch(video_id)
-            return " ".join([item.text for item in data])
-        except Exception as e2:
-            print(f"Default transcript fetch also failed: {e2}")
-            return ""
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([clean_url])
+        except Exception as dl_err:
+            print(f"DEBUG: Download failed: {dl_err}")
+            raise dl_err
+
+        audio_path = os.path.join(temp_dir, 'audio.mp3')
+        if not os.path.exists(audio_path):
+            print(f"DEBUG: audio.mp3 not found at {audio_path}")
+            raise FileNotFoundError("Audio extraction failed")
+
+        print("DEBUG: Initializing Whisper AI model (tiny)...")
+        # 增加載入模型時的錯誤捕捉
+        try:
+            model = WhisperModel(WHISPER_MODEL_SIZE, device=WHISPER_DEVICE, compute_type="float32")
+        except Exception as model_err:
+            print(f"DEBUG: Whisper model load failed: {model_err}")
+            raise model_err
+        
+        print("DEBUG: Transcribing audio (this may take a while)...")
+        segments, info = model.transcribe(audio_path, beam_size=5)
+        
+        # 遍歷 segments 時印出進度
+        transcript_parts = []
+        for i, segment in enumerate(segments):
+            transcript_parts.append(segment.text)
+            if i % 10 == 0:
+                print(f"DEBUG: Transcribing... segment {i}")
+        
+        transcript_text = " ".join(transcript_parts)
+        print(f"DEBUG: AI Transcription complete. Detected language: {info.language}")
+        return transcript_text
 
 
 def extract_youtube_video_id(video_link: str) -> str | None:
+
     patterns = [
         r"(?:youtube\.com/watch\?v=)([^&#]+)",
         r"(?:youtu\.be/)([^?&#]+)",

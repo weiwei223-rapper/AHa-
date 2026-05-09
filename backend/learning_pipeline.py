@@ -18,8 +18,8 @@ try:
 except ImportError:
     YoutubeLoader = None
 
-OUTLINE_CHUNK_SIZE = 4000
-OUTLINE_CHUNK_OVERLAP = 400
+OUTLINE_CHUNK_SIZE = 8000
+OUTLINE_CHUNK_OVERLAP = 800
 
 @dataclass
 class TranscriptResult:
@@ -107,10 +107,14 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
     # 獲取逐字稿
     transcript = ai_analyzer.fetch_video_transcript(video_link)
     if not transcript:
+        # 零失敗備援：如果完全沒有字幕也無法轉譯，使用「標題」進行推理分析
+        outline = generate_outline(f"這是一部名為「{title}」的教學影片。", title)
+        topics = _parse_bullets(outline)
         return schema.VideoAnalysisResponse(
             video_id=video_id, video_title=title, transcript_source="failed",
-            transcript_excerpt="無逐字稿", outline_markdown="- 無法取得逐字稿",
-            key_topics=[], retrieved_chunks=[], vector_backend="none",
+            transcript_excerpt="系統無法取得影片聲音或字幕，已轉為使用「影片標題」進行推理分析。", 
+            outline_markdown=outline,
+            key_topics=topics, retrieved_chunks=[], vector_backend="none",
             generated_at=datetime.utcnow()
         )
     
