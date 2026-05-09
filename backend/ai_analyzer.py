@@ -93,6 +93,28 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         return text
     except requests.exceptions.RequestException as e:
         raise ValueError(f"Gemini API request failed: {str(e)}")
+def is_python_related(title: str, transcript: str) -> bool:
+    """Use Gemini to determine if the content is related to Python programming."""
+    prompt = f"""
+請判斷以下影片內容是否與「Python 程式設計」有關。
+這包括：Python 語法、開發環境、資料科學、自動化腳本、Web 開發 (Django/Flask) 或任何 Python 相關教學。
+
+影片標題：{title}
+影片內容摘要：{transcript[:1000]}
+
+要求：
+1. 如果有關聯，請回傳：VALID
+2. 如果無關聯（例如是單純的音樂、生活 VLOG、非 Python 的語言教學），請回傳：INVALID
+3. 僅回傳以上兩個關鍵字之一，不要有其他文字。
+"""
+    try:
+        response = generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
+        return "VALID" in response.upper()
+    except:
+        # 如果 AI 判斷失敗，預設允許通過以避免誤殺
+        return True
+
+
 def get_video_title(video_link: str) -> Optional[str]:
     """Resiliently fetch the actual YouTube video title."""
     # 方法 1: 使用 yt-dlp (最全面，但易被擋)

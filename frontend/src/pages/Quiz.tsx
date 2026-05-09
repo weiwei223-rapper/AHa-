@@ -270,9 +270,30 @@ const Quiz = () => {
                     <pre className="code-snippet">{userAnswers[index] || "未作答"}</pre>
                   </div>
 
-                  {question.explanation && (
+                  <div style={{ marginTop: "12px" }}>
+                    <p><strong style={{ color: "#4ade80" }}>參考答案 (填空處)：</strong></p>
+                    <code style={{ background: "rgba(0,0,0,0.3)", padding: "4px 8px", borderRadius: "4px", color: "#4ade80", border: "1px solid rgba(74, 222, 128, 0.3)" }}>
+                      {question.correct_answer}
+                    </code>
+                  </div>
+
+                  <div style={{ marginTop: "12px" }}>
+                    <p><strong>完整正確程式碼：</strong></p>
+                    <pre className="code-snippet" style={{ borderColor: "rgba(74, 222, 128, 0.4)" }}>
+                      {(question.starter_code || "").replace("___", question.correct_answer)}
+                    </pre>
+                  </div>
+
+                  {detail?.diagnostic && (
+                    <div style={{ marginTop: "12px", padding: "10px", background: detail.passed ? "rgba(74, 222, 128, 0.1)" : "rgba(251, 113, 133, 0.1)", borderRadius: "8px", borderLeft: `4px solid ${detail.passed ? "#4ade80" : "#fb7185"}` }}>
+                      <strong>{detail.passed ? "通過解析：" : "錯誤診斷："}</strong>
+                      <p style={{ margin: "5px 0 0", color: detail.passed ? "#86efac" : "#fca5a5" }}>{detail.diagnostic}</p>
+                    </div>
+                  )}
+
+                  {question.explanation && detail?.passed && (
                     <p style={{ marginTop: "12px" }}>
-                      <strong>解析：</strong>
+                      <strong>原理補充：</strong>
                       {question.explanation}
                     </p>
                   )}

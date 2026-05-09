@@ -28,15 +28,13 @@
   border-bottom: 1px solid rgba(43, 193, 241, 0.12);
 }
 
-.workspace-brand-mark {
+.workspace-brand-logo {
   width: 42px;
   height: 42px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, #2bc1f1, #0ea5e9);
-  color: #05111d;
-  font-weight: 900;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 0 15px rgba(43, 193, 241, 0.4);
+  border: 1px solid rgba(43, 193, 241, 0.3);
 }
 
 .workspace-brand strong {
@@ -90,6 +88,7 @@
 .workspace-logout-button:hover {
   background: rgba(127, 29, 29, 0.3);
   border-color: rgba(248, 113, 113, 0.42);
+  color: #ffffff !important; /* 強制設定為白色 */
 }
 
 .workspace-main {

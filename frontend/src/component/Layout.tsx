@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import logoIcon from "../assets/logo_v3.jpg";
 
 interface LayoutProps {
   onLogout?: () => void;
@@ -20,7 +21,7 @@ const Layout = ({ onLogout }: LayoutProps) => {
     <div className="workspace-shell">
       <nav className="workspace-sidebar">
         <div className="workspace-brand">
-          <div className="workspace-brand-mark">A</div>
+          <img src={logoIcon} alt="Logo" className="workspace-brand-logo" />
           <div>
             <strong>AHa</strong>
             <span>AI Learning Hub</span>

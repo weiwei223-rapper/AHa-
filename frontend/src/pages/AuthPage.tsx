@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { authAPI } from '../api';
 import { updateLoginMetaForToday } from '../utils/achievement';
 import './AuthPage.css';
+import logoIcon from "../assets/logo_v3.jpg";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -103,8 +104,14 @@ export default function AuthPage() {
   return (
     <div className="auth-container">
       <div className="auth-box">
+        {/* 新增的科技感頭部視覺 */}
+        <div className="auth-header-visual">
+          <img src={logoIcon} alt="Logo" className="auth-logo-img" />
+          <div className="auth-brand-name">AHA AI</div>
+        </div>
+
         <div className={`auth-section login-section ${mode === 'login' ? 'active' : 'hidden'}`}>
-          <h2>登入</h2>
+          <h2>登入系統</h2>
           <form onSubmit={handleLogin}>
             <div className="form-group">
               <label htmlFor="login-email">電子郵件</label>
@@ -135,10 +142,10 @@ export default function AuthPage() {
             {error && mode === 'login' && <div className="error-message">{error}</div>}
 
             <button type="submit" className="auth-button" disabled={loading}>
-              {loading ? '登入中...' : '登入'}
+              {loading ? '驗證中...' : '進入工作台'}
             </button>
-            <button type="button" className="auth-button skip-button" onClick={handleSkipLogin} disabled={loading}>
-              跳過登入
+            <button type="button" className="auth-button skip-button" onClick={handleSkipLogin} disabled={loading} style={{ background: 'transparent', border: '1px solid rgba(43, 193, 241, 0.4)', color: '#94a3b8', boxShadow: 'none', marginTop: '14px' }}>
+              訪客模式 (跳過登入)
             </button>
           </form>
 
@@ -162,7 +169,7 @@ export default function AuthPage() {
         </div>
 
         <div className={`auth-section register-section ${mode === 'register' ? 'active' : 'hidden'}`}>
-          <h2>註冊</h2>
+          <h2>建立帳號</h2>
           <form onSubmit={handleRegister}>
             <div className="form-group">
               <label htmlFor="register-name">姓名</label>
@@ -219,10 +226,10 @@ export default function AuthPage() {
             {error && mode === 'register' && <div className="error-message">{error}</div>}
 
             <button type="submit" className="auth-button" disabled={loading}>
-              {loading ? '註冊中...' : '註冊'}
+              {loading ? '註冊中...' : '註冊帳號'}
             </button>
-            <button type="button" className="auth-button skip-button" onClick={handleSkipLogin} disabled={loading}>
-              跳過登入
+            <button type="button" className="auth-button skip-button" onClick={handleSkipLogin} disabled={loading} style={{ background: 'transparent', border: '1px solid rgba(43, 193, 241, 0.4)', color: '#94a3b8', boxShadow: 'none', marginTop: '14px' }}>
+              訪客模式 (跳過登入)
             </button>
           </form>
 

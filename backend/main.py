@@ -100,7 +100,7 @@ async def lifespan(app: FastAPI):
                 # Create initial recharge record
                 record = models.RechargeRecord(
                     user_id=1,
-                    date=datetime.utcnow().strftime("%Y/%m/%d"),
+                    date=datetime.now().strftime("%Y/%m/%d"),
                     order_id="INITIAL_POINTS",
                     amount=0,
                     points=10000,
@@ -273,7 +273,7 @@ def register_user(payload: RegisterRequest, db: Session = Depends(database.get_d
     existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already exists")
-    uid = f"UID-{datetime.utcnow():%Y%m%d%H%M}"
+    uid = f"UID-{datetime.now():%Y%m%d%H%M}"
     new_user = models.User(name=payload.name, email=payload.email, password=hash_password(payload.password), uid=uid,
                            points=0)
     db.add(new_user)
@@ -395,7 +395,7 @@ async def ecpay_return(request: Request, db: Session = Depends(database.get_db))
 
             record = models.RechargeRecord(
                 user_id=user.id,
-                date=datetime.utcnow().strftime("%Y/%m/%d"),
+                date=datetime.now().strftime("%Y/%m/%d"),
                 order_id=merchant_trade_no,
                 amount=total_amount,
                 points=points_to_add,
@@ -507,8 +507,8 @@ def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(
         
     record = models.RechargeRecord(
         user_id=user.id,
-        date=datetime.utcnow().strftime("%Y/%m/%d"),
-        order_id=f"A{datetime.utcnow():%Y%m%d%H%M%S}",
+        date=datetime.now().strftime("%Y/%m/%d"),
+        order_id=f"A{datetime.now():%Y%m%d%H%M%S}",
         amount=payload.price,
         points=points_to_add,
         balance_after=user.points,
@@ -558,7 +558,21 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
     raw_link = (payload.video_link or "").strip()
     if not raw_link:
         raise HTTPException(status_code=400, detail="Please provide a video link")
-    title = (payload.title or "").strip() or extract_youtube_title(raw_link)
+    
+    # 1. 獲取原始資訊進行內容校驗
+    original_title = ai_analyzer.get_video_title(raw_link) or payload.title or "Untitled Video"
+    transcript_snippet = ai_analyzer.fetch_video_transcript(raw_link)[:1500]
+    
+    # 2. 強制內容校驗：必須與 Python 相關
+    print(f"DEBUG: Validating content for: {original_title}")
+    if not ai_analyzer.is_python_related(original_title, transcript_snippet):
+        print(f"REJECTED: Video is not Python related.")
+        raise HTTPException(
+            status_code=400, 
+            detail="上傳失敗：本平台目前僅支援 Python 相關教學影片。請上傳正確的學習資源。"
+        )
+
+    title = (payload.title or "").strip() or original_title
     try:
         video = models.Video(video_link=raw_link, title=title, outline=payload.outline, user_id=payload.user_id,
                              cost_points=payload.cost_points or 0)
@@ -657,8 +671,9 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
                 q_results = []
                 
                 # 執行測試
+                first_failure_msg = None
                 for test_case in test_cases[:3]:
-                    # 效能優化：若已失敗則跳過後續執行
+                    # 效能優化：若已失敗則跳過後續執行，但保留第一個失敗的訊息
                     if not is_all_passed:
                         q_results.append({"test_case": test_case, "expected": "SKIPPED", "actual": "SKIPPED", "passed": False})
                         continue
@@ -669,6 +684,10 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
                     is_match = (ref_out.strip() == user_out.strip()) and not user_err
                     if not is_match:
                         is_all_passed = False
+                        if user_err:
+                            first_failure_msg = f"執行錯誤：{user_err.splitlines()[-1]}"
+                        else:
+                            first_failure_msg = f"輸出不符：執行「{test_case}」時預期為『{ref_out.strip()}』但得到『{user_out.strip()}』"
                     
                     q_results.append({
                         "test_case": test_case,
@@ -682,9 +701,10 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
 
                 details.append({
                     "question_id": q.id,
-                    "question_text": q.question_content, # 保存題目敘述
-                    "user_answer": user_answer_code,     # 保存使用者當時的完整代碼
+                    "question_text": q.question_content, 
+                    "user_answer": user_answer_code,     
                     "passed": is_all_passed,
+                    "diagnostic": first_failure_msg or "邏輯正確，通過所有測試案例。", # 新增診斷欄位
                     "test_results": q_results
                 })
             except Exception as e:
@@ -732,7 +752,7 @@ def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(d
     title = payload.title
     if not title:
         video = db.query(models.Video).filter(models.Video.id == payload.video_id).first()
-        title = video.title if video else f"Quiz Result {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+        title = video.title if video else f"Quiz Result {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
     quiz_result = models.QuizResult(
         user_id=user_id, 

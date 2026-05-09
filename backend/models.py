@@ -41,7 +41,7 @@ class Video(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     cost_points = Column(Integer, default=0)
     error_report = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     uploader = relationship("User", back_populates="videos")
     quiz_questions = relationship("QuizQuestion", back_populates="video", cascade="all, delete-orphan")
@@ -58,7 +58,7 @@ class AIFeedback(Base):
     ai_message = Column(String)
     user_message = Column(String)
     error_report = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="ai_feedbacks")
 
@@ -100,7 +100,7 @@ class QuizQuestion(Base):
     source_time = Column(String, nullable=True)
     source_excerpt = Column(String, nullable=True)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="quiz_questions")
     video = relationship("Video", back_populates="quiz_questions")
@@ -114,7 +114,7 @@ class GenerationRecord(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     quiz_question_id = Column(Integer, ForeignKey("quiz_questions.id"))
     consumed_points = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="generation_records")
     quiz_question = relationship("QuizQuestion", back_populates="generation_records")
@@ -127,7 +127,7 @@ class UploadRecord(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     video_id = Column(Integer, ForeignKey("videos.id"))
     consumed_points = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="upload_records")
     video = relationship("Video", back_populates="upload_records")
@@ -143,7 +143,7 @@ class QuizResult(Base):
     score = Column(Integer)
     total_questions = Column(Integer, default=5)
     details_json = Column(String, nullable=True) # 新增欄位，儲存詳細作答與比對結果
-    completed_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="quiz_results")
     video = relationship("Video", back_populates="quiz_results")
