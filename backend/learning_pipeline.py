@@ -109,8 +109,7 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
     
     if not transcript:
         # 抓取 YouTube 原始標題以利精準推理 (避免受使用者自定義標題干擾)
-        meta = ai_analyzer.get_video_metadata(video_link)
-        original_title = meta.get("title") or title
+        original_title = ai_analyzer.get_video_title(video_link) or title
         
         # 零失敗備援：讓 AI 以專家身份根據「原始標題」進行知識推理
         fallback_prompt = f"""

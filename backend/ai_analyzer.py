@@ -93,26 +93,37 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         return text
     except requests.exceptions.RequestException as e:
         raise ValueError(f"Gemini API request failed: {str(e)}")
-def get_video_metadata(video_link: str) -> dict:
-    """Fetch original metadata (like title) from YouTube using yt-dlp."""
+def get_video_title(video_link: str) -> Optional[str]:
+    """Resiliently fetch the actual YouTube video title."""
+    # 方法 1: 使用 yt-dlp (最全面，但易被擋)
     _setup_ffmpeg()
     ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': True, # 只抓元數據，不下載影片
+        'quiet': True, 'no_warnings': True, 'extract_flat': True,
         'cookiesfrombrowser': ('chrome', 'edge'),
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_link, download=False)
-            return {
-                "title": info.get("title", "Unknown Video"),
-                "uploader": info.get("uploader", "Unknown"),
-                "description": info.get("description", "")
-            }
-    except Exception as e:
-        print(f"DEBUG: Failed to fetch metadata: {e}")
-        return {"title": "Unknown Video", "uploader": "Unknown", "description": ""}
+            t = info.get("title")
+            if t and "Unknown" not in t: return t
+    except:
+        pass
+
+    # 方法 2: 直接爬取 HTML (輕量級，不易被擋)
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        response = requests.get(video_link, headers=headers, timeout=10)
+        if response.ok:
+            # 找 <title> 標籤
+            title_match = re.search(r"<title>(.*?)</title>", response.text)
+            if title_match:
+                raw_title = title_match.group(1)
+                # 移除 " - YouTube" 尾綴
+                return raw_title.replace(" - YouTube", "").strip()
+    except:
+        pass
+    
+    return None
 
 
 def fetch_video_transcript(video_link: str) -> str:
