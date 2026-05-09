@@ -138,7 +138,7 @@ const Profile = () => {
       userAPI.getStats(userId)
         .then((response) => {
           const stats = response.data;
-          // 使用已分析影片數量 (影片樹) 作為成就進度
+          // 使用已分析影片數量作為成就進度
           setVideoCount(stats.analyzed_video_count);
           setTotalVideoCount(stats.video_count);
           setQuestionCount(stats.total_questions_count || 0);
@@ -168,7 +168,7 @@ const Profile = () => {
         // 從後端 API 獲取最新的統計資訊，包括真實的影片數量
         userAPI.getStats(user.id).then((response) => {
           const stats = response.data;
-          // 使用已分析影片數量 (影片樹) 作為成就進度
+            // 使用已分析影片數量作為成就進度
           setVideoCount(stats.analyzed_video_count);
           setTotalVideoCount(stats.video_count);
           setQuestionCount(stats.total_questions_count || 0);
@@ -340,9 +340,9 @@ const Profile = () => {
             <p>維持習慣，連續登入 7 天即可獲得《學習堅持者》。</p>
           </div>
           <div>
-            <span>影片樹完成度</span>
+            <span>影片分析完成度</span>
             <strong>{videoCount} / {totalVideoCount}</strong>
-            <p>已分析並建立知識樹的影片數量，相對於總上傳數。</p>
+            <p>已完成分析的影片數量，相對於總上傳數。</p>
           </div>
           <div>
             <span>累計登入</span>
@@ -355,7 +355,7 @@ const Profile = () => {
       <section className="panel-card achievement-list-card">
         <div className="achievement-list-header">
           <h2>成就總覽</h2>
-          <p>依據影片分析後的知識樹數量，自動解鎖成就徽章。</p>
+          <p>依據已分析影片數量，自動解鎖成就徽章。</p>
         </div>
         <div className="achievement-grid">
           {achievements.map((item) => {

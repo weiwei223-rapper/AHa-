@@ -162,7 +162,7 @@ export const buildAchievements = (params: {
       key: `video-${threshold}`,
       category: 'video',
       title: videoTitles[threshold] || '影片里程碑',
-      description: `完成 ${threshold} 部影片分析並建立知識樹`,
+      description: `完成 ${threshold} 部影片分析`,
       points: 200,
       threshold,
       unlocked: videoCount >= threshold,
