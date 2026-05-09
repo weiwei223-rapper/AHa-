@@ -8,11 +8,7 @@ from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFoun
 from dotenv import load_dotenv
 
 # Configuration
-<<<<<<< HEAD
-DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
-=======
 DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
->>>>>>> 30fa993cac254dadb641e81c10def6b6c7a188ff
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
