@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance } from 'axios';
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+  import.meta.env.VITE_API_BASE_URL || '';
 
 export async function parseResponseBody<T>(response: Response): Promise<T | null> {
   const raw = await response.text();
@@ -49,18 +49,6 @@ export const userAPI = {
     api.post(`/users/${userId}/recharge`, data),
   getStats: (userId: number) =>
     api.get(`/users/${userId}/stats`),
-  createCheckout: (data: {
-    MerchantTradeNo: string;
-    MerchantTradeDate: string;
-    PaymentType: string;
-    TotalAmount: number;
-    TradeDesc: string;
-    ItemName: string;
-    ReturnURL: string;
-    ClientBackURL: string;
-    ChoosePayment: string;
-    EncryptType: number;
-  }) => api.post('/ecpay/create-checkmac', data),
 };
 
 export const videoAPI = {
@@ -75,7 +63,7 @@ export const videoAPI = {
 };
 
 export const feedbackAPI = {
-  createFeedback: (data: { user_id: number; video_id?: number | null; ai_message: string; user_message: string; error_report?: string | null }) =>
+  createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null }) =>
     api.post('/api/feedbacks', data),
   getFeedbacks: () => api.get('/api/feedbacks'),
   deleteConversation: (conversationId: string, userId: number) =>
@@ -86,11 +74,15 @@ export const quizAPI = {
   createQuestion: (data: { user_id: number; video_id: number; question_content: string; reference_answer: string; options: string[]; answer_record?: string | null; accuracy?: number }) =>
     api.post('/api/quiz-questions', data),
   getQuestions: () => api.get('/api/quiz-questions'),
-  createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number }) =>
+  getResults: (userId: number) => api.get('/api/quiz-results', { params: { user_id: userId } }),
+  deleteResult: (resultId: number) => api.delete(`/api/quiz-results/${resultId}`),
+  updateResult: (resultId: number, data: { title: string }) => api.patch(`/api/quiz-results/${resultId}`, data),
+  createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number; details_json?: string }) =>
     api.post('/api/quiz-results', data),
   gradeQuiz: (videoId: number, data: { user_id: number; answers: string[] }) =>
     api.post(`/api/quizzes/${videoId}/grade`, data),
-};
+  };
+
 
 export const uploadAPI = {
   createUpload: (data: { user_id: number; video_id: number; consumed_points: number }) =>

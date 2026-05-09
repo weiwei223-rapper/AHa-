@@ -234,3 +234,30 @@
 .chat-drawer .chat-thread-shell {
   border-radius: 22px;
 }
+
+/* Fix Monaco Suggestion Widget Visibility */
+.monaco-editor .suggest-widget,
+.monaco-editor .suggest-widget * {
+  color: #ffffff !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row:hover,
+.monaco-editor .suggest-widget .monaco-list-row.focused {
+  background-color: #2b415e !important;
+  color: #ffffff !important;
+}
+
+/* ULTIMATE Fix for Monaco Suggestion Visibility */
+.monaco-editor .suggest-widget, 
+.monaco-editor .suggest-widget *,
+.monaco-editor .suggest-widget .monaco-list-row,
+.monaco-editor .suggest-widget .monaco-list-row * {
+  color: #ffffff !important;
+  background-color: #1e1e1e !important;
+}
+
+.monaco-editor .suggest-widget .monaco-list-row.focused,
+.monaco-editor .suggest-widget .monaco-list-row.focused * {
+  background-color: #2b415e !important;
+  color: #ffffff !important;
+}

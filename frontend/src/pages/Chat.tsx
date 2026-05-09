@@ -211,7 +211,7 @@ const Chat: React.FC = () => {
         message: trimmedInput,
         history: nextMessages,
         user_id: Number(localStorage.getItem('userId') || 0) || undefined,
-        video_id: activeSession.selectedVideoId ?? null,
+        selected_video_id: activeSession.selectedVideoId ?? null,
       });
 
       let reply =
@@ -304,8 +304,6 @@ const Chat: React.FC = () => {
       </aside>
 
       <section className="chat-panel">
-<<<<<<< HEAD
-=======
         <div className="chat-hero">
           <div className="chat-hero-copy">
             <div className="chat-hero-label">Powered by Gemini</div>
@@ -326,7 +324,6 @@ const Chat: React.FC = () => {
           </div>
         </div>
 
->>>>>>> 2caae9783fccb9af9414409fb7870ea308131988
         <div className="chat-thread-shell">
           <div className="chat-thread-header">
             <div>
@@ -438,5 +435,4 @@ const Chat: React.FC = () => {
   );
 };
 
-export default ChatDB;
-export { Chat };
+export default Chat;

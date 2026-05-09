@@ -139,8 +139,10 @@ class QuizResult(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     video_id = Column(Integer, ForeignKey("videos.id"))
+    title = Column(String, nullable=True) # 新增自定義名稱欄位
     score = Column(Integer)
     total_questions = Column(Integer, default=5)
+    details_json = Column(String, nullable=True) # 新增欄位，儲存詳細作答與比對結果
     completed_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="quiz_results")

@@ -1,25 +1,20 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import json
-<<<<<<< HEAD
 import re
+import html
 from urllib.parse import quote, quote_plus
 
 import bcrypt
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-=======
-
-import bcrypt
-from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query
->>>>>>> 2caae9783fccb9af9414409fb7870ea308131988
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 load_dotenv()
 
@@ -61,7 +56,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def ensure_database_columns() -> None:
-<<<<<<< HEAD
     schema_updates = [
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript TEXT",
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript_source VARCHAR",
@@ -69,9 +63,13 @@ def ensure_database_columns() -> None:
         "ALTER TABLE ai_feedbacks ADD COLUMN IF NOT EXISTS video_id INTEGER",
         "ALTER TABLE recharge_records ADD COLUMN IF NOT EXISTS balance_after INTEGER",
     ]
-=======
->>>>>>> 2caae9783fccb9af9414409fb7870ea308131988
     with database.engine.begin() as connection:
+        for update in schema_updates:
+            try:
+                connection.execute(text(update))
+            except Exception as e:
+                print(f"Update failed: {update}, error: {e}")
+        
         connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role INTEGER DEFAULT 1"))
         connection.execute(text("UPDATE users SET role = 1 WHERE role IS NULL"))
         connection.execute(text("ALTER TABLE users ALTER COLUMN role SET DEFAULT 1"))
@@ -94,7 +92,6 @@ async def lifespan(app: FastAPI):
                     password=hash_password("password"),
                     uid="UID-20260419",
                     points=10000,
-                    role=1,
                 )
                 db.add(user)
                 db.flush()  # To get the user ID if needed, though it's set to 1
@@ -136,6 +133,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- ECPay Configuration ---
+ECPAY_MERCHANT_ID = "2000132" # 測試特店編號
+ECPAY_HASH_KEY = "5294y06JbISpM5x9"
+ECPAY_HASH_IV = "v77hoKGq4uF4s1uL"
+
+def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
+    # 1. 篩選並排序
+    filtered_params = {k: v for k, v in params.items() if k != "CheckMacValue"}
+    sorted_keys = sorted(filtered_params.keys(), key=str.lower)
+    
+    # 2. 組合字串
+    raw_list = [f"{k}={filtered_params[k]}" for k in sorted_keys]
+    raw_str = f"HashKey={ECPAY_HASH_KEY}&{'&'.join(raw_list)}&HashIV={ECPAY_HASH_IV}"
+    
+    # 3. URL Encode
+    encoded_str = quote_plus(raw_str).lower()
+    
+    # 4. 取代為綠界要求的特定字元 (雖然 quote_plus 已經做了一些，但綠界有特殊要求)
+    # 綠界規範：小寫、取代特定的符號
+    # 但在 Python 中，quote_plus(raw_str).lower() 通常就足夠，若有問題再細修
+    import hashlib
+    return hashlib.sha256(encoded_str.encode("utf-8")).hexdigest().upper()
+
+class EcpayCheckoutRequest(BaseModel):
+    MerchantTradeNo: str
+    MerchantTradeDate: str
+    TotalAmount: int
+    TradeDesc: str
+    ItemName: str
+    ReturnURL: str
+    ClientBackURL: Optional[str] = None
+
+class EcpayCheckoutResponse(BaseModel):
+    CheckMacValue: str
+
+# --- Schemas ---
 
 class UserResponse(BaseModel):
     id: int
@@ -143,8 +176,6 @@ class UserResponse(BaseModel):
     name: str
     uid: str
     points: int
-    role: int
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -172,7 +203,6 @@ class RechargeRecordResponse(BaseModel):
     plan_content: Optional[str] = None
     payment_method: Optional[str] = None
     plan_id: Optional[str] = None
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -240,16 +270,9 @@ def register_user(payload: RegisterRequest, db: Session = Depends(database.get_d
     existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already exists")
-
     uid = f"UID-{datetime.utcnow():%Y%m%d%H%M}"
-    new_user = models.User(
-        name=payload.name,
-        email=payload.email,
-        password=hash_password(payload.password),
-        uid=uid,
-        points=0,
-        role=1,
-    )
+    new_user = models.User(name=payload.name, email=payload.email, password=hash_password(payload.password), uid=uid,
+                           points=0)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -264,21 +287,10 @@ def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
     return {"user": user, "message": f"Welcome back, {user.name}"}
 
 
-<<<<<<< HEAD
 @app.post("/ecpay/create-checkmac", response_model=EcpayCheckoutResponse)
 def create_ecpay_checkmac(payload: EcpayCheckoutRequest):
     params = payload.model_dump()
     return EcpayCheckoutResponse(CheckMacValue=generate_ecpay_check_mac_value(params))
-
-
-@app.post("/ecpay/debug-checkmac")
-def debug_ecpay_checkmac(payload: Dict[str, Any]):
-    raw, encoded_raw, check_mac_value = build_ecpay_check_mac_debug(payload)
-    return {
-        "raw": raw,
-        "encoded_raw": encoded_raw,
-        "CheckMacValue": check_mac_value,
-    }
 
 
 @app.post("/ecpay/checkout", response_class=HTMLResponse)
@@ -401,38 +413,26 @@ async def ecpay_return(request: Request, db: Session = Depends(database.get_db))
     return PlainTextResponse(content="1|OK", status_code=200)
 
 
-=======
->>>>>>> 2caae9783fccb9af9414409fb7870ea308131988
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_with_ai(payload: ChatRequest, db: Session = Depends(database.get_db)):
     user_message = payload.message.strip()
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-
     recent_videos = db.query(models.Video).order_by(models.Video.created_at.desc()).limit(3).all()
     video_context = [{"title": video.title, "video_link": video.video_link} for video in recent_videos]
-
     try:
-        reply = ai_analyzer.generate_chat_reply(
-            user_message,
-            [{"role": item.role, "content": item.content} for item in payload.history],
-            video_context,
-        )
+        reply = ai_analyzer.get_chat_response([{"role": item.role, "content": item.content} for item in payload.history] + [{"role": "user", "content": user_message}])
         return ChatResponse(reply=reply)
     except Exception as exc:
-        print(f"Error chatting with Gemini: {exc}")
-        return ChatResponse(reply=ai_analyzer.generate_transcript_fallback_reply(user_message, video_context))
+        print(f"Chat error: {exc}")
+        return ChatResponse(reply="Sorry, I'm having trouble connecting to the AI service right now.")
 
 
 @app.post("/api/execute-code", response_model=CodeExecutionResponse)
 def execute_code(payload: CodeExecutionRequest):
     if not payload.code or not payload.code.strip():
         return CodeExecutionResponse(output="", error="Code cannot be empty")
-    output, error = code_compiler.execute_python_code(
-        payload.code,
-        timeout=10,
-        enable_security_check=True,
-    )
+    output, error = code_compiler.execute_python_code(payload.code, timeout=10, enable_security_check=True)
     return CodeExecutionResponse(output=output, error=error)
 
 
@@ -461,12 +461,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(databas
 
 @app.get("/users/{user_id}/recharge-records", response_model=List[RechargeRecordResponse])
 def read_recharge_records(user_id: int, db: Session = Depends(database.get_db)):
-    return (
-        db.query(models.RechargeRecord)
-        .filter(models.RechargeRecord.user_id == user_id)
-        .order_by(models.RechargeRecord.id.desc())
-        .all()
-    )
+    return db.query(models.RechargeRecord).filter(models.RechargeRecord.user_id == user_id).order_by(
+        models.RechargeRecord.id.desc()).all()
 
 
 @app.post("/users/{user_id}/recharge", response_model=RechargeRecordResponse)
@@ -522,8 +518,7 @@ def analyze_video(video_id: int, db: Session = Depends(database.get_db)):
             db.refresh(video)
         return analysis
     except Exception as exc:
-        print(f"Error analyzing video: {exc}")
-        raise HTTPException(status_code=500, detail=f"Failed to analyze video: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/api/videos", response_model=schema.VideoResponse)
@@ -531,36 +526,16 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
     raw_link = (payload.video_link or "").strip()
     if not raw_link:
         raise HTTPException(status_code=400, detail="Please provide a video link")
-
-    title = (payload.title or "").strip() or None
-    if not title:
-        title = extract_youtube_title(raw_link) if ("youtube.com" in raw_link or "youtu.be" in raw_link) else "Uploaded Video"
-
+    title = (payload.title or "").strip() or extract_youtube_title(raw_link)
     try:
-        video = models.Video(
-            video_link=raw_link,
-            title=title,
-            outline=payload.outline,
-            user_id=payload.user_id,
-            cost_points=payload.cost_points or 0,
-            error_report=payload.error_report,
-        )
+        video = models.Video(video_link=raw_link, title=title, outline=payload.outline, user_id=payload.user_id,
+                             cost_points=payload.cost_points or 0)
         db.add(video)
         db.commit()
         db.refresh(video)
-
-        if payload.user_id is not None:
-            upload = models.UploadRecord(
-                user_id=payload.user_id,
-                video_id=video.id,
-                consumed_points=payload.cost_points or 0,
-            )
-            db.add(upload)
-            db.commit()
         return video
     except SQLAlchemyError as exc:
         db.rollback()
-        print(f"Database error creating video: {exc}")
         raise HTTPException(status_code=500, detail="Failed to create video")
 
 
@@ -576,181 +551,164 @@ def delete_video(video_id: int, db: Session = Depends(database.get_db)):
 
 @app.post("/api/feedbacks", response_model=schema.AIFeedbackResponse)
 def create_ai_feedback(payload: schema.AIFeedbackCreate, db: Session = Depends(database.get_db)):
-    feedback = models.AIFeedback(
-        user_id=payload.user_id,
-        ai_message=payload.ai_message,
-        user_message=payload.user_message,
-        error_report=payload.error_report,
-    )
+    feedback = models.AIFeedback(user_id=payload.user_id, ai_message=payload.ai_message,
+                                 user_message=payload.user_message, error_report=payload.error_report)
     db.add(feedback)
     db.commit()
     db.refresh(feedback)
     return feedback
 
 
-@app.get("/api/feedbacks", response_model=List[schema.AIFeedbackResponse])
-def get_ai_feedbacks(db: Session = Depends(database.get_db)):
-    return db.query(models.AIFeedback).order_by(models.AIFeedback.id.desc()).all()
-
-
 @app.delete("/api/feedbacks/conversations/{conversation_id}")
-def delete_chat_conversation(
-    conversation_id: str,
-    user_id: int = Query(..., description="User id"),
-    db: Session = Depends(database.get_db),
-):
-    """
-    Delete all ai_feedback rows that belong to a single chat conversation.
-
-    Note: the frontend stores the conversation token in `error_report` as:
-      `chat-session:{conversation_id}`
-    """
-
+def delete_chat_conversation(conversation_id: str, user_id: int = Query(...), db: Session = Depends(database.get_db)):
     token = f"chat-session:{conversation_id}"
-    q = (
-        db.query(models.AIFeedback)
-        .filter(models.AIFeedback.user_id == user_id)
-        .filter(models.AIFeedback.error_report == token)
-    )
-    deleted_count = q.count()
-    q.delete(synchronize_session=False)
+    db.query(models.AIFeedback).filter(models.AIFeedback.user_id == user_id,
+                                       models.AIFeedback.error_report == token).delete(synchronize_session=False)
     db.commit()
-    return {"message": "Conversation deleted", "deleted_count": deleted_count}
+    return {"message": "Conversation deleted"}
 
 
-@app.post("/api/quiz-questions", response_model=schema.QuizQuestionResponse)
-def create_quiz_question(payload: schema.QuizQuestionCreate, db: Session = Depends(database.get_db)):
-    question = models.QuizQuestion(
-        user_id=payload.user_id,
-        video_id=payload.video_id,
-        question_content=payload.question_content,
-        reference_answer=payload.reference_answer,
-        answer_record=payload.answer_record,
-        accuracy=payload.accuracy or 0,
-        options_json=json.dumps(payload.options, ensure_ascii=False),
-    )
-    db.add(question)
-    db.commit()
-    db.refresh(question)
-    return schema.QuizQuestionResponse(
-        id=question.id,
-        user_id=question.user_id,
-        video_id=question.video_id,
-        question_content=question.question_content,
-        reference_answer=question.reference_answer,
-        answer_record=question.answer_record,
-        accuracy=question.accuracy,
-        options=payload.options,
-        created_at=question.created_at,
-    )
+class GradeRequest(BaseModel):
+    user_id: int
+    answers: List[str]
 
 
-@app.get("/api/quiz-questions", response_model=List[schema.QuizQuestionResponse])
-def get_quiz_questions(db: Session = Depends(database.get_db)):
-    questions = db.query(models.QuizQuestion).order_by(models.QuizQuestion.id.desc()).all()
-    return [
-        schema.QuizQuestionResponse(
-            id=q.id,
-            user_id=q.user_id,
-            video_id=q.video_id,
-            question_content=q.question_content,
-            reference_answer=q.reference_answer,
-            answer_record=q.answer_record,
-            accuracy=q.accuracy,
-            options=json.loads(q.options_json or "[]"),
-            created_at=q.created_at,
+class GradeResponse(BaseModel):
+    total_score: int
+    details: List[dict]
+
+
+@app.post("/api/quizzes/{video_id}/grade", response_model=GradeResponse)
+def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(database.get_db)):
+    try:
+        answer_count = len(payload.answers)
+        # 增加 user_id 過濾，並抓取最新的題目紀錄
+        questions = (
+            db.query(models.QuizQuestion)
+            .filter(models.QuizQuestion.video_id == video_id)
+            .filter(models.QuizQuestion.user_id == payload.user_id)
+            .order_by(models.QuizQuestion.id.desc())
+            .limit(answer_count)
+            .all()
         )
-        for q in questions
-    ]
+        questions.reverse()
+        
+        if not questions:
+            raise HTTPException(status_code=404, detail="找不到對應的測驗紀錄，請重新產生測驗。")
+        
+        details = []
+        correct_count = 0
+        
+        for idx, q in enumerate(questions):
+            try:
+                user_answer_code = payload.answers[idx] if idx < len(payload.answers) else ""
+                correct_answer_str = (q.reference_answer or "").strip()
+                starter_code = q.starter_code or ""
+                
+                # 安全解析測試案例
+                tc_str = q.test_cases_json
+                test_cases = []
+                if tc_str:
+                    try:
+                        parsed = json.loads(tc_str)
+                        test_cases = parsed if isinstance(parsed, list) else [str(parsed)]
+                    except:
+                        test_cases = [tc_str]
+                
+                if not test_cases:
+                    test_cases = ["print('No tests')"]
+                
+                ref_full_code = starter_code.replace("___", correct_answer_str)
+                user_full_code = user_answer_code
+                
+                is_all_passed = True
+                q_results = []
+                
+                # 執行測試
+                for test_case in test_cases[:3]:
+                    # 效能優化：若已失敗則跳過後續執行
+                    if not is_all_passed:
+                        q_results.append({"test_case": test_case, "expected": "SKIPPED", "actual": "SKIPPED", "passed": False})
+                        continue
 
+                    ref_out, ref_err = code_compiler.execute_python_code(f"{ref_full_code}\n\n{test_case}", timeout=4)
+                    user_out, user_err = code_compiler.execute_python_code(f"{user_full_code}\n\n{test_case}", timeout=4)
+                    
+                    is_match = (ref_out.strip() == user_out.strip()) and not user_err
+                    if not is_match:
+                        is_all_passed = False
+                    
+                    q_results.append({
+                        "test_case": test_case,
+                        "expected": ref_out.strip() or ("ERROR: " + ref_err if ref_err else "None"),
+                        "actual": user_out.strip() or ("ERROR: " + user_err if user_err else "None"),
+                        "passed": is_match
+                    })
+                
+                if is_all_passed and q_results:
+                    correct_count += 1
 
-@app.post("/api/uploads", response_model=schema.UploadRecordResponse)
-def create_upload(payload: schema.UploadRecordCreate, db: Session = Depends(database.get_db)):
-    upload = models.UploadRecord(
-        user_id=payload.user_id,
-        video_id=payload.video_id,
-        consumed_points=payload.consumed_points,
-    )
-    db.add(upload)
-    db.commit()
-    db.refresh(upload)
-    return upload
-
-
-@app.post("/api/generations", response_model=schema.GenerationRecordResponse)
-def create_generation(payload: schema.GenerationRecordCreate, db: Session = Depends(database.get_db)):
-    generation = models.GenerationRecord(
-        user_id=payload.user_id,
-        quiz_question_id=payload.quiz_question_id,
-        consumed_points=payload.consumed_points,
-    )
-    db.add(generation)
-    db.commit()
-    db.refresh(generation)
-    return generation
+                details.append({
+                    "question_id": q.id,
+                    "question_text": q.question_content, # 保存題目敘述
+                    "user_answer": user_answer_code,     # 保存使用者當時的完整代碼
+                    "passed": is_all_passed,
+                    "test_results": q_results
+                })
+            except Exception as e:
+                details.append({
+                    "question_id": q.id,
+                    "question_text": q.question_content,
+                    "user_answer": user_answer_code,
+                    "passed": False,
+                    "error": f"批改異常: {str(e)}"
+                })
+        
+        total_score = round((correct_count / len(questions)) * 100) if questions else 0
+        return GradeResponse(total_score=total_score, details=details)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"CRITICAL GRADING ERROR: {e}")
+        raise HTTPException(status_code=500, detail=f"系統批改模組發生嚴重錯誤: {str(e)}")
 
 
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
-def generate_quiz(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
+def generate_quiz_api(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
-    if video is None:
-        raise HTTPException(status_code=404, detail="Video not found")
-
-    title = video.title or "Untitled Video"
+    if video is None: raise HTTPException(status_code=404, detail="Video not found")
     try:
-        quiz_response = learning_pipeline.generate_quiz(video.id, title, video.video_link)
-        questions = quiz_response.questions
-        saved_questions = []
-        for item in questions:
-            question_record = models.QuizQuestion(
-                user_id=user_id,
-                video_id=video.id,
-                question_content=item.question,
-                reference_answer=item.correct_answer,
-                answer_record=None,
-                accuracy=0,
-                options_json=json.dumps(item.options, ensure_ascii=False),
-            )
-            db.add(question_record)
-            saved_questions.append(question_record)
-
+        quiz_response = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link)
+        for item in quiz_response.questions:
+            db.add(models.QuizQuestion(user_id=user_id, video_id=video.id, question_content=item.question,
+                                       reference_answer=item.correct_answer, accuracy=0,
+                                       options_json=json.dumps(item.options, ensure_ascii=False),
+                                       starter_code=item.starter_code,
+                                       test_cases_json=json.dumps(item.test_cases, ensure_ascii=False),
+                                       explanation=item.explanation, reference_concept=item.reference_concept,
+                                       source_time=item.source_time, source_excerpt=item.source_excerpt))
         db.commit()
-
-        if saved_questions:
-            db.refresh(saved_questions[0])
-            generation_record = models.GenerationRecord(
-                user_id=user_id,
-                quiz_question_id=saved_questions[0].id,
-                consumed_points=video.cost_points or 0,
-            )
-            db.add(generation_record)
-            db.commit()
-
-        return schema.QuizResponse(
-            video_id=video.id,
-            video_title=title,
-            quiz_type=quiz_response.quiz_type,
-            questions=questions,
-        )
+        return quiz_response
     except Exception as exc:
-        print(f"Error generating quiz: {exc}")
-        questions = ai_analyzer.generate_fallback_questions(title)
-        return schema.QuizResponse(
-            video_id=video.id,
-            video_title=title,
-            quiz_type="fallback-coding",
-            questions=questions,
-        )
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/api/quiz-results", response_model=schema.QuizResultResponse)
 def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(database.get_db)):
     user_id = payload.user_id or 1
+    # 如果沒給標題，預設使用影片標題
+    title = payload.title
+    if not title:
+        video = db.query(models.Video).filter(models.Video.id == payload.video_id).first()
+        title = video.title if video else f"Quiz Result {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+
     quiz_result = models.QuizResult(
-        user_id=user_id,
-        video_id=payload.video_id,
+        user_id=user_id, 
+        video_id=payload.video_id, 
         score=payload.score,
         total_questions=payload.total_questions,
+        title=title,
+        details_json=payload.details_json
     )
     db.add(quiz_result)
     db.commit()
@@ -758,24 +716,54 @@ def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(d
     return quiz_result
 
 
+@app.delete("/api/quiz-results/{result_id}")
+def delete_quiz_result(result_id: int, db: Session = Depends(database.get_db)):
+    result = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    db.delete(result)
+    db.commit()
+    return {"message": "Result deleted successfully"}
+
+
+@app.patch("/api/quiz-results/{result_id}", response_model=schema.QuizResultResponse)
+def update_quiz_result(result_id: int, payload: schema.QuizResultUpdate, db: Session = Depends(database.get_db)):
+    result = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    result.title = payload.title
+    db.commit()
+    db.refresh(result)
+    return result
+
+
+@app.get("/api/quiz-results", response_model=List[schema.QuizResultResponse])
+def get_quiz_results(user_id: int = 1, db: Session = Depends(database.get_db)):
+    results = (
+        db.query(models.QuizResult)
+        .filter(models.QuizResult.user_id == user_id)
+        .order_by(models.QuizResult.completed_at.desc())
+        .all()
+    )
+    # 由於 schema 需要 video_title，我們可以動態補齊或修改 schema
+    # 這裡直接回傳，Pydantic 會處理關聯 (如果 models 有設定)
+    return results
+
+
 @app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)
 def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
-    video_count = db.query(models.Video).filter(models.Video.user_id == user_id).count()
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    completed_quizzes = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).count()
+    if user is None: raise HTTPException(status_code=404, detail="User not found")
     quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).all()
-    average_accuracy = (
-        sum(result.score / result.total_questions * 100 for result in quiz_results) / len(quiz_results)
-        if quiz_results
-        else 0.0
-    )
+    
+    # 因為 r.score 已經是百分比 (0-100)，直接取平均值即可
+    avg_acc = (sum(r.score for r in quiz_results) / len(quiz_results)) if quiz_results else 0.0
+    
     return schema.UserStatsResponse(
-        video_count=video_count,
-        remaining_points=user.points,
-        completed_quizzes=completed_quizzes,
-        average_accuracy=round(average_accuracy, 1),
+        video_count=db.query(models.Video).filter(models.Video.user_id == user_id).count(),
+        remaining_points=user.points, 
+        completed_quizzes=len(quiz_results),
+        average_accuracy=round(avg_acc, 1)
     )
 
 
