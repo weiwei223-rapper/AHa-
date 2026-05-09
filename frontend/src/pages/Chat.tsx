@@ -65,6 +65,7 @@ const Chat: React.FC = () => {
   const [videos, setVideos] = useState<Array<{ id: number; title?: string | null }>>([]);
   const [videosLoading, setVideosLoading] = useState(false);
   const [videosError, setVideosError] = useState('');
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -273,34 +274,41 @@ const Chat: React.FC = () => {
   };
 
   return (
-    <div className="chat-page">
+    <div className={`chat-page ${isSidebarVisible ? 'sidebar-open' : 'sidebar-collapsed'}`}>
       <aside className="chat-sidebar">
-        <div className="chat-sidebar-top">
-          <div>
-            <div className="chat-sidebar-label">Workspace Chat</div>
-            <h2>歷史對話</h2>
-            <p>切換舊對話、延續問題，或開一個新的聊天視窗。</p>
-          </div>
-          <button className="chat-new-session" onClick={handleCreateSession}>
-            + New Chat
+        <div className="chat-sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px' }}>
+          <div className="chat-sidebar-label">歷史紀錄 (History)</div>
+          <button 
+            className="chat-sidebar-toggle-v-btn"
+            onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+            title={isSidebarVisible ? "向上收起" : "向下展開"}
+          >
+            {isSidebarVisible ? '▲' : '▼'}
           </button>
         </div>
 
-        <div className="chat-history-list">
-          {sessions.map((session) => (
-            <button
-              key={session.id}
-              className={`chat-history-card ${session.id === activeSession?.id ? 'active' : ''}`}
-              onClick={() => handleSelectSession(session.id)}
-            >
-              <span className="chat-history-title">{session.title}</span>
-              <span className="chat-history-preview">
-                {session.messages[session.messages.length - 1]?.content || 'No messages yet'}
-              </span>
-              <span className="chat-history-time">{formatUpdatedAt(session.updatedAt)}</span>
+        {isSidebarVisible && (
+          <div className="chat-history-list">
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                className={`chat-history-card ${session.id === activeSession?.id ? 'active' : ''}`}
+                onClick={() => handleSelectSession(session.id)}
+              >
+                <span className="chat-history-title">{session.title}</span>
+                <span className="chat-history-preview">
+                  {session.messages[session.messages.length - 1]?.content || 'No messages yet'}
+                </span>
+                <span className="chat-history-time">{formatUpdatedAt(session.updatedAt)}</span>
+              </button>
+            ))}
+            {sessions.length === 0 && <p style={{ padding: '20px', color: '#8da3bd', textAlign: 'center' }}>尚無對話紀錄</p>}
+            
+            <button className="chat-new-session" onClick={handleCreateSession} style={{ marginTop: '10px' }}>
+              + New Chat
             </button>
-          ))}
-        </div>
+          </div>
+        )}
       </aside>
 
       <section className="chat-panel">
