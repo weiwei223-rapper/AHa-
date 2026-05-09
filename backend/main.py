@@ -537,11 +537,16 @@ def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None: raise HTTPException(status_code=404, detail="User not found")
     quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).all()
-    avg_acc = (sum(r.score / r.total_questions * 100 for r in quiz_results) / len(
-        quiz_results)) if quiz_results else 0.0
-    return schema.UserStatsResponse(video_count=db.query(models.Video).filter(models.Video.user_id == user_id).count(),
-                                    remaining_points=user.points, completed_quizzes=len(quiz_results),
-                                    average_accuracy=round(avg_acc, 1))
+    
+    # 因為 r.score 已經是百分比 (0-100)，直接取平均值即可
+    avg_acc = (sum(r.score for r in quiz_results) / len(quiz_results)) if quiz_results else 0.0
+    
+    return schema.UserStatsResponse(
+        video_count=db.query(models.Video).filter(models.Video.user_id == user_id).count(),
+        remaining_points=user.points, 
+        completed_quizzes=len(quiz_results),
+        average_accuracy=round(avg_acc, 1)
+    )
 
 
 if __name__ == "__main__":
