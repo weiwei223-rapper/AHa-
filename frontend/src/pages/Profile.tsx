@@ -2,8 +2,6 @@ import { useEffect, useState, useCallback } from "react";
 import api, { API_BASE_URL, userAPI } from "../api";
 import {
   buildAchievements,
-  loadLoginMeta,
-  loadUnlockedAchievementKeys,
   loadVideoCount,
   saveAchievementPoints,
   saveUnlockedAchievementKeys,
@@ -18,6 +16,9 @@ type UserData = {
   email: string;
   uid: string;
   points: number;
+  last_login_date?: string;
+  consecutive_login_days: number;
+  total_login_days: number;
 };
 
 type RechargeRecord = {
@@ -100,7 +101,13 @@ const Profile = () => {
   };
 
   const refreshAchievements = useCallback(() => {
-    const currentLoginMeta = loadLoginMeta();
+    if (!user) return;
+
+    const currentLoginMeta = {
+      lastLoginDate: user.last_login_date || '',
+      consecutiveLoginDays: user.consecutive_login_days || 0,
+      totalLoginDays: user.total_login_days || 0,
+    };
     setLoginMeta(currentLoginMeta);
 
     const allAchievements = buildAchievements({
@@ -119,7 +126,7 @@ const Profile = () => {
     saveAchievementPoints(totalPoints);
     saveUnlockedAchievementKeys(unlockedKeys);
     setAchievements(allAchievements);
-  }, [videoCount, totalVideoCount, questionCount]);
+  }, [videoCount, totalVideoCount, questionCount, user]);
 
   useEffect(() => {
     const storedUserId = localStorage.getItem("userId");
@@ -140,6 +147,9 @@ const Profile = () => {
           const currentVideoCount = loadVideoCount();
           setVideoCount(currentVideoCount);
         });
+
+      // 初始化時載入使用者詳細資料
+      void loadUser(userId);
     }
   }, []);
 
@@ -148,11 +158,6 @@ const Profile = () => {
   }, [videoCount, questionCount, refreshAchievements]);
 
   useEffect(() => {
-    const storedUserId = localStorage.getItem("userId");
-    if (storedUserId) {
-      void loadUser(Number(storedUserId));
-    }
-
     // 監聽影片變更事件，當影片數量變化時重新載入成就
     const handleVideoUpdated = () => {
       if (user?.id) {

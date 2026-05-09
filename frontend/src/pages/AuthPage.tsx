@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { authAPI } from '../api';
-import { updateLoginMetaForToday } from '../utils/achievement';
 import './AuthPage.css';
 import logoIcon from "../assets/logo_v3.jpg";
 
@@ -24,7 +23,6 @@ export default function AuthPage() {
       points: 10000,
     };
 
-    updateLoginMetaForToday();
     localStorage.setItem('userId', guestUser.id.toString());
     localStorage.setItem('userData', JSON.stringify(guestUser));
     window.location.href = '/';
@@ -42,7 +40,6 @@ export default function AuthPage() {
       });
 
       const { user } = response.data;
-      updateLoginMetaForToday();
       localStorage.setItem('userId', user.id.toString());
       localStorage.setItem('userData', JSON.stringify(user));
       window.location.href = '/';
@@ -91,7 +88,6 @@ export default function AuthPage() {
       });
 
       const user = response.data;
-      updateLoginMetaForToday();
       localStorage.setItem('userId', user.id.toString());
       localStorage.setItem('userData', JSON.stringify(user));
       window.location.href = '/';

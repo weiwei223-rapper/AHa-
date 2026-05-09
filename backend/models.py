@@ -18,6 +18,9 @@ class User(Base):
     uid = Column(String, unique=True, index=True)
     points = Column(Integer, default=0)
     role = Column(Integer, default=1, nullable=False)
+    last_login_date = Column(String, nullable=True)  # 新增：最後登入日期
+    consecutive_login_days = Column(Integer, default=0)  # 新增：連續登入天數
+    total_login_days = Column(Integer, default=0)  # 新增：總登入天數
 
     videos = relationship("Video", back_populates="uploader", cascade="all, delete-orphan")
     recharge_records = relationship("RechargeRecord", back_populates="user", cascade="all, delete-orphan")

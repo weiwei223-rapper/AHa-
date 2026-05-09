@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import json
 import re
@@ -177,6 +177,9 @@ class UserResponse(BaseModel):
     name: str
     uid: str
     points: int
+    last_login_date: Optional[str] = None
+    consecutive_login_days: int = 0
+    total_login_days: int = 0
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -287,6 +290,22 @@ def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # 更新登入元數據
+    today = datetime.now().date().isoformat()
+    yesterday = (datetime.now().date() - timedelta(days=1)).isoformat()
+    
+    if user.last_login_date == today:
+        # 今天已經登入過，不更新
+        pass
+    else:
+        consecutive_days = user.consecutive_login_days + 1 if user.last_login_date == yesterday else 1
+        total_days = user.total_login_days + 1
+        user.last_login_date = today
+        user.consecutive_login_days = consecutive_days
+        user.total_login_days = total_days
+        db.commit()
+    
     return {"user": user, "message": f"Welcome back, {user.name}"}
 
 
