@@ -1,13 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import api, { API_BASE_URL, userAPI } from "../api";
 import {
-  addAchievementPoints,
   buildAchievements,
-  loadAchievementPoints,
   loadLoginMeta,
   loadUnlockedAchievementKeys,
   loadVideoCount,
-  updateVideoCount,
+  saveAchievementPoints,
   saveUnlockedAchievementKeys,
   type AchievementItem,
   type LoginMeta,
@@ -112,21 +110,14 @@ const Profile = () => {
       totalLoginDays: currentLoginMeta.totalLoginDays,
     });
 
-    const storedKeys = loadUnlockedAchievementKeys();
     const unlockedKeys = allAchievements.filter((item) => item.unlocked).map((item) => item.key);
-    const newlyUnlockedKeys = unlockedKeys.filter((key) => !storedKeys.includes(key));
+    const totalPoints = allAchievements
+      .filter((item) => item.unlocked)
+      .reduce((sum, item) => sum + item.points, 0);
 
-    if (newlyUnlockedKeys.length > 0) {
-      const newPoints = allAchievements
-        .filter((item) => newlyUnlockedKeys.includes(item.key))
-        .reduce((sum, item) => sum + item.points, 0);
-      const nextPoints = addAchievementPoints(newPoints);
-      setAchievementPoints(nextPoints);
-      saveUnlockedAchievementKeys([...storedKeys, ...newlyUnlockedKeys]);
-    } else {
-      setAchievementPoints(loadAchievementPoints());
-    }
-
+    setAchievementPoints(totalPoints);
+    saveAchievementPoints(totalPoints);
+    saveUnlockedAchievementKeys(unlockedKeys);
     setAchievements(allAchievements);
   }, [videoCount, totalVideoCount, questionCount]);
 

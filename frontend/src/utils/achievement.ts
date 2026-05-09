@@ -107,6 +107,10 @@ export const loadAchievementPoints = (): number => {
   return typeof stored === 'number' ? stored : 0;
 };
 
+export const saveAchievementPoints = (points: number): void => {
+  localStorage.setItem(STORAGE_KEYS.achievementPoints, JSON.stringify(points));
+};
+
 export const addAchievementPoints = (points: number): number => {
   const current = loadAchievementPoints();
   const next = current + points;
