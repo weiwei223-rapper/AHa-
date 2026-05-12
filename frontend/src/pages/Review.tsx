@@ -242,7 +242,7 @@ const Review = () => {
         <div>
           <div className="page-eyebrow">History Review</div>
           <h1>歷史作答紀錄</h1>
-          <p>在這裡你可以回顧過去所有的測驗表現、更改名稱或刪除紀錄。</p>
+          <p>在這裡你可以回顧過去所有的測驗表現、更改名稱，所有的學習腳印都將被永久保留。</p>
         </div>
       </section>
 

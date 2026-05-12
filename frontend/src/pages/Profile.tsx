@@ -66,6 +66,15 @@ const Profile = () => {
   const loadUser = async (id: number) => {
     try {
       setLoading(true);
+      
+      // ✅ 改用 sessionStorage 來檢查付款狀態
+      const expectedPoints = sessionStorage.getItem("pending_points");
+
+      // 如果有待處理的充值，稍微等待一下後端接收綠界的 ReturnURL
+      if (expectedPoints) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
       const userResp = await api.get(`/users/${id}`);
       const data: UserData = userResp.data;
       setUser(data);
@@ -77,22 +86,21 @@ const Profile = () => {
       });
       const historyResp = await api.get(`/users/${id}/recharge-records`);
       setHistory(historyResp.data);
-      
-      // Check for payment success in URL
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("payment_status") === "success") {
-        const points = params.get("points");
-        setMessage(`🎉 付款成功！已成功儲值 ${points} 點。`);
+
+      if (expectedPoints) {
+        setMessage(`🎉 付款成功！已成功儲值 ${expectedPoints} 點。`);
         setActiveTab("records");
         setShowTopup(false);
-        // 清除 URL 參數，避免重新整理時重複顯示
-        window.history.replaceState({}, document.title, window.location.pathname);
+
+        // 清除暫存，避免使用者按 F5 重新整理時又重複跳出訊息
+        sessionStorage.removeItem("pending_points");
       } else {
         setMessage("");
       }
 
       refreshAchievements();
     } catch (error) {
+
       console.error(error);
       setMessage("無法讀取使用者資料，請稍後再試。");
     } finally {
@@ -164,7 +172,7 @@ const Profile = () => {
         // 從後端 API 獲取最新的統計資訊，包括真實的影片數量
         userAPI.getStats(user.id).then((response) => {
           const stats = response.data;
-            // 使用已分析影片數量作為成就進度
+          // 使用已分析影片數量作為成就進度
           setVideoCount(stats.analyzed_video_count);
           setTotalVideoCount(stats.video_count);
           setQuestionCount(stats.total_questions_count || 0);
@@ -240,7 +248,11 @@ const Profile = () => {
     form.action = `${API_BASE_URL}/ecpay/checkout`;
     form.style.display = "none";
 
+    // 儲存預期點數到 sessionStorage，以便跳轉回來時顯示成功訊息並更新紀錄
+    sessionStorage.setItem("pending_points", plan.points.toString());
+
     Object.entries(checkoutParams).forEach(([name, value]) => {
+
       const input = document.createElement("input");
       input.type = "hidden";
       input.name = name;
@@ -511,16 +523,17 @@ const Profile = () => {
             <table className="profile-record-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Order ID</th>
-                  <th>Description</th>
-                  <th>Amount</th>
-                  <th>Added</th>
-                  <th>Balance</th>
-                  <th>Method</th>
+                  <th>儲值日期</th>
+                  <th>訂單編號</th>
+                  <th>方案內容</th>
+                  <th>儲值金額</th>
+                  <th>獲得點數</th>
+                  <th>儲值後餘額</th>
+                  <th>付款方式</th>
                 </tr>
               </thead>
               <tbody>
+
                 {history.map((record) => (
                   <tr key={record.order_id}>
                     <td>{record.date}</td>

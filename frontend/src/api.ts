@@ -41,7 +41,7 @@ export const authAPI = {
 export const userAPI = {
   getUser: (userId: number) =>
     api.get(`/users/${userId}`),
-  updateUser: (userId: number, data: { name: string; email: string; password?: string }) =>
+  updateUser: (userId: number, data: { name: string; email: string; password?: string; current_quiz_draft?: string | null }) =>
     api.put(`/users/${userId}`, data),
   getRechargeRecords: (userId: number) =>
     api.get(`/users/${userId}/recharge-records`),
@@ -58,8 +58,8 @@ export const videoAPI = {
     api.post('/api/videos', data),
   deleteVideo: (videoId: number) => api.delete(`/api/videos/${videoId}`),
   analyzeVideo: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/analysis`, { params: { user_id: userId } }),
-  generateQuiz: (videoId: number, userId: number, outline?: string | null) =>
-    api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, outline: outline || undefined } }),
+  generateQuiz: (videoId: number, userId: number, count?: number) =>
+    api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
 };
 
 export const feedbackAPI = {

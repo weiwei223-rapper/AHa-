@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { chatAPI, videoAPI } from '../api';
+import { chatAPI, feedbackAPI, videoAPI } from '../api';
 import './PageIndex.css';
 import ChatDB from './ChatDB';
+import ReportModal from '../component/ReportModal';
 
 type MessageRole = 'user' | 'assistant';
 
@@ -66,6 +67,10 @@ const Chat: React.FC = () => {
   const [videosLoading, setVideosLoading] = useState(false);
   const [videosError, setVideosError] = useState('');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+
+  // Modal State
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportingMessage, setReportingMessage] = useState<Message | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -301,6 +306,31 @@ const Chat: React.FC = () => {
     setError('');
   };
 
+  const handleReportError = (message: Message) => {
+    setReportingMessage(message);
+    setIsReportModalOpen(true);
+  };
+
+  const handleModalSubmit = async (errorDesc: string) => {
+    const userId = Number(localStorage.getItem('userId') || 0);
+    if (!reportingMessage) return;
+
+    try {
+      await feedbackAPI.createFeedback({
+        user_id: userId,
+        video_id: activeSession?.selectedVideoId ?? null,
+        ai_message: reportingMessage.content,
+        user_message: 'USER_ERROR_REPORT',
+        error_report: errorDesc,
+      });
+      setError('感謝您的回報！');
+      setTimeout(() => setError(''), 3000);
+    } catch (err) {
+      console.error('Error submitting report:', err);
+      setError('回報失敗，請稍後再試。');
+    }
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -430,6 +460,15 @@ const Chat: React.FC = () => {
                     <div className="chat-message-card">
                       <div className="chat-message-role">
                         {message.role === 'user' ? 'You' : 'Gemini'}
+                        {message.role === 'assistant' && (
+                          <button 
+                            className="chat-message-report-btn"
+                            onClick={() => handleReportError(message)}
+                            title="回報錯誤"
+                          >
+                            🚩 回報
+                          </button>
+                        )}
                       </div>
                       <p>{message.content}</p>
                     </div>
@@ -472,6 +511,14 @@ const Chat: React.FC = () => {
           )}
         </div>
       </section>
+
+      <ReportModal 
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onSubmit={handleModalSubmit}
+        title="錯誤回報"
+        subtitle="請告訴我們這則訊息哪裡有誤，我們會儘速修正。"
+      />
     </div>
   );
 };

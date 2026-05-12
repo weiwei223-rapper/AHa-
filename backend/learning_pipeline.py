@@ -167,7 +167,7 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
         token_usage=_to_token_usage_schema(total_usage)
     )
 
-def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResponse:
+def generate_quiz(video_id: int, title: str, video_link: str, count: int = 5) -> schema.QuizResponse:
     analysis = analyze_video(video_id, title, video_link)
     total_usage = {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}
     
@@ -176,9 +176,20 @@ def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResp
         total_usage["candidatesTokenCount"] += analysis.token_usage.completion_tokens
         total_usage["totalTokenCount"] += analysis.token_usage.total_tokens
 
+    # 零失敗備援偵測：若分析結果顯示 failed，直接進入標題推理
+    if analysis.transcript_source == "failed":
+        questions = ai_analyzer.generate_fallback_questions(title, outline=analysis.outline_markdown, count=count)
+        return schema.QuizResponse(
+            video_id=video_id, 
+            video_title=title, 
+            quiz_type="technical_inference", 
+            questions=questions,
+            token_usage=_to_token_usage_schema(total_usage)
+        )
+
     prompt = f"""
 [SYSTEM: RETURN RAW JSON ARRAY ONLY. NO TEXT AROUND IT.]
-你是一位親切的 Python 導師。請根據影片內容產出 5 題「直覺式」的程式填空題。
+你是一位親切的 Python 導師。請根據影片內容產出 {count} 題「直覺式」的程式填空題。
 
 影片標題：{title}
 大綱：{analysis.outline_markdown}
@@ -210,7 +221,7 @@ JSON 範例格式：
         payload, usage = _call_llm(prompt)
         _add_tokens(total_usage, usage)
         raw_questions = _extract_json_array(payload)
-        questions = [_normalize_question(item) for item in raw_questions]
+        questions = [_normalize_question(item) for item in raw_questions[:count]]
         return schema.QuizResponse(
             video_id=video_id, 
             video_title=title, 
@@ -221,13 +232,11 @@ JSON 範例格式：
     except Exception as e:
         print(f"Error in generate_quiz: {e}")
         # 極速備援題目
+        fallback_questions = ai_analyzer.generate_fallback_questions(title, outline=analysis.outline_markdown, count=count)
         return schema.QuizResponse(
-            video_id=video_id, video_title=title, quiz_type="fallback",
-            questions=[_normalize_question({
-                "question": f"場景：判斷開關狀態。請補全邏輯，使其回傳 True。",
-                "correct_answer": "True",
-                "starter_code": "# --- 請在此填入 True ---\\nresult = ___",
-                "test_cases": ["print(True)"]
-            })],
+            video_id=video_id, 
+            video_title=title, 
+            quiz_type="fallback", 
+            questions=fallback_questions,
             token_usage=_to_token_usage_schema(total_usage)
         )
