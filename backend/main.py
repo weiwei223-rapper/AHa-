@@ -137,26 +137,63 @@ app.add_middleware(
 # --- ECPay Configuration ---
 ECPAY_MERCHANT_ID = "2000132" # 測試特店編號
 ECPAY_HASH_KEY = "5294y06JbISpM5x9"
-ECPAY_HASH_IV = "v77hoKGq4uF4s1uL"
+ECPAY_HASH_IV = "v77hoKGq4kWxNNIS"
+
 
 def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
-    # 1. 篩選並排序
-    filtered_params = {k: v for k, v in params.items() if k != "CheckMacValue"}
-    sorted_keys = sorted(filtered_params.keys(), key=str.lower)
+    """
+    產生綠界科技的 CheckMacValue。
+    規則：
+    1. 篩選：排除 CheckMacValue，且排除值為 None 或空字串的參數。
+    2. 排序：依參數名稱的 ASCII 碼由小到大排序。
+    3. 組合：前後加上 HashKey 和 HashIV。
+    4. URL Encode：轉小寫，並進行特定的字元替換。
+    5. 雜湊：根據 EncryptType 使用 SHA256 (1) 或 MD5 (0)。
+    """
+    # 1. 篩選並排序 (ECPay 規定空值不參加雜湊)
+    filtered_params = {
+        k: str(v) for k, v in params.items() 
+        if k != "CheckMacValue" and v is not None and str(v).strip() != ""
+    }
+    
+    # 如果 params 中沒有 MerchantID，則補上預設值
+    if "MerchantID" not in filtered_params:
+        filtered_params["MerchantID"] = ECPAY_MERCHANT_ID
+        
+    sorted_keys = sorted(filtered_params.keys())
     
     # 2. 組合字串
     raw_list = [f"{k}={filtered_params[k]}" for k in sorted_keys]
     raw_str = f"HashKey={ECPAY_HASH_KEY}&{'&'.join(raw_list)}&HashIV={ECPAY_HASH_IV}"
     
     # 3. URL Encode
+    # 綠界要求的 URL Encode 規則：
+    # - 使用 quote_plus (將空格轉為 +)
+    # - 轉為小寫
+    # - 取代特定的符號為原始字元
     encoded_str = quote_plus(raw_str).lower()
+    encoded_str = (
+        encoded_str.replace("%2d", "-")
+        .replace("%5f", "_")
+        .replace("%2e", ".")
+        .replace("%21", "!")
+        .replace("%2a", "*")
+        .replace("%28", "(")
+        .replace("%29", ")")
+        .replace("%7e", "~")  # 補上 tilde
+    )
     
-    # 4. 取代為綠界要求的特定字元 (雖然 quote_plus 已經做了一些，但綠界有特殊要求)
-    # 綠界規範：小寫、取代特定的符號
-    # 但在 Python 中，quote_plus(raw_str).lower() 通常就足夠，若有問題再細修
+    # 4. 雜湊
     import hashlib
+    encrypt_type = params.get("EncryptType", 1)
+    
+    # 偵錯記錄 (可選)
+    # print(f"DEBUG - Raw Str: {raw_str}")
+    # print(f"DEBUG - Encoded Str: {encoded_str}")
+    
+    if str(encrypt_type) == "0":
+        return hashlib.md5(encoded_str.encode("utf-8")).hexdigest().upper()
     return hashlib.sha256(encoded_str.encode("utf-8")).hexdigest().upper()
-
 class EcpayCheckoutRequest(BaseModel):
     MerchantTradeNo: str
     MerchantTradeDate: str
@@ -165,6 +202,8 @@ class EcpayCheckoutRequest(BaseModel):
     ItemName: str
     ReturnURL: str
     ClientBackURL: Optional[str] = None
+    CustomField1: Optional[str] = None
+    CustomField2: Optional[str] = None
 
 class EcpayCheckoutResponse(BaseModel):
     CheckMacValue: str

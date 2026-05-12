@@ -77,16 +77,19 @@ const Profile = () => {
       });
       const historyResp = await api.get(`/users/${id}/recharge-records`);
       setHistory(historyResp.data);
-      
+
       // Check for payment success in URL
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("payment_status") === "success") {
-        const points = params.get("points");
-        setMessage(`🎉 付款成功！已成功儲值 ${points} 點。`);
+
+      // ✅ 改用 sessionStorage 來檢查付款狀態
+      const expectedPoints = sessionStorage.getItem("pending_points");
+
+      if (expectedPoints) {
+        setMessage(`🎉 付款成功！已成功儲值 ${expectedPoints} 點。`);
         setActiveTab("records");
         setShowTopup(false);
-        // 清除 URL 參數，避免重新整理時重複顯示
-        window.history.replaceState({}, document.title, window.location.pathname);
+
+        // 清除暫存，避免使用者按 F5 重新整理時又重複跳出訊息
+        sessionStorage.removeItem("pending_points");
       } else {
         setMessage("");
       }
@@ -164,7 +167,7 @@ const Profile = () => {
         // 從後端 API 獲取最新的統計資訊，包括真實的影片數量
         userAPI.getStats(user.id).then((response) => {
           const stats = response.data;
-            // 使用已分析影片數量作為成就進度
+          // 使用已分析影片數量作為成就進度
           setVideoCount(stats.analyzed_video_count);
           setTotalVideoCount(stats.video_count);
           setQuestionCount(stats.total_questions_count || 0);
