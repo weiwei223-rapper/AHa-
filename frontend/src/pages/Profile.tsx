@@ -66,6 +66,15 @@ const Profile = () => {
   const loadUser = async (id: number) => {
     try {
       setLoading(true);
+      
+      // ✅ 改用 sessionStorage 來檢查付款狀態
+      const expectedPoints = sessionStorage.getItem("pending_points");
+
+      // 如果有待處理的充值，稍微等待一下後端接收綠界的 ReturnURL
+      if (expectedPoints) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
       const userResp = await api.get(`/users/${id}`);
       const data: UserData = userResp.data;
       setUser(data);
@@ -77,11 +86,6 @@ const Profile = () => {
       });
       const historyResp = await api.get(`/users/${id}/recharge-records`);
       setHistory(historyResp.data);
-
-      // Check for payment success in URL
-
-      // ✅ 改用 sessionStorage 來檢查付款狀態
-      const expectedPoints = sessionStorage.getItem("pending_points");
 
       if (expectedPoints) {
         setMessage(`🎉 付款成功！已成功儲值 ${expectedPoints} 點。`);
@@ -96,6 +100,7 @@ const Profile = () => {
 
       refreshAchievements();
     } catch (error) {
+
       console.error(error);
       setMessage("無法讀取使用者資料，請稍後再試。");
     } finally {
@@ -243,7 +248,11 @@ const Profile = () => {
     form.action = `${API_BASE_URL}/ecpay/checkout`;
     form.style.display = "none";
 
+    // 儲存預期點數到 sessionStorage，以便跳轉回來時顯示成功訊息並更新紀錄
+    sessionStorage.setItem("pending_points", plan.points.toString());
+
     Object.entries(checkoutParams).forEach(([name, value]) => {
+
       const input = document.createElement("input");
       input.type = "hidden";
       input.name = name;
