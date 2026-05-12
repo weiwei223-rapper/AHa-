@@ -13,9 +13,11 @@
     "@google/generative-ai": "^0.24.1",
     "@monaco-editor/react": "^4.7.0",
     "axios": "^1.7.5",
+    "chart.js": "^4.5.1",
     "firebase": "^12.12.1",
     "monaco-editor": "^0.53.0",
     "react": "^19.2.4",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.0"
   },
