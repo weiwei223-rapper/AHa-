@@ -52,6 +52,7 @@ const Home = ({ name }: UserStatusProps) => {
     };
 
     window.addEventListener("video-updated", handleVideoUpdated);
+    window.addEventListener("points-updated", handleVideoUpdated);
     window.addEventListener("focus", handleVideoUpdated);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 

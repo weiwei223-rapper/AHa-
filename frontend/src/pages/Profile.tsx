@@ -194,10 +194,12 @@ const Profile = () => {
     };
 
     window.addEventListener('video-updated', handleVideoUpdated);
+    window.addEventListener('points-updated', handleVideoUpdated);
     window.addEventListener('quizCompleted', handleQuizCompleted);
 
     return () => {
       window.removeEventListener('video-updated', handleVideoUpdated);
+      window.removeEventListener('points-updated', handleVideoUpdated);
       window.removeEventListener('quizCompleted', handleQuizCompleted);
     };
   }, [user?.id, refreshAchievements]);

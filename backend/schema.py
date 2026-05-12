@@ -90,11 +90,18 @@ class QuizQuestionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class TokenUsage(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
 class QuizResponse(BaseModel):
     video_id: int
     video_title: str
     quiz_type: str = "ai-coding"
     questions: List[QuizQuestion]
+    token_usage: Optional[TokenUsage] = None
+    consumed_points: Optional[int] = 0
 
 
 class TranscriptChunk(BaseModel):
@@ -113,6 +120,8 @@ class VideoAnalysisResponse(BaseModel):
     retrieved_chunks: List[TranscriptChunk]
     vector_backend: str
     generated_at: datetime
+    token_usage: Optional[TokenUsage] = None
+    consumed_points: Optional[int] = 0
 
 class QuizResultCreate(BaseModel):
     user_id: int = 1

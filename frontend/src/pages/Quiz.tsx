@@ -24,11 +24,19 @@ type QuizQuestion = {
   test_cases?: string[];
 };
 
+type TokenUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+};
+
 type QuizData = {
   video_id: number;
   video_title: string;
   quiz_type?: string;
   questions: QuizQuestion[];
+  token_usage?: TokenUsage;
+  consumed_points?: number;
 };
 
 const Quiz = () => {
@@ -116,6 +124,11 @@ const Quiz = () => {
       setCurrentQuestionIndex(0);
       setUserAnswers(nextQuiz.questions.map(q => q.starter_code || ""));
       setShowResults(false);
+
+      // 觸發點數更新事件
+      window.dispatchEvent(new CustomEvent('points-updated', {
+        detail: { userId }
+      }));
     } catch (err: any) {
       console.error("Error generating quiz:", err);
       setError(err.response?.data?.detail || "無法產生影片填空題");
@@ -375,6 +388,11 @@ const Quiz = () => {
 
       {quiz && currentQuestion && (
         <section className="panel-card">
+          {quiz.consumed_points !== undefined && (
+            <div className="quiz-score-band" style={{ marginBottom: '20px', backgroundColor: 'rgba(56, 189, 248, 0.1)', borderColor: 'rgba(56, 189, 248, 0.3)' }}>
+              <p style={{ color: '#fb7185' }}>本次生成扣除點數：<strong>{quiz.consumed_points}</strong> 點</p>
+            </div>
+          )}
           <div className="quiz-question-card">
             <div className="quiz-question-number">
               Question {currentQuestionIndex + 1} / {quiz.questions.length}

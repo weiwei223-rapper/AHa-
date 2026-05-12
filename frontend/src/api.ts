@@ -57,7 +57,7 @@ export const videoAPI = {
   createVideo: (data: { video_link: string; title?: string | null; outline?: string | null; user_id?: number; cost_points?: number; error_report?: string | null }) =>
     api.post('/api/videos', data),
   deleteVideo: (videoId: number) => api.delete(`/api/videos/${videoId}`),
-  analyzeVideo: (videoId: number) => api.get(`/api/videos/${videoId}/analysis`),
+  analyzeVideo: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/analysis`, { params: { user_id: userId } }),
   generateQuiz: (videoId: number, userId: number, outline?: string | null) =>
     api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, outline: outline || undefined } }),
 };
