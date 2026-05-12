@@ -523,16 +523,17 @@ const Profile = () => {
             <table className="profile-record-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Order ID</th>
-                  <th>Description</th>
-                  <th>Amount</th>
-                  <th>Added</th>
-                  <th>Balance</th>
-                  <th>Method</th>
+                  <th>儲值日期</th>
+                  <th>訂單編號</th>
+                  <th>方案內容</th>
+                  <th>儲值金額</th>
+                  <th>獲得點數</th>
+                  <th>儲值後餘額</th>
+                  <th>付款方式</th>
                 </tr>
               </thead>
               <tbody>
+
                 {history.map((record) => (
                   <tr key={record.order_id}>
                     <td>{record.date}</td>
