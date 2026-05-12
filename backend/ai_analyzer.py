@@ -40,7 +40,7 @@ def init_gemini() -> str:
     return api_key
 
 
-def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> str:
+def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> tuple[str, dict]:
     api_key = init_gemini()
     model_name = model.replace("models/", "")
 
@@ -90,9 +90,16 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         text = "".join(part.get("text", "") for part in parts).strip()
         if not text:
             raise ValueError("Empty response text from Gemini")
-        return text
+        
+        usage_metadata = data.get("usageMetadata", {
+            "promptTokenCount": 0,
+            "candidatesTokenCount": 0,
+            "totalTokenCount": 0
+        })
+        return text, usage_metadata
     except requests.exceptions.RequestException as e:
         raise ValueError(f"Gemini API request failed: {str(e)}")
+
 def get_chat_response(messages: list[dict]) -> str:
     """Send chat history to Gemini and get a response."""
     # Convert our internal message format to Gemini's format
@@ -107,7 +114,8 @@ def get_chat_response(messages: list[dict]) -> str:
         else:
             gemini_history.append({"role": "user", "parts": [{"text": content}]})
     
-    return generate_text_with_gemini(gemini_history)
+    text, _ = generate_text_with_gemini(gemini_history)
+    return text
 
 
 def is_python_related(title: str, transcript: str) -> bool:
@@ -125,8 +133,8 @@ def is_python_related(title: str, transcript: str) -> bool:
 3. 僅回傳以上兩個關鍵字之一，不要有其他文字。
 """
     try:
-        response = generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
-        return "VALID" in response.upper()
+        response_text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
+        return "VALID" in response_text.upper()
     except:
         # 如果 AI 判斷失敗，預設允許通過以避免誤殺
         return True
@@ -355,5 +363,5 @@ def generate_fallback_questions(
 
 
 def test_gemini_connection(model: str = DEFAULT_GEMINI_MODEL) -> dict:
-    text = generate_text_with_gemini([{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], model=model)
+    text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], model=model)
     return {"ok": text.strip() == "GEMINI_OK", "model": model, "reply": text.strip()}

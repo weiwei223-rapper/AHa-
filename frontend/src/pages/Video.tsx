@@ -20,6 +20,12 @@ type TranscriptChunk = {
   score?: number | null;
 };
 
+type TokenUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+};
+
 type VideoAnalysis = {
   video_id: number;
   video_title: string;
@@ -30,6 +36,8 @@ type VideoAnalysis = {
   retrieved_chunks: TranscriptChunk[];
   vector_backend: string;
   generated_at: string;
+  token_usage?: TokenUsage;
+  consumed_points?: number;
 };
 
 type VideoStatusProps = {
@@ -117,14 +125,18 @@ const Video = (_props: VideoStatusProps) => {
     setAnalyzingVideoId(videoId);
     setError("");
     try {
-      const response = await videoAPI.analyzeVideo(videoId);
+      const response = await videoAPI.analyzeVideo(videoId, userId);
       setAnalysis(response.data);
       await fetchVideos();
 
       // 影片分析完成後，觸發成就更新事件
-      // 因為 analyzed_video_count 已更新
       window.dispatchEvent(new CustomEvent('video-updated', {
         detail: { userId, videoIdAnalyzed: videoId }
+      }));
+
+      // 觸發點數更新事件
+      window.dispatchEvent(new CustomEvent('points-updated', {
+        detail: { userId }
       }));
     } catch (err: any) {
       console.error("Error analyzing video:", err);
@@ -232,6 +244,12 @@ const Video = (_props: VideoStatusProps) => {
             <p>逐字稿來源：{analysis.transcript_source}</p>
             <p>檢索方式：{analysis.vector_backend}</p>
           </div>
+
+          {analysis.consumed_points !== undefined && (
+            <div className="quiz-score-band" style={{ marginTop: '8px', backgroundColor: 'rgba(56, 189, 248, 0.1)', borderColor: 'rgba(56, 189, 248, 0.3)' }}>
+              <p style={{ color: '#fb7185' }}>本次分析扣除點數：<strong>{analysis.consumed_points}</strong> 點</p>
+            </div>
+          )}
 
           <div className="quiz-review-list">
             <article className="quiz-review-card">

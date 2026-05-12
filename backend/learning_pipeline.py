@@ -26,8 +26,20 @@ class TranscriptResult:
     transcript: str
     source: str
 
-def _call_llm(prompt: str) -> str:
+def _call_llm(prompt: str) -> tuple[str, dict]:
     return ai_analyzer.generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
+
+def _add_tokens(total: dict, current: dict):
+    total["promptTokenCount"] += current.get("promptTokenCount", 0)
+    total["candidatesTokenCount"] += current.get("candidatesTokenCount", 0)
+    total["totalTokenCount"] += current.get("totalTokenCount", 0)
+
+def _to_token_usage_schema(usage_dict: dict) -> schema.TokenUsage:
+    return schema.TokenUsage(
+        prompt_tokens=usage_dict.get("promptTokenCount", 0),
+        completion_tokens=usage_dict.get("candidatesTokenCount", 0),
+        total_tokens=usage_dict.get("totalTokenCount", 0)
+    )
 
 def _extract_json_array(payload: str) -> list[dict[str, Any]]:
     payload = re.sub(r"```[a-z]*|```", "", payload).strip()
@@ -68,9 +80,10 @@ def _parse_bullets(markdown: str) -> list[str]:
                 topics.append(topic)
     return topics[:8]
 
-def generate_outline(transcript: str, title: str) -> str:
+def generate_outline(transcript: str, title: str) -> tuple[str, dict]:
+    total_usage = {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}
     if not transcript.strip():
-        return "- 無法取得影片逐字稿\n- 目前不能生成可靠的影片摘要"
+        return "- 無法取得影片逐字稿\n- 目前不能生成可靠的影片摘要", total_usage
 
     # 簡單分段處理
     chunks = [transcript[i:i+OUTLINE_CHUNK_SIZE] for i in range(0, len(transcript), OUTLINE_CHUNK_SIZE - OUTLINE_CHUNK_OVERLAP)]
@@ -89,7 +102,9 @@ def generate_outline(transcript: str, title: str) -> str:
 逐字稿：
 {chunk}
 """
-        chunk_summaries.append(_call_llm(prompt))
+        text, usage = _call_llm(prompt)
+        chunk_summaries.append(text)
+        _add_tokens(total_usage, usage)
 
     merged_prompt = f"""
 請把以下分段摘要整合成一份影片重點整理，使用繁體中文 Markdown 條列。
@@ -101,11 +116,14 @@ def generate_outline(transcript: str, title: str) -> str:
 分段摘要：
 {chr(10).join(chunk_summaries)}
 """
-    return _call_llm(merged_prompt)
+    final_text, final_usage = _call_llm(merged_prompt)
+    _add_tokens(total_usage, final_usage)
+    return final_text, total_usage
 
 def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAnalysisResponse:
     # 獲取逐字稿
     transcript = ai_analyzer.fetch_video_transcript(video_link)
+    total_usage = {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}
     
     if not transcript:
         # 抓取 YouTube 原始標題以利精準推理 (避免受使用者自定義標題干擾)
@@ -120,17 +138,20 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
 2. 內容要具體且具備技術深度。
 3. 使用繁體中文。
 """
-        outline = _call_llm(fallback_prompt)
+        outline, usage = _call_llm(fallback_prompt)
+        _add_tokens(total_usage, usage)
         topics = _parse_bullets(outline)
         return schema.VideoAnalysisResponse(
             video_id=video_id, video_title=original_title, transcript_source="failed",
             transcript_excerpt="系統目前因 YouTube 限制無法取得音軌，已啟動『專家推理模式』根據影片原始標題生成學習重點。", 
             outline_markdown=outline,
             key_topics=topics, retrieved_chunks=[], vector_backend="none",
-            generated_at=datetime.utcnow()
+            generated_at=datetime.utcnow(),
+            token_usage=_to_token_usage_schema(total_usage)
         )
     
-    outline = generate_outline(transcript, title)
+    outline, usage = generate_outline(transcript, title)
+    _add_tokens(total_usage, usage)
     topics = _parse_bullets(outline)
     
     return schema.VideoAnalysisResponse(
@@ -142,12 +163,19 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
         key_topics=topics, 
         retrieved_chunks=[], 
         vector_backend="simple",
-        generated_at=datetime.utcnow()
+        generated_at=datetime.utcnow(),
+        token_usage=_to_token_usage_schema(total_usage)
     )
 
 def generate_quiz(video_id: int, title: str, video_link: str) -> schema.QuizResponse:
     analysis = analyze_video(video_id, title, video_link)
+    total_usage = {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}
     
+    if analysis.token_usage:
+        total_usage["promptTokenCount"] += analysis.token_usage.prompt_tokens
+        total_usage["candidatesTokenCount"] += analysis.token_usage.completion_tokens
+        total_usage["totalTokenCount"] += analysis.token_usage.total_tokens
+
     prompt = f"""
 [SYSTEM: RETURN RAW JSON ARRAY ONLY. NO TEXT AROUND IT.]
 你是一位親切的 Python 導師。請根據影片內容產出 5 題「直覺式」的程式填空題。
@@ -179,10 +207,17 @@ JSON 範例格式：
 ]
 """
     try:
-        payload = _call_llm(prompt)
+        payload, usage = _call_llm(prompt)
+        _add_tokens(total_usage, usage)
         raw_questions = _extract_json_array(payload)
         questions = [_normalize_question(item) for item in raw_questions]
-        return schema.QuizResponse(video_id=video_id, video_title=title, quiz_type="coding", questions=questions)
+        return schema.QuizResponse(
+            video_id=video_id, 
+            video_title=title, 
+            quiz_type="coding", 
+            questions=questions,
+            token_usage=_to_token_usage_schema(total_usage)
+        )
     except Exception as e:
         print(f"Error in generate_quiz: {e}")
         # 極速備援題目
@@ -193,5 +228,6 @@ JSON 範例格式：
                 "correct_answer": "True",
                 "starter_code": "# --- 請在此填入 True ---\\nresult = ___",
                 "test_cases": ["print(True)"]
-            })]
+            })],
+            token_usage=_to_token_usage_schema(total_usage)
         )
