@@ -2,7 +2,7 @@ import "./PageIndex.css";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
-import { codeAPI, quizAPI, videoAPI } from "../api";
+import { codeAPI, quizAPI, videoAPI, userAPI } from "../api";
 
 type VideoItem = {
   id: number;
@@ -39,6 +39,8 @@ type QuizData = {
   consumed_points?: number;
 };
 
+const STORAGE_KEY = "aha-active-quiz-v1";
+
 const Quiz = () => {
   const [searchParams] = useSearchParams();
   const preferredVideoId = Number(searchParams.get("videoId") || 0);
@@ -52,14 +54,56 @@ const Quiz = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [outlineWarning, setOutlineWarning] = useState("");
+  const [quizCounts, setQuizCounts] = useState<Record<number, number>>({}); // 每部影片獨立數量
 
   const [codeOutput, setCodeOutput] = useState("");
   const [codeError, setCodeError] = useState("");
   const [codeLoading, setCodeLoading] = useState(false);
 
+  // 1. 初始化載入
   useEffect(() => {
     void fetchVideos();
-  }, []);
+    
+    // 檢查是否有未完成的測驗 (從資料庫載入)
+    const loadDraft = async () => {
+      try {
+        const response = await userAPI.getUser(userId);
+        const userData = response.data;
+        if (userData && userData.current_quiz_draft) {
+          const parsed = JSON.parse(userData.current_quiz_draft);
+          if (parsed.quiz) {
+            setQuiz(parsed.quiz);
+            setUserAnswers(parsed.userAnswers || []);
+            setCurrentQuestionIndex(parsed.currentQuestionIndex || 0);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to restore saved quiz from backend", e);
+      }
+    };
+    void loadDraft();
+  }, [userId]);
+
+  // 2. 當測驗狀態改變時自動儲存 (寫回資料庫)
+  useEffect(() => {
+    if (quiz && !showResults) {
+      const state = {
+        quiz,
+        userAnswers,
+        currentQuestionIndex,
+        timestamp: new Date().getTime()
+      };
+      const storedUserData = localStorage.getItem('userData');
+      if (storedUserData) {
+        const userData = JSON.parse(storedUserData);
+        userAPI.updateUser(userId, {
+          name: userData.name,
+          email: userData.email,
+          current_quiz_draft: JSON.stringify(state)
+        }).catch(err => console.error("Failed to save quiz draft", err));
+      }
+    }
+  }, [quiz, userAnswers, currentQuestionIndex, showResults, userId]);
 
   useEffect(() => {
     if (!quiz) {
@@ -83,18 +127,6 @@ const Quiz = () => {
 
   const currentQuestion = quiz?.questions[currentQuestionIndex] ?? null;
 
-  const score = useMemo(() => {
-    if (!quiz) {
-      return 0;
-    }
-    return userAnswers.reduce((total, answer, index) => {
-      const correct = quiz.questions[index].correct_answer.trim();
-      // If the answer is the full code, we should check if it contains the correct_answer in place of ___
-      // But for simplicity, we'll check if the answer (which was pre-filled with starter_code) now contains the correct_answer
-      return answer.trim().includes(correct) ? total + 1 : total;
-    }, 0);
-  }, [quiz, userAnswers]);
-
   const fetchVideos = async () => {
     try {
       const response = await videoAPI.getVideos(userId);
@@ -114,11 +146,13 @@ const Quiz = () => {
       return;
     }
 
+    const specificCount = quizCounts[videoId] || 5; // 取得獨立數量
+
     setLoading(true);
     setError("");
     setOutlineWarning("");
     try {
-      const response = await videoAPI.generateQuiz(videoId, userId, video.outline);
+      const response = await videoAPI.generateQuiz(videoId, userId, specificCount);
       const nextQuiz = response.data as QuizData;
       setQuiz(nextQuiz);
       setCurrentQuestionIndex(0);
@@ -160,15 +194,9 @@ const Quiz = () => {
       return;
     }
 
-    // 防重複點擊：若已在批改中，直接返回
-    if (grading) {
-      return;
-    }
-
     setGrading(true);
     setLoading(true);
     try {
-      // 呼叫後端進行邏輯批改
       const gradeRes = await quizAPI.gradeQuiz(quiz.video_id, {
         user_id: userId,
         answers: userAnswers,
@@ -183,20 +211,24 @@ const Quiz = () => {
         video_id: quiz.video_id,
         score: total_score,
         total_questions: quiz.questions.length,
-        details_json: JSON.stringify(details), // 保存詳細作答與比對詳情
+        details_json: JSON.stringify(details),
       });
+      
+      const storedUserData = localStorage.getItem('userData');
+      if (storedUserData) {
+        const userData = JSON.parse(storedUserData);
+        await userAPI.updateUser(userId, {
+          name: userData.name,
+          email: userData.email,
+          current_quiz_draft: null
+        });
+      }
+      
+      localStorage.removeItem(STORAGE_KEY);
       setShowResults(true);
     } catch (err: any) {
       console.error("Error grading quiz:", err);
-      let msg = "未知錯誤";
-      if (err.response?.data?.detail) {
-        msg = typeof err.response.data.detail === 'string' 
-          ? err.response.data.detail 
-          : JSON.stringify(err.response.data.detail);
-      } else if (err.message) {
-        msg = err.message;
-      }
-      setError(`批改失敗: ${msg}`);
+      setError(`批改失敗: ${err.message}`);
     } finally {
       setGrading(false);
       setLoading(false);
@@ -222,7 +254,17 @@ const Quiz = () => {
     }
   };
 
-  const resetQuiz = () => {
+  const resetQuiz = async () => {
+    const storedUserData = localStorage.getItem('userData');
+    if (storedUserData) {
+      const userData = JSON.parse(storedUserData);
+      await userAPI.updateUser(userId, {
+        name: userData.name,
+        email: userData.email,
+        current_quiz_draft: null
+      }).catch(e => console.error(e));
+    }
+    localStorage.removeItem(STORAGE_KEY);
     setQuiz(null);
     setCurrentQuestionIndex(0);
     setUserAnswers([]);
@@ -261,11 +303,6 @@ const Quiz = () => {
                   <h3>
                     {index + 1}. {question.question}
                   </h3>
-                  {question.reference_concept && (
-                    <p style={{ color: "#38bdf8", fontWeight: "bold", margin: "8px 0" }}>
-                      {question.reference_concept}
-                    </p>
-                  )}
 
                   <div style={{ marginTop: "12px" }}>
                     <p><strong>驗證詳情：</strong></p>
@@ -316,7 +353,7 @@ const Quiz = () => {
           </div>
 
           <div className="quiz-nav-row">
-            <button onClick={resetQuiz} className="page-primary-button">
+            <button onClick={() => void resetQuiz()} className="page-primary-button">
               回到影片列表
             </button>
           </div>
@@ -331,7 +368,7 @@ const Quiz = () => {
         <div>
           <div className="page-eyebrow">Video Quiz</div>
           <h1>影片程式填空題</h1>
-          <p>系統會依照影片逐字稿與摘要，並參考 LeetCode 題庫，生成 Python 程式填空題。</p>
+          <p>系統會依照影片逐字稿與摘要，生成 Python 程式填空題。</p>
         </div>
         <div className="page-hero-metric">
           <span>Sources</span>
@@ -342,48 +379,55 @@ const Quiz = () => {
 
       {error && <div className="page-error">{error}</div>}
       {outlineWarning && <div className="page-error">{outlineWarning}</div>}
-      {loading && <div className="page-loading">正在分析影片並產生填空題...</div>}
+      {loading && <div className="page-loading">正在處理測驗數據...</div>}
 
       <section className="video-library-grid">
-        {videos.map((video) => (
-          <article key={video.id} className="video-library-card">
-            <div className="video-library-top">
-              <div style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
-                <div className="video-library-badge">Quiz Source</div>
-                {video.outline ? (
-                  <div style={{ display: "inline-flex", width: "fit-content", borderRadius: "999px", padding: "6px 10px", background: "rgba(34, 197, 94, 0.15)", color: "#86efac", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                    ✓ Outline
-                  </div>
-                ) : (
-                  <div style={{ display: "inline-flex", width: "fit-content", borderRadius: "999px", padding: "6px 10px", background: "rgba(248, 113, 113, 0.15)", color: "#fecaca", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                    ✗ No Outline
-                  </div>
-                )}
+        {videos.map((video) => {
+          const currentCount = quizCounts[video.id] || 5;
+          const updateCount = (val: number) => setQuizCounts(prev => ({ ...prev, [video.id]: val }));
+          
+          return (
+            <article key={video.id} className="video-library-card">
+              <div className="video-library-top">
+                <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                  <div className="video-library-badge">Quiz Source</div>
+                </div>
+                <h3 className="video-library-title">{video.title || "Untitled Video"}</h3>
               </div>
-              <h3>{video.title || "Untitled Video"}</h3>
-              <p className="video-library-description">
-                Added at {new Date(video.created_at).toLocaleString("zh-TW")}
-              </p>
-            </div>
-            <div className="video-library-actions">
-              <button
-                onClick={() => void handleGenerateQuiz(video.id)}
-                disabled={loading || !video.outline}
-                className="page-primary-button"
-                title={!video.outline ? "Outline is not available for this video. Please generate an outline first." : ""}
-              >
-                Generate Quiz
-              </button>
-            </div>
-          </article>
-        ))}
+              
+              <div className="quiz-settings-container">
+                <label className="quiz-settings-label">題目數量<br/>(上限 10 題)</label>
+                <div className="quiz-stepper">
+                  <button 
+                    className="quiz-stepper-btn"
+                    onClick={() => updateCount(Math.max(1, currentCount - 1))}
+                  >
+                    -
+                  </button>
+                  <div className="quiz-stepper-value">
+                    {currentCount}
+                  </div>
+                  <button 
+                    className="quiz-stepper-btn"
+                    onClick={() => updateCount(Math.min(10, currentCount + 1))}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
 
-        {videos.length === 0 && (
-          <div className="empty-state-card">
-            <h3>目前沒有影片</h3>
-            <p>先到 Learning Material 新增影片，才能產生和影片內容相關的填空題。</p>
-          </div>
-        )}
+              <div className="video-library-actions">
+                <button
+                  onClick={() => void handleGenerateQuiz(video.id)}
+                  disabled={loading || !video.outline}
+                  className="page-primary-button"
+                >
+                  {quiz && quiz.video_id === video.id ? "Regenerate" : "Generate"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </section>
 
       {quiz && currentQuestion && (
@@ -398,36 +442,10 @@ const Quiz = () => {
               Question {currentQuestionIndex + 1} / {quiz.questions.length}
             </div>
             <h2>{currentQuestion.question}</h2>
-
-            {currentQuestion.reference_concept && (
-              <p style={{ color: "#38bdf8", fontSize: "1.1em", fontWeight: "bold", marginTop: "10px" }}>
-                {currentQuestion.reference_concept}
-              </p>
-            )}
           </div>
 
           <div style={{ marginTop: "20px" }}>
             <p className="page-eyebrow">Python Editor (填入 ___ 處內容)</p>
-            <style>{`
-              /* ULTIMATE Monaco Suggestion Widget Fix */
-              .monaco-editor .suggest-widget,
-              .monaco-editor .suggest-widget .monaco-list,
-              .monaco-editor .suggest-widget .monaco-list-row,
-              .monaco-editor .suggest-widget .monaco-list-row .label-name,
-              .monaco-editor .suggest-widget .monaco-list-row .details-label,
-              .monaco-editor .suggest-widget .monaco-list-row .read-more {
-                color: #ffffff !important;
-                background-color: #1e1e1e !important;
-              }
-              .monaco-editor .suggest-widget .monaco-list-row:hover,
-              .monaco-editor .suggest-widget .monaco-list-row.focused {
-                background-color: #2b415e !important;
-              }
-              .monaco-editor .suggest-widget .monaco-list-row.focused .label-name,
-              .monaco-editor .suggest-widget .monaco-list-row.focused .details-label {
-                color: #ffffff !important;
-              }
-            `}</style>
             <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
               <Editor
                 height="100%"
@@ -435,51 +453,15 @@ const Quiz = () => {
                 value={userAnswers[currentQuestionIndex]}
                 onChange={(value) => handleAnswerChange(value || "")}
                 theme="vs-dark"
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  lineNumbers: "on",
-                  roundedSelection: false,
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                }}
+                options={{ automaticLayout: true, fontSize: 14 }}
               />
             </div>
           </div>
 
-          {(currentQuestion.test_cases && currentQuestion.test_cases.length > 0) && (
-            <div>
-              <p className="page-eyebrow">Test Cases</p>
-              <article className="quiz-review-card">
-                <pre className="code-snippet">
-                  {currentQuestion.test_cases.join("\n")}
-                </pre>
-              </article>
-            </div>
-          )}
-
-          {(codeOutput || codeError) && (
-            <div>
-              {codeOutput && (
-                <div>
-                  <p className="page-eyebrow">Output</p>
-                  <article className="quiz-review-card">
-                    <pre className="code-snippet">{codeOutput}</pre>
-                  </article>
-                </div>
-              )}
-              {codeError && (
-                <div>
-                  <p className="page-eyebrow">Error</p>
-                  <article className="quiz-review-card">
-                    <pre className="code-snippet">{codeError}</pre>
-                  </article>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end" }} className="unified-control-bar">
+          <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end" }}>
+            <button onClick={() => void resetQuiz()} className="page-secondary-button" style={{ marginRight: 'auto' }}>
+              放棄測驗
+            </button>
             <button
               onClick={handlePrevious}
               disabled={currentQuestionIndex === 0}

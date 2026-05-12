@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 import json
 import re
 import html
+import math
 from urllib.parse import quote, quote_plus
 
 import bcrypt
@@ -63,6 +64,7 @@ def ensure_database_columns() -> None:
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript_updated_at TIMESTAMP",
         "ALTER TABLE ai_feedbacks ADD COLUMN IF NOT EXISTS video_id INTEGER",
         "ALTER TABLE recharge_records ADD COLUMN IF NOT EXISTS balance_after INTEGER",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS current_quiz_draft TEXT",
     ]
     with database.engine.begin() as connection:
         for update in schema_updates:
@@ -128,6 +130,10 @@ app.add_middleware(
         "http://localhost:5175",
         "http://localhost:5176",
         "http://localhost:5177",
+        "http://localhost:5178",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -226,6 +232,7 @@ class UserUpdate(BaseModel):
     name: str
     email: str
     password: Optional[str] = None
+    current_quiz_draft: Optional[str] = None
 
 
 class RechargeRequest(BaseModel):
@@ -539,6 +546,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(databas
     user.email = payload.email
     if payload.password:
         user.password = hash_password(payload.password)
+    if payload.current_quiz_draft is not None:
+        user.current_quiz_draft = payload.current_quiz_draft
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -588,8 +597,6 @@ def get_videos(user_id: Optional[int] = None, db: Session = Depends(database.get
         query = query.filter(models.Video.user_id == user_id)
     return query.order_by(models.Video.id.desc()).all()
 
-
-import math
 
 @app.get("/api/videos/{video_id}/analysis", response_model=schema.VideoAnalysisResponse)
 def analyze_video(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
@@ -813,26 +820,26 @@ def grade_quiz(video_id: int, payload: GradeRequest, db: Session = Depends(datab
 
 
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
-def generate_quiz_api(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
+def generate_quiz_api(video_id: int, user_id: int = 1, count: int = Query(5, ge=1, le=10), db: Session = Depends(database.get_db)):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if video is None: raise HTTPException(status_code=404, detail="Video not found")
     
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None: raise HTTPException(status_code=404, detail="User not found")
 
-    # 先計算應消耗點數 (預期 5 題 * 50 = 250 點)
-    expected_points = 250
+    # 先計算應消耗點數 (預期 "題數" * 50 點)
+    expected_points = count * 50
     if user.points < expected_points:
         raise HTTPException(status_code=403, detail=f"點數不足。生成測驗預計需要 {expected_points} 點，剩餘 {user.points} 點。")
 
     try:
-        quiz_response = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link)
+        quiz_response = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link, count=count)
         
         # 實際計算扣除點數："題數"*50
         num_questions = len(quiz_response.questions)
         consumed_points = num_questions * 50
         
-        # 二次確認點數 (以防實際題數超出預期，雖然目前固定 5 題)
+        # 二次確認點數
         if user.points < consumed_points:
             raise HTTPException(status_code=403, detail=f"點數不足。生成測驗需要 {consumed_points} 點，剩餘 {user.points} 點。")
             
@@ -927,17 +934,19 @@ def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
     # 因為 r.score 已經是百分比 (0-100)，直接取平均值即可
     avg_acc = (sum(r.score for r in quiz_results) / len(quiz_results)) if quiz_results else 0.0
     
+    # 已回答題數：加總所有已完成測驗的題目數量
+    total_answered_questions = sum(r.total_questions for r in quiz_results) if quiz_results else 0
+
     total_videos = db.query(models.Video).filter(models.Video.user_id == user_id).count()
     analyzed_videos = db.query(models.Video).filter(
         models.Video.user_id == user_id,
         or_(models.Video.outline != None, models.Video.transcript != None)
     ).count()
-    total_questions = db.query(models.QuizQuestion).filter(models.QuizQuestion.user_id == user_id).count()
 
     return schema.UserStatsResponse(
         video_count=total_videos,
         analyzed_video_count=analyzed_videos,
-        total_questions_count=total_questions,
+        total_questions_count=total_answered_questions,
         remaining_points=user.points,
         completed_quizzes=len(quiz_results),
         average_accuracy=round(avg_acc, 1)

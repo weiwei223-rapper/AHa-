@@ -126,7 +126,7 @@ button{
     transition: all 0.4s ease;
     padding: 0 20px;
     white-space: nowrap;
-    min-width: 120px;
+    min-width: 50px;
 }
 
 button:hover{
@@ -1998,16 +1998,106 @@ body {
 }
 
 .video-library-card {
-  display: grid;
-  gap: 16px;
+  background: linear-gradient(180deg, rgba(15, 22, 35, 0.98), rgba(9, 15, 24, 0.98));
+  border: 1px solid rgba(43, 193, 241, 0.16);
+  border-radius: 20px;
+  padding: 20px;
+  color: #e5eef9;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: all 0.3s ease;
+  min-height: 240px;
+}
+
+.video-library-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(43, 193, 241, 0.4);
+  box-shadow: 0 15px 40px rgba(43, 193, 241, 0.1);
+}
+
+.video-library-top {
+  flex: 1;
 }
 
 .video-library-top h3,
 .quiz-review-card h3,
 .empty-state-card h3,
 .profile-plan-card h3 {
-  margin: 8px 0;
+  margin: 10px 0;
   color: white;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.quiz-settings-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.quiz-settings-label {
+  font-size: 15px;
+  color: #94a3b8;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.quiz-stepper {
+  display: flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 4px;
+  border: 1px solid rgba(43, 193, 241, 0.2);
+  padding: 0;
+}
+
+.quiz-stepper-btn {
+  background: transparent;
+  border: none;
+  color: #2bc1f1;
+  padding: 1px 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.quiz-stepper-btn:hover {
+  background: rgba(43, 193, 241, 0.1);
+}
+
+.quiz-stepper-value {
+  width: 80px;
+  text-align: center;
+  color: white;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.quiz-settings-hint {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.video-library-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.video-library-actions .page-primary-button {
+  width: 100%;
+  justify-content: center;
 }
 
 .video-library-badge,

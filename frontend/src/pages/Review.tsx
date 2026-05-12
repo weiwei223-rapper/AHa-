@@ -38,18 +38,6 @@ const Review = () => {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
-    e.stopPropagation();
-    if (!window.confirm("確定要刪除這筆紀錄嗎？")) return;
-    try {
-      await quizAPI.deleteResult(id);
-      setResults(results.filter((r) => r.id !== id));
-      if (selectedResult?.id === id) setSelectedResult(null);
-    } catch (err) {
-      alert("刪除失敗");
-    }
-  };
-
   const startEdit = (e: React.MouseEvent, res: QuizResultItem) => {
     e.stopPropagation();
     setEditingId(res.id);
@@ -110,7 +98,7 @@ const Review = () => {
         <div>
           <div className="page-eyebrow">History Review</div>
           <h1>歷史作答紀錄</h1>
-          <p>在這裡你可以回顧過去所有的測驗表現、更改名稱或刪除紀錄。</p>
+          <p>在這裡你可以回顧過去所有的測驗表現、更改名稱，所有的學習腳印都將被永久保留。</p>
         </div>
       </section>
 
@@ -149,7 +137,6 @@ const Review = () => {
               </div>
               <div className="video-library-actions" style={{ marginTop: '12px' }}>
                 <button className="page-primary-button" style={{ flex: 1 }}>查看詳情</button>
-                <button className="page-secondary-button" style={{ color: '#fb7185', borderColor: '#fb7185' }} onClick={(e) => handleDelete(e, res.id)}>刪除紀錄</button>
               </div>
             </article>
           ))}

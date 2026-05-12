@@ -330,9 +330,10 @@ def generate_fallback_questions(
     title: str,
     transcript: str = "",
     outline: str = "",
+    count: int = 5
 ) -> list[Any]:
     from . import schema
-    snippets = _extract_transcript_snippets(transcript, limit=8)
+    snippets = _extract_transcript_snippets(transcript, limit=max(8, count))
     if not snippets:
         snippets = [outline[:100]] if outline else [title]
         
@@ -340,7 +341,7 @@ def generate_fallback_questions(
     used_answers = set()
 
     for snippet in snippets:
-        if len(questions) >= 5: break
+        if len(questions) >= count: break
         answer = _pick_answer_from_snippet(snippet)
         if answer.lower() in used_answers or len(answer) < 2: continue
         used_answers.add(answer.lower())
