@@ -456,6 +456,19 @@ const Quiz = () => {
                 options={{ automaticLayout: true, fontSize: 14 }}
               />
             </div>
+
+            {/* 新增：程式執行結果顯示區 */}
+            {(codeOutput || codeError) && (
+              <div style={{ marginTop: "15px", padding: "12px", background: "#08111f", borderRadius: "10px", border: "1px solid rgba(148, 163, 184, 0.2)" }}>
+                <p className="page-eyebrow" style={{ marginBottom: "8px" }}>Test Result:</p>
+                {codeOutput && (
+                  <pre style={{ margin: 0, color: "#4ade80", fontSize: "13px", whiteSpace: "pre-wrap" }}>{codeOutput}</pre>
+                )}
+                {codeError && (
+                  <pre style={{ margin: codeOutput ? "10px 0 0" : 0, color: "#fb7185", fontSize: "13px", whiteSpace: "pre-wrap" }}>{codeError}</pre>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end" }}>

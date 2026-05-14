@@ -134,8 +134,15 @@ def is_python_related(title: str, transcript: str) -> bool:
 """
     try:
         response_text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
-        return "VALID" in response_text.upper()
-    except:
+        decision = response_text.strip().upper()
+        print(f"DEBUG: Video validation AI response: '{decision}'")
+        
+        # 修正 Bug：'INVALID' 包含 'VALID'。必須先檢查 'INVALID'。
+        if "INVALID" in decision:
+            return False
+        return "VALID" in decision
+    except Exception as e:
+        print(f"DEBUG: Video validation AI failed: {e}")
         # 如果 AI 判斷失敗，預設允許通過以避免誤殺
         return True
 
