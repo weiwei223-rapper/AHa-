@@ -78,12 +78,13 @@ export const quizAPI = {
   getQuestions: () => api.get('/api/quiz-questions'),
   getResults: (userId: number) => api.get('/api/quiz-results', { params: { user_id: userId } }),
   deleteResult: (resultId: number) => api.delete(`/api/quiz-results/${resultId}`),
-  updateResult: (resultId: number, data: { title: string }) => api.patch(`/api/quiz-results/${resultId}`, data),
-  createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number; details_json?: string }) =>
+  updateResult: (resultId: number, data: { title?: string; score?: number; details_json?: string; error_report?: string }) => api.patch(`/api/quiz-results/${resultId}`, data),
+  createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number; details_json?: string; error_report?: string }) =>
     api.post('/api/quiz-results', data),
+  reportQuizError: (resultId: number, errorReport: string) =>
+    api.post(`/api/quiz-results/${resultId}/report-error`, { error_report: errorReport }),
   gradeQuiz: (videoId: number, data: { user_id: number; answers: string[] }) =>
     api.post(`/api/quizzes/${videoId}/grade`, data),
-  
   // New Draft APIs
   getDrafts: (userId: number) => api.get('/api/quiz-drafts', { params: { user_id: userId } }),
   upsertDraft: (data: { user_id: number; video_id: number; draft_json: string }) =>

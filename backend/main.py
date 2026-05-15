@@ -65,6 +65,8 @@ def ensure_database_columns() -> None:
         "ALTER TABLE ai_feedbacks ADD COLUMN IF NOT EXISTS video_id INTEGER",
         "ALTER TABLE recharge_records ADD COLUMN IF NOT EXISTS balance_after INTEGER",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS current_quiz_draft TEXT",
+        "ALTER TABLE videos ADD COLUMN IF NOT EXISTS error_report VARCHAR",
+        "ALTER TABLE quiz_results ADD COLUMN IF NOT EXISTS error_report VARCHAR",
     ]
     with database.engine.begin() as connection:
         for update in schema_updates:
@@ -891,13 +893,15 @@ def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(d
         title = video.title if video else f"Quiz Result {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
     quiz_result = models.QuizResult(
-        user_id=user_id, 
-        video_id=payload.video_id, 
+        user_id=user_id,
+        video_id=payload.video_id,
         score=payload.score,
         total_questions=payload.total_questions,
         title=title,
-        details_json=payload.details_json
+        details_json=payload.details_json,
+        error_report=payload.error_report
     )
+
     db.add(quiz_result)
     db.commit()
     db.refresh(quiz_result)
@@ -917,12 +921,31 @@ def delete_quiz_result(result_id: int, db: Session = Depends(database.get_db)):
 @app.patch("/api/quiz-results/{result_id}", response_model=schema.QuizResultResponse)
 def update_quiz_result(result_id: int, payload: schema.QuizResultUpdate, db: Session = Depends(database.get_db)):
     result = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
-    if not result:
-        raise HTTPException(status_code=404, detail="Result not found")
-    result.title = payload.title
+    if result is None:
+        raise HTTPException(status_code=404, detail="Quiz result not found")
+    
+    if payload.title is not None:
+        result.title = payload.title
+    if payload.score is not None:
+        result.score = payload.score
+    if payload.details_json is not None:
+        result.details_json = payload.details_json
+    if payload.error_report is not None:
+        result.error_report = payload.error_report
+        
     db.commit()
     db.refresh(result)
     return result
+
+
+@app.post("/api/quiz-results/{result_id}/report-error")
+def report_quiz_error(result_id: int, payload: schema.ErrorReportRequest, db: Session = Depends(database.get_db)):
+    result = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
+    if result is None:
+        raise HTTPException(status_code=404, detail="Quiz result not found")
+    result.error_report = payload.error_report
+    db.commit()
+    return {"message": "Quiz error report saved"}
 
 
 @app.get("/api/quiz-results", response_model=List[schema.QuizResultResponse])
