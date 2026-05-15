@@ -689,6 +689,16 @@ def delete_video(video_id: int, db: Session = Depends(database.get_db)):
     return {"message": "Video deleted"}
 
 
+@app.post("/api/videos/{video_id}/report-error")
+def report_video_error(video_id: int, payload: schema.ErrorReportRequest, db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    video.error_report = payload.error_report
+    db.commit()
+    return {"message": "Error report saved"}
+
+
 @app.post("/api/feedbacks", response_model=schema.AIFeedbackResponse)
 def create_ai_feedback(payload: schema.AIFeedbackCreate, db: Session = Depends(database.get_db)):
     feedback = models.AIFeedback(user_id=payload.user_id, ai_message=payload.ai_message,

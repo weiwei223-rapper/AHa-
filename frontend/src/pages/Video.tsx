@@ -2,6 +2,7 @@ import "./PageIndex.css";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { videoAPI } from "../api";
+import ReportModal from "../component/ReportModal";
 
 type VideoItem = {
   id: number;
@@ -54,10 +55,23 @@ const Video = (_props: VideoStatusProps) => {
   const [loading, setLoading] = useState(false);
   const [analyzingVideoId, setAnalyzingVideoId] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportingVideoId, setReportingVideoId] = useState<number | null>(null);
 
   useEffect(() => {
     void fetchVideos();
   }, []);
+
+  const handleReportError = async (description: string) => {
+    if (!reportingVideoId) return;
+    try {
+      await videoAPI.reportError(reportingVideoId, description);
+      alert("感謝您的回報！大綱錯誤已記錄。");
+    } catch (err) {
+      console.error("Error reporting error:", err);
+      alert("提交回報時發生錯誤，請稍後再試。");
+    }
+  };
 
   const fetchVideos = async () => {
     try {
@@ -253,7 +267,19 @@ const Video = (_props: VideoStatusProps) => {
 
           <div className="quiz-review-list">
             <article className="quiz-review-card">
-              <div className="quiz-review-status">Outline</div>
+              <div className="quiz-review-status" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                <span>Outline</span>
+                <button 
+                  onClick={() => {
+                    setReportingVideoId(analysis.video_id);
+                    setIsReportModalOpen(true);
+                  }}
+                  className="chat-message-report-btn"
+                  style={{ margin: 0 }}
+                >
+                  回報大綱錯誤
+                </button>
+              </div>
               <pre className="code-snippet">{analysis.outline_markdown}</pre>
             </article>
 
@@ -278,6 +304,13 @@ const Video = (_props: VideoStatusProps) => {
           </div>
         </section>
       )}
+      <ReportModal 
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onSubmit={handleReportError}
+        title="回報大綱錯誤"
+        subtitle="如果您發現 AI 生成的大綱有誤、格式混亂或不完整，請告訴我們。"
+      />
     </div>
   );
 };

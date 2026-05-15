@@ -60,6 +60,8 @@ export const videoAPI = {
   analyzeVideo: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/analysis`, { params: { user_id: userId } }),
   generateQuiz: (videoId: number, userId: number, count?: number) =>
     api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
+  reportError: (videoId: number, errorReport: string) =>
+    api.post(`/api/videos/${videoId}/report-error`, { error_report: errorReport }),
 };
 
 export const feedbackAPI = {
