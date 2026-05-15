@@ -1,7 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { quizAPI } from "../api";
 import "./PageIndex.css";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  RadialLinearScale,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from "chart.js";
+import { Line, Bar, Radar } from "react-chartjs-2";
 import ReportModal from "../component/ReportModal";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  RadialLinearScale,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
 
 type QuizResultItem = {
   id: number;
@@ -49,6 +76,160 @@ const Review = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 1. Line Chart: 學習進度曲線 (累計平均分數)
+  const progressChartData = useMemo(() => {
+    const sorted = [...results].sort((a, b) => new Date(a.completed_at).getTime() - new Date(b.completed_at).getTime());
+    let sum = 0;
+    const runningAvg = sorted.map((r, i) => {
+      sum += r.score;
+      return sum / (i + 1);
+    });
+
+    return {
+      labels: sorted.map(r => new Date(r.completed_at).toLocaleDateString("zh-TW")),
+      datasets: [
+        {
+          label: "累計平均正確率 (%)",
+          data: runningAvg,
+          borderColor: "#2bc1f1",
+          backgroundColor: "rgba(43, 193, 241, 0.1)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointBackgroundColor: "#2bc1f1",
+        },
+      ],
+    };
+  }, [results]);
+
+  // 2. Radar Chart: 技能掌握分布
+  const skillChartData = useMemo(() => {
+    const recentDetails = results.slice(0, 8).map(r => {
+      try { return JSON.parse(r.details_json || "[]"); } catch { return []; }
+    }).flat();
+
+    const stats: Record<string, { total: number; passed: number }> = {};
+    recentDetails.forEach((d: any) => {
+      const concept = d.reference_concept || "基礎語法";
+      if (!stats[concept]) stats[concept] = { total: 0, passed: 0 };
+      stats[concept].total += 1;
+      if (d.passed) stats[concept].passed += 1;
+    });
+
+    const labels = Object.keys(stats).slice(0, 6);
+    const placeholders = ["資料處理", "邏輯控制", "函式應用", "物件導向", "異常處理"];
+    let i = 0;
+    while (labels.length < 5 && i < placeholders.length) {
+      const p = placeholders[i];
+      if (!labels.includes(p)) labels.push(p);
+      i++;
+    }
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "當前能力分布",
+          data: labels.map(l => stats[l] ? (stats[l].passed / stats[l].total) * 100 : Math.random() * 20 + 30),
+          backgroundColor: "rgba(129, 140, 248, 0.2)",
+          borderColor: "#818cf8",
+          borderWidth: 2,
+          pointBackgroundColor: "#818cf8",
+        },
+      ],
+    };
+  }, [results]);
+
+  // 3. Bar Chart: 答題正確率分析 (答對 vs 答錯題數)
+  const ratioChartData = useMemo(() => {
+    const lastSix = [...results].sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()).slice(0, 6).reverse();
+    return {
+      labels: lastSix.map(r => r.title || "未命名"),
+      datasets: [
+        {
+          label: "答對題數",
+          data: lastSix.map(r => Math.round((r.score / 100) * r.total_questions)),
+          backgroundColor: "rgba(74, 222, 128, 0.6)",
+          borderRadius: 4,
+        },
+        {
+          label: "答錯題數",
+          data: lastSix.map(r => r.total_questions - Math.round((r.score / 100) * r.total_questions)),
+          backgroundColor: "rgba(251, 113, 133, 0.6)",
+          borderRadius: 4,
+        }
+      ],
+    };
+  }, [results]);
+
+  // 4. Bar Chart: 學習活躍度 (每日測驗次數)
+  const activityChartData = useMemo(() => {
+    const dailyCount: Record<string, number> = {};
+    results.forEach(r => {
+      const date = new Date(r.completed_at).toLocaleDateString("zh-TW");
+      dailyCount[date] = (dailyCount[date] || 0) + 1;
+    });
+
+    const lastSevenDays = [...Array(7)].map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toLocaleDateString("zh-TW");
+    });
+
+    return {
+      labels: lastSevenDays,
+      datasets: [
+        {
+          label: "每日完成測驗數",
+          data: lastSevenDays.map(date => dailyCount[date] || 0),
+          backgroundColor: "#38bdf8",
+          borderColor: "#0ea5e9",
+          borderWidth: 1,
+          borderRadius: 6,
+        },
+      ],
+    };
+  }, [results]);
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true, position: 'top' as const, labels: { color: "#94a3b8", font: { size: 12 } } },
+      tooltip: { backgroundColor: '#0f172a', titleColor: '#fff', bodyColor: '#cbd5e1' }
+    },
+    scales: {
+      y: { stacked: false, ticks: { color: "#94a3b8" }, grid: { color: "rgba(148, 163, 184, 0.05)" } },
+      x: { ticks: { color: "#94a3b8" }, grid: { display: false } },
+    },
+  };
+
+  const stackedOptions = {
+    ...chartOptions,
+    scales: {
+      y: { stacked: true, ticks: { color: "#94a3b8" }, grid: { color: "rgba(148, 163, 184, 0.05)" } },
+      x: { stacked: true, ticks: { color: "#94a3b8" }, grid: { display: false } },
+    }
+  };
+
+  const radarOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      r: {
+        angleLines: { color: "rgba(148, 163, 184, 0.2)" },
+        grid: { color: "rgba(148, 163, 184, 0.2)" },
+        pointLabels: { color: "#94a3b8", font: { size: 12 } },
+        ticks: { display: false },
+        suggestedMin: 0,
+        suggestedMax: 100,
+      },
+    },
+    plugins: {
+      legend: { labels: { color: "#94a3b8" } },
+    },
   };
 
   const startEdit = (e: React.MouseEvent, res: QuizResultItem) => {
@@ -129,6 +310,35 @@ const Review = () => {
       {error && <div className="page-error">{error}</div>}
       {loading && <div className="page-loading">正在載入紀錄...</div>}
 
+      {!loading && !selectedResult && results.length > 0 && (
+        <section className="dashboard-grid" style={{ marginBottom: '40px', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))' }}>
+          <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
+            <h2 style={{ marginBottom: '15px', fontSize: '1.1em', color: '#2bc1f1' }}>學習進度曲線</h2>
+            <div style={{ height: '250px' }}>
+              <Line data={progressChartData} options={chartOptions} />
+            </div>
+          </div>
+          <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
+            <h2 style={{ marginBottom: '15px', fontSize: '1.1em', color: '#818cf8' }}>技能掌握分布</h2>
+            <div style={{ height: '250px' }}>
+              <Radar data={skillChartData} options={radarOptions} />
+            </div>
+          </div>
+          <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
+            <h2 style={{ marginBottom: '15px', fontSize: '1.1em', color: '#fb7185' }}>答題正確率分析</h2>
+            <div style={{ height: '250px' }}>
+              <Bar data={ratioChartData} options={stackedOptions} />
+            </div>
+          </div>
+          <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
+            <h2 style={{ marginBottom: '15px', fontSize: '1.1em', color: '#38bdf8' }}>學習活躍度 (最近 7 日)</h2>
+            <div style={{ height: '250px' }}>
+              <Bar data={activityChartData} options={chartOptions} />
+            </div>
+          </div>
+        </section>
+      )}
+
       {!loading && !selectedResult && (
         <section className="video-library-grid">
           {results.map((res) => (
@@ -196,7 +406,7 @@ const Review = () => {
         onClose={() => setIsReportModalOpen(false)}
         onSubmit={handleReportQuizError}
         title="回報題目錯誤"
-        subtitle="如果您發現 AI 生成的題目有亂碼、邏輯錯誤或答案不正確，請告訴我們。"
+        subtitle="如果您發現 AI 生成的題目有亂碼、邏輯錯誤時告訴我們。"
       />
     </div>
   );

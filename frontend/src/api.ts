@@ -50,7 +50,11 @@ export const userAPI = {
   getStats: (userId: number) =>
     api.get(`/users/${userId}/stats`),
   claimAchievementPoints: (userId: number) =>
+<<<<<<< HEAD
     api.post(`/users/${userId}/claim-achievement-points`),
+=======
+    api.post('/api/users/claim-achievement-points', { user_id: userId }),
+>>>>>>> f5abc542f2b32cde081b4b2f624e26d03fb575b4
 };
 
 export const videoAPI = {

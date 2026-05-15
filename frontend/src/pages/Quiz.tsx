@@ -65,10 +65,45 @@ const Quiz = () => {
     void fetchDocs();
   }, [userId]);
 
+<<<<<<< HEAD
   useEffect(() => {
     if (preferredVideoId > 0) void loadSpecificDraft('video', preferredVideoId);
     else if (preferredDocId > 0) void loadSpecificDraft('doc', preferredDocId);
   }, [preferredVideoId, preferredDocId]);
+=======
+  // 2. 當有指定影片時，自動載入該影片的草稿 (若有)；若無指定且目前沒測驗，載入最新的一份草稿
+  useEffect(() => {
+    if (preferredVideoId > 0) {
+      void loadSpecificDraft(preferredVideoId);
+    } else if (!quiz) {
+      void loadLatestDraft();
+    }
+  }, [preferredVideoId, userId]);
+
+  const loadLatestDraft = async () => {
+    try {
+      const response = await quizAPI.getDrafts(userId);
+      const drafts = response.data;
+      if (drafts.length > 0) {
+        // 按照更新時間排序，取最晚的
+        const latest = [...drafts].sort((a: any, b: any) => 
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )[0];
+        
+        const parsed = JSON.parse(latest.draft_json);
+        if (parsed.quiz) {
+          setQuiz(parsed.quiz);
+          setUserAnswers(parsed.userAnswers || []);
+          setCurrentQuestionIndex(parsed.currentQuestionIndex || 0);
+          setShowResults(false);
+          console.log(`Latest draft restored for video ${latest.video_id}`);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load latest draft", e);
+    }
+  };
+>>>>>>> f5abc542f2b32cde081b4b2f624e26d03fb575b4
 
   const loadSpecificDraft = async (type: 'video' | 'doc', id: number) => {
     try {
@@ -148,6 +183,12 @@ const Quiz = () => {
       setCurrentQuestionIndex(prev => prev + 1);
       return;
     }
+<<<<<<< HEAD
+=======
+
+    if (grading) return;
+    setGrading(true);
+>>>>>>> f5abc542f2b32cde081b4b2f624e26d03fb575b4
     setLoading(true);
     try {
       const gradeRes = await quizAPI.gradeQuiz(quiz.video_id || 0, { 
@@ -200,8 +241,36 @@ const Quiz = () => {
         document_id: quiz.document_id || 0,
         draft_json: JSON.stringify(state)
       });
+<<<<<<< HEAD
       alert("測驗進度已儲存！");
     } catch (err) { alert("儲存失敗"); }
+=======
+      alert("該影片測驗進度已成功儲存至『Unfinished Test』頁面！");
+      setQuiz(null);
+      setCurrentQuestionIndex(0);
+      setUserAnswers([]);
+      setShowResults(false);
+      setLastResultId(null);
+      setCodeOutput("");
+      setCodeError("");
+    } catch (err) {
+      console.error("Failed to save draft manually", err);
+      alert("儲存失敗，請稍後再試。");
+    }
+  };
+
+  const resetQuiz = async () => {
+    if (quiz) {
+       await quizAPI.deleteDraft(quiz.video_id, userId).catch(e => console.error(e));
+    }
+    setQuiz(null);
+    setCurrentQuestionIndex(0);
+    setUserAnswers([]);
+    setShowResults(false);
+    setLastResultId(null);
+    setCodeOutput("");
+    setCodeError("");
+>>>>>>> f5abc542f2b32cde081b4b2f624e26d03fb575b4
   };
 
   if (showResults && quiz) {
@@ -264,9 +333,15 @@ const Quiz = () => {
               <div className="quiz-settings-container">
                 <label className="quiz-settings-label">題數</label>
                 <div className="quiz-stepper">
+<<<<<<< HEAD
                    <button className="quiz-stepper-btn" onClick={() => setQuizCounts(p=>({...p, [key]: Math.max(1, count-1)}))}>-</button>
                    <div className="quiz-stepper-value">{count}</div>
                    <button className="quiz-stepper-btn" onClick={() => setQuizCounts(p=>({...p, [key]: Math.min(10, count+1)}))}>+</button>
+=======
+                  <button className="quiz-stepper-btn" onClick={() => updateCount(Math.max(1, currentCount - 1))} disabled={loading || !!quiz}>-</button>
+                  <div className="quiz-stepper-value">{currentCount}</div>
+                  <button className="quiz-stepper-btn" onClick={() => updateCount(Math.min(10, currentCount + 1))} disabled={loading || !!quiz}>+</button>
+>>>>>>> f5abc542f2b32cde081b4b2f624e26d03fb575b4
                 </div>
               </div>
               <div className="video-library-actions">
@@ -297,6 +372,7 @@ const Quiz = () => {
         })}
       </section>
 
+<<<<<<< HEAD
       {quiz && !showResults && (
         <section className="panel-card" style={{marginTop:'30px'}}>
            <div className="quiz-question-card">
@@ -317,6 +393,51 @@ const Quiz = () => {
              <button onClick={handleNext} className="page-primary-button">{currentQuestionIndex === quiz.questions.length-1 ? 'Finish' : 'Next'}</button>
              <button onClick={executeCode} disabled={codeLoading} className="page-secondary-button">Test</button>
            </div>
+=======
+      {quiz && currentQuestion && (
+        <section className="panel-card">
+          {quiz.consumed_points !== undefined && (
+            <div className="quiz-score-band" style={{ marginBottom: '20px', backgroundColor: 'rgba(56, 189, 248, 0.1)', borderColor: 'rgba(56, 189, 248, 0.3)' }}>
+              <p style={{ color: '#fb7185' }}>本次生成扣除點數：<strong>{quiz.consumed_points}</strong> 點</p>
+            </div>
+          )}
+          <div className="quiz-question-card">
+            <div className="quiz-question-number" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>Question {currentQuestionIndex + 1} / {quiz.questions.length}</span>
+              <button 
+                onClick={() => {
+                  setReportingContext(`第 ${currentQuestionIndex + 1} 題生成錯誤`);
+                  setIsReportModalOpen(true);
+                }}
+                className="chat-message-report-btn"
+                style={{ margin: 0 }}
+              >
+                回報題目錯誤
+              </button>
+            </div>
+            <h2>{currentQuestion.question}</h2>
+          </div>
+          <div style={{ marginTop: "20px" }}>
+            <p className="page-eyebrow">Python Editor (填入 ___ 處內容)</p>
+            <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
+              <Editor height="100%" language="python" value={userAnswers[currentQuestionIndex]} onChange={(value) => handleAnswerChange(value || "")} theme="vs-dark" options={{ automaticLayout: true, fontSize: 14 }} />
+            </div>
+            {(codeOutput || codeError) && (
+              <div style={{ marginTop: "15px", padding: "12px", background: "#08111f", borderRadius: "10px", border: "1px solid rgba(148, 163, 184, 0.2)" }}>
+                <p className="page-eyebrow" style={{ marginBottom: "8px" }}>Test Result:</p>
+                {codeOutput && <pre style={{ margin: 0, color: "#4ade80", fontSize: "13px", whiteSpace: "pre-wrap" }}>{codeOutput}</pre>}
+                {codeError && <pre style={{ margin: codeOutput ? "10px 0 0" : 0, color: "#fb7185", fontSize: "13px", whiteSpace: "pre-wrap" }}>{codeError}</pre>}
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end" }}>
+            <button onClick={() => void resetQuiz()} className="page-secondary-button" style={{ marginRight: 'auto' }}>放棄測驗</button>
+            <button onClick={() => void handleManualSave()} className="page-secondary-button" style={{ borderColor: "#facc15", color: "#facc15" }}>儲存進度</button>
+            <button onClick={handlePrevious} disabled={currentQuestionIndex === 0} className="page-secondary-button">Previous</button>
+            <button onClick={() => void handleNext()} disabled={grading || loading} className="page-primary-button">{currentQuestionIndex === quiz.questions.length - 1 ? (grading ? "Grading..." : "Finish") : "Next"}</button>
+            <button onClick={() => void executeCode()} disabled={codeLoading} className="page-primary-button">{codeLoading ? "Testing..." : "Test"}</button>
+          </div>
+>>>>>>> f5abc542f2b32cde081b4b2f624e26d03fb575b4
         </section>
       )}
     </div>
