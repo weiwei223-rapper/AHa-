@@ -60,6 +60,8 @@ export const videoAPI = {
   analyzeVideo: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/analysis`, { params: { user_id: userId } }),
   generateQuiz: (videoId: number, userId: number, count?: number) =>
     api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
+  reportError: (videoId: number, errorReport: string) =>
+    api.post(`/api/videos/${videoId}/report-error`, { error_report: errorReport }),
 };
 
 export const feedbackAPI = {
@@ -81,7 +83,14 @@ export const quizAPI = {
     api.post('/api/quiz-results', data),
   gradeQuiz: (videoId: number, data: { user_id: number; answers: string[] }) =>
     api.post(`/api/quizzes/${videoId}/grade`, data),
-  };
+  
+  // New Draft APIs
+  getDrafts: (userId: number) => api.get('/api/quiz-drafts', { params: { user_id: userId } }),
+  upsertDraft: (data: { user_id: number; video_id: number; draft_json: string }) =>
+    api.post('/api/quiz-drafts', data),
+  deleteDraft: (videoId: number, userId: number) =>
+    api.delete(`/api/quiz-drafts/${videoId}`, { params: { user_id: userId } }),
+};
 
 
 export const uploadAPI = {

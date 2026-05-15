@@ -30,10 +30,12 @@ const Layout = ({ onLogout }: LayoutProps) => {
 
         <div className="workspace-nav-group">
           <NavLink to="/" className={navClassName}>Home</NavLink>
+          <NavLink to="/Tutorial" className={navClassName}>Tutorial</NavLink>
           <NavLink to="/Video" className={navClassName}>Video</NavLink>
-          <NavLink to="/Profile" className={navClassName}>Profile</NavLink>
           <NavLink to="/Quiz" className={navClassName}>Quiz</NavLink>
+          <NavLink to="/UnfinishedTest" className={navClassName}>Unfinished Test</NavLink>
           <NavLink to="/Review" className={navClassName}>Review</NavLink>
+          <NavLink to="/Profile" className={navClassName}>Profile</NavLink>
         </div>
 
         <button onClick={handleLogout} className="workspace-logout-button">

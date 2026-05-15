@@ -4,29 +4,25 @@ import "./App.css"
 import Home from "./pages/Home.tsx";
 import Video from "./pages/Video.tsx";
 import Layout from "./component/Layout.tsx";
-import ChatFloatingWidget from "./component/ChatFloatingWidget.tsx";
-import Profile from "./pages/Profile.tsx"
-import Quiz from "./pages/Quiz.tsx";
-import Review from "./pages/Review.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
+import Quiz from "./pages/Quiz.tsx";
+import Profile from "./pages/Profile.tsx";
+import Review from "./pages/Review.tsx";
 import Chat from "./pages/Chat.tsx";
-import {Route,Routes} from "react-router-dom";
-import { updateLoginMetaForToday } from "./utils/achievement";
-import { ChatProvider } from "./context/ChatContext.tsx";
+import Tutorial from "./pages/Tutorial.tsx";
+import UnfinishedTest from "./pages/UnfinishedTest.tsx";
 
-function App (){
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [userInfo, setUserInfo] = useState<any>(null);
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { ChatProvider } from "./context/ChatContext";
+import ChatFloatingWidget from "./component/ChatFloatingWidget";
+
+function App() {
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
     useEffect(() => {
-        // Check if user is already logged in
         const userId = localStorage.getItem('userId');
-        const userData = localStorage.getItem('userData');
-        
-        if (userId && userData) {
-            updateLoginMetaForToday();
+        if (userId) {
             setIsAuthenticated(true);
-            setUserInfo(JSON.parse(userData));
         }
     }, []);
 
@@ -34,24 +30,26 @@ function App (){
         localStorage.removeItem('userId');
         localStorage.removeItem('userData');
         setIsAuthenticated(false);
-        setUserInfo(null);
     };
 
     if (!isAuthenticated) {
         return <AuthPage />;
     }
 
-    return(
+    return (
         <ChatProvider>
             <Routes>
                 <Route element={<Layout onLogout={handleLogout} />}>
-                <Route path="/" element={<Home name={userInfo?.name}/>} />
-                <Route path="/Video" element={<Video VideoName={"python"}/>} />
-                <Route path="/Profile" element={<Profile />} />
-                <Route path="/Quiz" element={<Quiz />} />
-                <Route path="/Review" element={<Review />} />
-                <Route path="/Chat" element={<Chat />} />
-              </Route>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/Video" element={<Video />} />
+                    <Route path="/Quiz" element={<Quiz />} />
+                    <Route path="/Profile" element={<Profile />} />
+                    <Route path="/Review" element={<Review />} />
+                    <Route path="/Chat" element={<Chat />} />
+                    <Route path="/Tutorial" element={<Tutorial />} />
+                    <Route path="/UnfinishedTest" element={<UnfinishedTest />} />
+                </Route>
+                <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             <ChatFloatingWidget />
         </ChatProvider>

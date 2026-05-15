@@ -225,6 +225,7 @@ class UserResponse(BaseModel):
     last_login_date: Optional[str] = None
     consecutive_login_days: int = 0
     total_login_days: int = 0
+    current_quiz_draft: Optional[str] = None # 新增此欄位以回傳草稿
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -539,6 +540,7 @@ def read_user(user_id: int, db: Session = Depends(database.get_db)):
 
 @app.put("/users/{user_id}", response_model=UserResponse)
 def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(database.get_db)):
+    print(f"DEBUG: Updating user {user_id}. Draft present: {payload.current_quiz_draft is not None}")
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -547,6 +549,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(databas
     if payload.password:
         user.password = hash_password(payload.password)
     if payload.current_quiz_draft is not None:
+        print(f"DEBUG: Setting draft (len={len(payload.current_quiz_draft)})")
         user.current_quiz_draft = payload.current_quiz_draft
     db.add(user)
     db.commit()
@@ -687,6 +690,16 @@ def delete_video(video_id: int, db: Session = Depends(database.get_db)):
     db.delete(video)
     db.commit()
     return {"message": "Video deleted"}
+
+
+@app.post("/api/videos/{video_id}/report-error")
+def report_video_error(video_id: int, payload: schema.ErrorReportRequest, db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    video.error_report = payload.error_report
+    db.commit()
+    return {"message": "Error report saved"}
 
 
 @app.post("/api/feedbacks", response_model=schema.AIFeedbackResponse)
@@ -923,6 +936,66 @@ def get_quiz_results(user_id: int = 1, db: Session = Depends(database.get_db)):
     # 由於 schema 需要 video_title，我們可以動態補齊或修改 schema
     # 這裡直接回傳，Pydantic 會處理關聯 (如果 models 有設定)
     return results
+
+
+# --- Quiz Drafts ---
+
+class QuizDraftBase(BaseModel):
+    user_id: int
+    video_id: int
+    draft_json: str
+
+class QuizDraftResponse(BaseModel):
+    id: int
+    user_id: int
+    video_id: int
+    draft_json: str
+    updated_at: datetime
+    video_title: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+@app.get("/api/quiz-drafts", response_model=List[QuizDraftResponse])
+def get_all_drafts(user_id: int = 1, db: Session = Depends(database.get_db)):
+    drafts = db.query(models.QuizDraft).filter(models.QuizDraft.user_id == user_id).all()
+    # 補上影片標題方便前端顯示
+    for d in drafts:
+        d.video_title = d.video.title if d.video else "Unknown Video"
+    return drafts
+
+@app.post("/api/quiz-drafts", response_model=QuizDraftResponse)
+def upsert_quiz_draft(payload: QuizDraftBase, db: Session = Depends(database.get_db)):
+    # 檢查是否已有該影片的草稿
+    draft = db.query(models.QuizDraft).filter(
+        models.QuizDraft.user_id == payload.user_id,
+        models.QuizDraft.video_id == payload.video_id
+    ).first()
+
+    if draft:
+        draft.draft_json = payload.draft_json
+        draft.updated_at = datetime.now()
+    else:
+        draft = models.QuizDraft(
+            user_id=payload.user_id,
+            video_id=payload.video_id,
+            draft_json=payload.draft_json
+        )
+        db.add(draft)
+
+    db.commit()
+    db.refresh(draft)
+    draft.video_title = draft.video.title if draft.video else "Unknown Video"
+    return draft
+
+@app.delete("/api/quiz-drafts/{video_id}")
+def delete_quiz_draft(video_id: int, user_id: int = Query(...), db: Session = Depends(database.get_db)):
+    db.query(models.QuizDraft).filter(
+        models.QuizDraft.user_id == user_id,
+        models.QuizDraft.video_id == video_id
+    ).delete()
+    db.commit()
+    return {"message": "Draft deleted"}
+
 
 
 @app.get("/users/{user_id}/stats", response_model=schema.UserStatsResponse)

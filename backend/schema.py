@@ -184,3 +184,6 @@ class UserStatsResponse(BaseModel):
     remaining_points: int
     completed_quizzes: int
     average_accuracy: float
+
+class ErrorReportRequest(BaseModel):
+    error_report: str
