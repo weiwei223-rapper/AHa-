@@ -49,6 +49,8 @@ export const userAPI = {
     api.post(`/users/${userId}/recharge`, data),
   getStats: (userId: number) =>
     api.get(`/users/${userId}/stats`),
+  claimAchievementPoints: (userId: number) =>
+    api.post(`/users/${userId}/claim-achievement-points`),
 };
 
 export const videoAPI = {
@@ -62,6 +64,18 @@ export const videoAPI = {
     api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
   reportError: (videoId: number, errorReport: string) =>
     api.post(`/api/videos/${videoId}/report-error`, { error_report: errorReport }),
+};
+
+export const documentAPI = {
+  getDocuments: (userId: number) => api.get('/api/documents', { params: { user_id: userId } }),
+  uploadDocument: (userId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user_id', userId.toString());
+    return api.post('/api/documents', formData);
+  },
+  generateQuiz: (docId: number, userId: number, count?: number) =>
+    api.get(`/api/documents/${docId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
 };
 
 export const feedbackAPI = {

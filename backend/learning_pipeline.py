@@ -67,7 +67,7 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
         source_time="unknown",
         source_excerpt=None,
         starter_code=str(item.get("starter_code") or ""),
-        test_cases=item.get("test_cases") or ["assert True"],
+        test_cases=item.get("test_cases") or ["print('No tests')"],
     )
 
 def _parse_bullets(markdown: str) -> list[str]:
@@ -83,23 +83,22 @@ def _parse_bullets(markdown: str) -> list[str]:
 def generate_outline(transcript: str, title: str) -> tuple[str, dict]:
     total_usage = {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}
     if not transcript.strip():
-        return "- 無法取得影片逐字稿\n- 目前不能生成可靠的影片摘要", total_usage
+        return "- 無法取得內容文字\n- 目前不能生成可靠的摘要", total_usage
 
-    # 簡單分段處理
     chunks = [transcript[i:i+OUTLINE_CHUNK_SIZE] for i in range(0, len(transcript), OUTLINE_CHUNK_SIZE - OUTLINE_CHUNK_OVERLAP)]
     chunk_summaries: list[str] = []
 
     for index, chunk in enumerate(chunks, start=1):
         prompt = f"""
-請用繁體中文整理以下影片逐字稿片段。
+請用繁體中文整理以下內容片段。
 要求：
 1. 用 3 到 5 點條列。
 2. 每點聚焦在這段內容的具體重點。
 3. 不要補外部知識。
 
-影片標題：{title}
+標題：{title}
 片段：{index}/{len(chunks)}
-逐字稿：
+內容：
 {chunk}
 """
         text, usage = _call_llm(prompt)
@@ -107,12 +106,12 @@ def generate_outline(transcript: str, title: str) -> tuple[str, dict]:
         _add_tokens(total_usage, usage)
 
     merged_prompt = f"""
-請把以下分段摘要整合成一份影片重點整理，使用繁體中文 Markdown 條列。
+請把以下分段摘要整合成一份重點整理，使用繁體中文 Markdown 條列。
 要求：
 1. 產出 4 到 8 點。
 2. 每點精簡明確。
 
-影片標題：{title}
+標題：{title}
 分段摘要：
 {chr(10).join(chunk_summaries)}
 """
@@ -121,29 +120,24 @@ def generate_outline(transcript: str, title: str) -> tuple[str, dict]:
     return final_text, total_usage
 
 def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAnalysisResponse:
-    # 獲取逐字稿
     transcript = ai_analyzer.fetch_video_transcript(video_link)
     total_usage = {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}
     
     if not transcript:
-        # 抓取 YouTube 原始標題以利精準推理 (避免受使用者自定義標題干擾)
         original_title = ai_analyzer.get_video_title(video_link) or title
-        
-        # 零失敗備援：讓 AI 以專家身份根據「原始標題」進行知識推理
         fallback_prompt = f"""
-你是一位專業的 Python 導師。目前系統無法從影片中提取聲音，但我們知道這部影片的原始標題是「{original_title}」。
+你是一位專業的 Python 導師。目前系統無法從影片中提取聲音，但我們知道這部影片的標題是「{original_title}」。
 請根據這個標題所涉及的 Python 技術主題，產出一份結構化的學習大綱。
 要求：
 1. 用 5 點條列說明該主題的核心語法、運算邏輯與常見應用。
-2. 內容要具體且具備技術深度。
-3. 使用繁體中文。
+2. 使用繁體中文。
 """
         outline, usage = _call_llm(fallback_prompt)
         _add_tokens(total_usage, usage)
         topics = _parse_bullets(outline)
         return schema.VideoAnalysisResponse(
             video_id=video_id, video_title=original_title, transcript_source="failed",
-            transcript_excerpt="系統目前因 YouTube 限制無法取得音軌，已啟動『專家推理模式』根據影片原始標題生成學習重點。", 
+            transcript_excerpt="已啟動專家推理模式。", 
             outline_markdown=outline,
             key_topics=topics, retrieved_chunks=[], vector_backend="none",
             generated_at=datetime.utcnow(),
@@ -155,65 +149,54 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
     topics = _parse_bullets(outline)
     
     return schema.VideoAnalysisResponse(
-        video_id=video_id, 
-        video_title=title, 
-        transcript_source="direct",
-        transcript_excerpt=transcript[:1000], 
-        outline_markdown=outline,
-        key_topics=topics, 
-        retrieved_chunks=[], 
-        vector_backend="simple",
+        video_id=video_id, video_title=title, transcript_source="direct",
+        transcript_excerpt=transcript[:1000], outline_markdown=outline,
+        key_topics=topics, retrieved_chunks=[], vector_backend="simple",
         generated_at=datetime.utcnow(),
         token_usage=_to_token_usage_schema(total_usage)
     )
 
 def generate_quiz(video_id: int, title: str, video_link: str, count: int = 5) -> schema.QuizResponse:
     analysis = analyze_video(video_id, title, video_link)
+    return _generate_quiz_core(video_id, title, analysis.outline_markdown, analysis.transcript_excerpt, count, is_video=True)
+
+def generate_quiz_from_document(doc_id: int, title: str, content: str, count: int = 5) -> schema.QuizResponse:
+    outline, usage = generate_outline(content, title)
+    return _generate_quiz_core(doc_id, title, outline, content[:1000], count, is_video=False)
+
+def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, count: int, is_video: bool) -> schema.QuizResponse:
     total_usage = {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}
     
-    if analysis.token_usage:
-        total_usage["promptTokenCount"] += analysis.token_usage.prompt_tokens
-        total_usage["candidatesTokenCount"] += analysis.token_usage.completion_tokens
-        total_usage["totalTokenCount"] += analysis.token_usage.total_tokens
-
-    # 零失敗備援偵測：若分析結果顯示 failed，直接進入標題推理
-    if analysis.transcript_source == "failed":
-        questions = ai_analyzer.generate_fallback_questions(title, outline=analysis.outline_markdown, count=count)
-        return schema.QuizResponse(
-            video_id=video_id, 
-            video_title=title, 
-            quiz_type="technical_inference", 
-            questions=questions,
-            token_usage=_to_token_usage_schema(total_usage)
-        )
-
     prompt = f"""
 [SYSTEM: RETURN RAW JSON ARRAY ONLY. NO TEXT AROUND IT.]
-你是一位親切的 Python 導師。請根據影片內容產出 {count} 題「直覺式」的程式填空題。
+你是一位專業的 Python 導師。請根據提供內容產出 {count} 題「直覺式」的程式填空題。
 
-影片標題：{title}
-大綱：{analysis.outline_markdown}
-影片部分內容：{analysis.transcript_excerpt}
+標題：{title}
+重點摘要：{outline}
+部分內容：{snippet}
 
 出題要求：
-1. **不要**使用 'class Solution' 物件導向結構。
-2. 使用直覺的「變數運算」或「簡單函式」風格。
-3. **嚴禁使用 input() 函式**。
-4. 程式碼中必須包含清晰的中文注釋，標註填空處（例如：# --- 請在此處填寫 ---）。
-5. 填空處請使用唯一的 `___`。
-6. 題目敘述要包含：場景設定、輸入輸出說明。
-7. 提供 **精確 3 個** 測試案例 (test_cases)，每個案例應為一行程式碼，並使用 `print()` 輸出結果。
-8. 使用繁體中文。
+1. **題型混合要求**：請平均分配以下四種風格：
+   - 『關鍵字熟練』：針對 Python 保留字或內建函數。
+   - 『邏輯運算』：針對 if/while/for 邏輯判斷。
+   - 『資料處理』：針對串列、字典或字串切片。
+   - 『函式架構』：針對參數傳遞或回傳值。
+2. **嚴禁**使用 'class Solution' 或物件導向。
+3. **嚴禁**使用 input()。
+4. 程式碼包含中文注釋。
+5. 填空處使用唯一的 `___`。
+6. 提供 **精確 3 個** `print()` 測試案例。
+7. 使用繁體中文。
 
-JSON 範例格式：
+JSON 範例：
 [
   {{
-    "question": "場景描述 (例如：判斷成績是否及格...)",
-    "reference_concept": "技術點 (例如：比較運算子)",
-    "correct_answer": "答案內容",
-    "explanation": "解析為何填寫此內容",
-    "starter_code": "def check(score):\\n    # --- 請在下方補全邏輯 ---\\n    is_pass = ___\\n    return is_pass",
-    "test_cases": ["print(check(80))", "print(check(50))", "print(check(60))"]
+    "question": "場景描述",
+    "reference_concept": "關鍵字熟練",
+    "correct_answer": "...",
+    "explanation": "...",
+    "starter_code": "...",
+    "test_cases": ["print(...)"]
   }}
 ]
 """
@@ -222,21 +205,23 @@ JSON 範例格式：
         _add_tokens(total_usage, usage)
         raw_questions = _extract_json_array(payload)
         questions = [_normalize_question(item) for item in raw_questions[:count]]
+        
         return schema.QuizResponse(
-            video_id=video_id, 
+            video_id=source_id if is_video else None,
+            document_id=source_id if not is_video else None,
             video_title=title, 
-            quiz_type="coding", 
+            quiz_type="mixed_styles", 
             questions=questions,
             token_usage=_to_token_usage_schema(total_usage)
         )
     except Exception as e:
-        print(f"Error in generate_quiz: {e}")
-        # 極速備援題目
-        fallback_questions = ai_analyzer.generate_fallback_questions(title, outline=analysis.outline_markdown, count=count)
+        print(f"Error in quiz generation: {e}")
+        fallback = ai_analyzer.generate_fallback_questions(title, outline=outline, count=count)
         return schema.QuizResponse(
-            video_id=video_id, 
+            video_id=source_id if is_video else None,
+            document_id=source_id if not is_video else None,
             video_title=title, 
             quiz_type="fallback", 
-            questions=fallback_questions,
+            questions=fallback,
             token_usage=_to_token_usage_schema(total_usage)
         )

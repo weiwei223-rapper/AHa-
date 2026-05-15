@@ -22,13 +22,48 @@ class VideoResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True   # Pydantic v2
+        from_attributes = True
+
+class DocumentResponse(BaseModel):
+    id: int
+    filename: str
+    title: str
+    content_text: Optional[str] = None
+    outline: Optional[str] = None
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    name: str
+    uid: str
+    points: int
+    last_login_date: Optional[str] = None
+    consecutive_login_days: int = 0
+    total_login_days: int = 0
+    current_quiz_draft: Optional[str] = None
+    claimed_achievement_points: int = 0
+
+    class Config:
+        from_attributes = True
+
+class UserUpdate(BaseModel):
+    name: str
+    email: str
+    password: Optional[str] = None
+    current_quiz_draft: Optional[str] = None
 
 class AIFeedbackCreate(BaseModel):
     user_id: int
     ai_message: str
     user_message: str
     error_report: Optional[str] = None
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
 
 class AIFeedbackResponse(BaseModel):
     id: int
@@ -69,7 +104,8 @@ class QuizQuestion(BaseModel):
 
 class QuizQuestionCreate(BaseModel):
     user_id: int
-    video_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
     question_content: str
     reference_answer: str
     options: List[str] = []
@@ -79,7 +115,8 @@ class QuizQuestionCreate(BaseModel):
 class QuizQuestionResponse(BaseModel):
     id: int
     user_id: int
-    video_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
     question_content: str
     reference_answer: str
     answer_record: Optional[str] = None
@@ -96,7 +133,8 @@ class TokenUsage(BaseModel):
     total_tokens: int
 
 class QuizResponse(BaseModel):
-    video_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
     video_title: str
     quiz_type: str = "ai-coding"
     questions: List[QuizQuestion]
@@ -125,11 +163,12 @@ class VideoAnalysisResponse(BaseModel):
 
 class QuizResultCreate(BaseModel):
     user_id: int = 1
-    video_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
     score: int
     total_questions: int = 5
-    title: Optional[str] = None # 新增標題欄位
-    details_json: Optional[str] = None # 儲存詳細批改細節
+    title: Optional[str] = None
+    details_json: Optional[str] = None
     error_report: Optional[str] = None
 
 class QuizResultUpdate(BaseModel):
@@ -141,9 +180,10 @@ class QuizResultUpdate(BaseModel):
 class QuizResultResponse(BaseModel):
     id: int
     user_id: int
-    video_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
     score: int
-    total_questions: int
+    total_questions: int = 5
     title: Optional[str] = None
     details_json: Optional[str] = None
     error_report: Optional[str] = None
@@ -151,6 +191,33 @@ class QuizResultResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class QuizDraftBase(BaseModel):
+    user_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
+    draft_json: str
+
+class QuizDraftResponse(BaseModel):
+    id: int
+    user_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
+    draft_json: str
+    updated_at: datetime
+    video_title: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class GradeRequest(BaseModel):
+    user_id: int
+    answers: List[str]
+    document_id: Optional[int] = None
+
+class GradeResponse(BaseModel):
+    total_score: int
+    details: List[dict]
 
 class GenerationRecordCreate(BaseModel):
     user_id: int
@@ -169,13 +236,15 @@ class GenerationRecordResponse(BaseModel):
 
 class UploadRecordCreate(BaseModel):
     user_id: int
-    video_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
     consumed_points: int
 
 class UploadRecordResponse(BaseModel):
     id: int
     user_id: int
-    video_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
     consumed_points: int
     created_at: datetime
 
@@ -192,3 +261,28 @@ class UserStatsResponse(BaseModel):
 
 class ErrorReportRequest(BaseModel):
     error_report: str
+
+class GeminiHealthResponse(BaseModel):
+    ok: bool
+    model: str
+    reply: str
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[ChatMessage] = []
+    user_id: Optional[int] = None
+    video_id: Optional[int] = None
+
+class ChatResponse(BaseModel):
+    reply: str
+
+class CodeExecutionRequest(BaseModel):
+    code: str
+
+class CodeExecutionResponse(BaseModel):
+    output: str
+    error: str
