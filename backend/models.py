@@ -21,6 +21,7 @@ class User(Base):
     last_login_date = Column(String, nullable=True)  # 新增：最後登入日期
     consecutive_login_days = Column(Integer, default=0)  # 新增：連續登入天數
     total_login_days = Column(Integer, default=0)  # 新增：總登入天數
+    claimed_achievement_points = Column(Integer, default=0) # 新增：已領取的成就點數
     current_quiz_draft = Column(Text, nullable=True) # 新增：儲存未完成的測驗進度 (JSON)
 
     videos = relationship("Video", back_populates="uploader", cascade="all, delete-orphan")
