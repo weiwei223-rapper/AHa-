@@ -19,6 +19,7 @@ type UserData = {
   last_login_date?: string;
   consecutive_login_days: number;
   total_login_days: number;
+  claimed_achievement_points?: number;
 };
 
 type RechargeRecord = {
@@ -43,7 +44,7 @@ const Profile = () => {
   const [showTopup, setShowTopup] = useState(false);
   const [user, setUser] = useState<UserData | null>(null);
   const [achievements, setAchievements] = useState<AchievementItem[]>([]);
-  const [achievementPoints, setAchievementPoints] = useState(0);
+  const [accumulatedPoints, setAccumulatedPoints] = useState(0); 
   const [videoCount, setVideoCount] = useState(0);
   const [totalVideoCount, setTotalVideoCount] = useState(0);
   const [questionCount, setQuestionCount] = useState(0);
@@ -63,14 +64,42 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
+  const refreshAchievements = useCallback((userData?: UserData) => {
+    const activeUser = userData || user;
+    if (!activeUser) return;
+
+    const currentLoginMeta = {
+      lastLoginDate: activeUser.last_login_date || '',
+      consecutiveLoginDays: activeUser.consecutive_login_days || 0,
+      totalLoginDays: activeUser.total_login_days || 0,
+    };
+    setLoginMeta(currentLoginMeta);
+
+    const allAchievements = buildAchievements({
+      videoCount,
+      questionCount,
+      loginStreakDays: currentLoginMeta.consecutiveLoginDays,
+      totalLoginDays: currentLoginMeta.totalLoginDays,
+    });
+
+    const unlockedKeys = allAchievements.filter((item) => item.unlocked).map((item) => item.key);
+    const totalUnlockedPoints = allAchievements
+      .filter((item) => item.unlocked)
+      .reduce((sum, item) => sum + item.points, 0);
+
+    // 可領取 = 總已解鎖 - 已領取。此值會在領取後歸零 (由後端 refresh 回傳)
+    const claimable = Math.max(0, totalUnlockedPoints - (activeUser.claimed_achievement_points || 0));
+    setAccumulatedPoints(claimable);
+    
+    saveAchievementPoints(totalUnlockedPoints);
+    saveUnlockedAchievementKeys(unlockedKeys);
+    setAchievements(allAchievements);
+  }, [videoCount, totalVideoCount, questionCount, user]);
+
   const loadUser = async (id: number) => {
     try {
       setLoading(true);
-      
-      // ✅ 改用 sessionStorage 來檢查付款狀態
       const expectedPoints = sessionStorage.getItem("pending_points");
-
-      // 如果有待處理的充值，稍微等待一下後端接收綠界的 ReturnURL
       if (expectedPoints) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
@@ -84,6 +113,7 @@ const Profile = () => {
         email: data.email,
         uid: data.uid,
       });
+      
       const historyResp = await api.get(`/users/${id}/recharge-records`);
       setHistory(historyResp.data);
 
@@ -91,16 +121,12 @@ const Profile = () => {
         setMessage(`🎉 付款成功！已成功儲值 ${expectedPoints} 點。`);
         setActiveTab("records");
         setShowTopup(false);
-
-        // 清除暫存，避免使用者按 F5 重新整理時又重複跳出訊息
         sessionStorage.removeItem("pending_points");
       } else {
         setMessage("");
       }
-
-      refreshAchievements();
+      refreshAchievements(data);
     } catch (error) {
-
       console.error(error);
       setMessage("無法讀取使用者資料，請稍後再試。");
     } finally {
@@ -108,55 +134,22 @@ const Profile = () => {
     }
   };
 
-  const refreshAchievements = useCallback(() => {
-    if (!user) return;
-
-    const currentLoginMeta = {
-      lastLoginDate: user.last_login_date || '',
-      consecutiveLoginDays: user.consecutive_login_days || 0,
-      totalLoginDays: user.total_login_days || 0,
-    };
-    setLoginMeta(currentLoginMeta);
-
-    const allAchievements = buildAchievements({
-      videoCount,
-      questionCount,
-      loginStreakDays: currentLoginMeta.consecutiveLoginDays,
-      totalLoginDays: currentLoginMeta.totalLoginDays,
-    });
-
-    const unlockedKeys = allAchievements.filter((item) => item.unlocked).map((item) => item.key);
-    const totalPoints = allAchievements
-      .filter((item) => item.unlocked)
-      .reduce((sum, item) => sum + item.points, 0);
-
-    setAchievementPoints(totalPoints);
-    saveAchievementPoints(totalPoints);
-    saveUnlockedAchievementKeys(unlockedKeys);
-    setAchievements(allAchievements);
-  }, [videoCount, totalVideoCount, questionCount, user]);
-
   useEffect(() => {
     const storedUserId = localStorage.getItem("userId");
     if (storedUserId) {
       const userId = Number(storedUserId);
-      // 初始化時從後端 API 獲取最新的影片與題數計數
       userAPI.getStats(userId)
         .then((response) => {
           const stats = response.data;
-          // 使用已分析影片數量作為成就進度
           setVideoCount(stats.analyzed_video_count);
           setTotalVideoCount(stats.video_count);
           setQuestionCount(stats.total_questions_count || 0);
         })
         .catch((error) => {
           console.error("Failed to fetch initial stats:", error);
-          // 降級方案：使用 localStorage 中的值
           const currentVideoCount = loadVideoCount();
           setVideoCount(currentVideoCount);
         });
-
-      // 初始化時載入使用者詳細資料
       void loadUser(userId);
     }
   }, []);
@@ -166,390 +159,248 @@ const Profile = () => {
   }, [videoCount, questionCount, refreshAchievements]);
 
   useEffect(() => {
-    // 監聽影片變更事件，當影片數量變化時重新載入成就
     const handleVideoUpdated = () => {
       if (user?.id) {
-        // 從後端 API 獲取最新的統計資訊，包括真實的影片數量
         userAPI.getStats(user.id).then((response) => {
           const stats = response.data;
-          // 使用已分析影片數量作為成就進度
           setVideoCount(stats.analyzed_video_count);
           setTotalVideoCount(stats.video_count);
           setQuestionCount(stats.total_questions_count || 0);
           refreshAchievements();
-        }).catch((error) => {
-          console.error("Failed to fetch user stats:", error);
-          // 降級方案：從 localStorage 讀取
-          const currentVideoCount = loadVideoCount();
-          setVideoCount(currentVideoCount);
-          refreshAchievements();
-        });
+        }).catch(err => console.error(err));
       }
     };
-
-    // 監聽測驗完成事件，當測驗完成時重新計算成就
-    const handleQuizCompleted = () => {
-      if (user?.id) {
-        userAPI.getStats(user.id).then((response) => {
-          const stats = response.data;
-          setQuestionCount(stats.total_questions_count || 0);
-          setTotalVideoCount(stats.video_count);
-          refreshAchievements();
-        });
-      } else {
-        refreshAchievements();
-      }
-    };
-
     window.addEventListener('video-updated', handleVideoUpdated);
     window.addEventListener('points-updated', handleVideoUpdated);
-    window.addEventListener('quizCompleted', handleQuizCompleted);
-
     return () => {
       window.removeEventListener('video-updated', handleVideoUpdated);
       window.removeEventListener('points-updated', handleVideoUpdated);
-      window.removeEventListener('quizCompleted', handleQuizCompleted);
     };
-  }, [user?.id, refreshAchievements]);
+  }, [user, refreshAchievements]);
 
-  const handleFieldChange = (field: string, value: string) => {
-    setFormValues((prev) => ({ ...prev, [field]: value }));
+  const handleClaimPoints = async () => {
+    if (!user || accumulatedPoints <= 0) return;
+    try {
+      setSaving(true);
+      const resp = await userAPI.claimAchievementPoints(user.id);
+      const updated = resp.data as UserData;
+      setUser(updated);
+      setAccumulatedPoints(0);
+      setMessage(`🎉 領取成功！已領取 ${accumulatedPoints} 點成就獎勵。`);
+      refreshAchievements(updated);
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "領取失敗，請稍後再試。");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const formatTradeDate = (date: Date) => {
-    const pad = (value: number) => String(value).padStart(2, "0");
-    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(
-      date.getHours(),
-    )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    try {
+      setSaving(true);
+      const payload: any = { name: formValues.name, email: formValues.email };
+      if (formValues.password) payload.password = formValues.password;
+      const resp = await api.put(`/users/${user.id}`, payload);
+      setUser(resp.data as UserData);
+      setMessage("個人資料已更新。");
+    } catch (err) {
+      setMessage("更新失敗，請檢查輸入內容。");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const submitEcpayCheckout = (plan: { title: string; points: number; price: number }) => {
-    if (!user) {
-      setMessage("請先登入後再進行付款。");
-      return;
-    }
-
+    if (!user) return;
     const merchantTradeNo = `AHA${user.id}${Date.now().toString().slice(-10)}`;
     const checkoutParams = {
       MerchantTradeNo: merchantTradeNo,
-      MerchantTradeDate: formatTradeDate(new Date()),
-      PaymentType: "aio",
+      MerchantTradeDate: new Date().toLocaleString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).replace(/\//g, "/"),
       TotalAmount: plan.price,
-      TradeDesc: "AHA 點數充值",
+      TradeDesc: "AHa AI 點數儲值",
       ItemName: `${plan.points} 點`,
       ReturnURL: `${API_BASE_URL}/ecpay/return`,
-      ClientBackURL: `${window.location.origin}/profile?payment_status=success&points=${plan.points}`,
+      ClientBackURL: window.location.href,
       ChoosePayment: "ALL",
       EncryptType: 1,
     };
-
     const form = document.createElement("form");
     form.method = "post";
     form.action = `${API_BASE_URL}/ecpay/checkout`;
     form.style.display = "none";
-
-    // 儲存預期點數到 sessionStorage，以便跳轉回來時顯示成功訊息並更新紀錄
     sessionStorage.setItem("pending_points", plan.points.toString());
-
     Object.entries(checkoutParams).forEach(([name, value]) => {
-
       const input = document.createElement("input");
       input.type = "hidden";
       input.name = name;
       input.value = String(value);
       form.appendChild(input);
     });
-
     document.body.appendChild(form);
     form.submit();
   };
 
-  const resetForm = () => {
-    if (!user) {
-      return;
-    }
-
-    setFormValues({
-      name: user.name,
-      password: "",
-      email: user.email,
-      uid: user.uid,
-    });
-  };
-
-  const handleSave = async () => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      const payload: { name: string; email: string; password?: string } = {
-        name: formValues.name,
-        email: formValues.email,
-      };
-
-      if (formValues.password.trim()) {
-        payload.password = formValues.password;
-      }
-
-      const resp = await api.put(`/users/${user.id}`, payload);
-      const updated = resp.data as UserData;
-      setUser(updated);
-      setFormValues({
-        name: updated.name,
-        password: "",
-        email: updated.email,
-        uid: updated.uid,
-      });
-      setMessage("個人資料已更新。");
-    } catch (error) {
-      console.error(error);
-      setMessage("儲存失敗，請稍後再試。");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
-    return <div className="page-loading">正在讀取個人資料...</div>;
-  }
+  if (loading) return <div className="page-loading">正在讀取個人帳戶資料...</div>;
 
   return (
     <div className="page-shell">
       <section className="page-hero">
-        <div>
-          <div className="page-eyebrow">Account Center</div>
-          <h1>個人資料與點數中心</h1>
-          <p>管理帳戶資訊、可用點數與充值紀錄。整體介面已與 Chat 工作台使用同一套視覺語言。</p>
+        <div className="profile-header-main">
+          <div className="profile-avatar">
+            {user?.name?.charAt(0).toUpperCase() || "U"}
+          </div>
+          <div>
+            <div className="page-eyebrow">User Profile</div>
+            <h1>{user?.name || "使用者"}</h1>
+            <p className="profile-uid">UID: {user?.uid}</p>
+          </div>
         </div>
-        <div className="page-hero-metric">
+        <div className="dashboard-highlight-card">
           <span>Current Points</span>
-          <strong>{user?.points ?? 0}</strong>
-          <p>可用於 AI 聊天與學習流程</p>
-        </div>
-      </section>
-
-      {message ? <div className="page-info-banner">{message}</div> : null}
-
-      <section className="panel-card achievement-overview">
-        <div className="achievement-summary-row">
-          <div>
-            <span>累積成就點數</span>
-            <strong>{achievementPoints}</strong>
-            <p>達成成就後即可獲得對應點數，將在本地儲存並顯示於此。</p>
-          </div>
-          <div>
-            <span>已回答題數</span>
-            <strong>{questionCount} 題</strong>
-            <p>參與 AI 測驗累積的答題數量，作為測驗成就進度依據。</p>
-          </div>
-          <div>
-            <span>連續登入</span>
-            <strong>{loginMeta.consecutiveLoginDays} 天</strong>
-            <p>維持習慣，連續登入 7 天即可獲得《學習堅持者》。</p>
-          </div>
-          <div>
-            <span>影片分析完成度</span>
-            <strong>{videoCount} / {totalVideoCount}</strong>
-            <p>已完成分析的影片數量，相對於總上傳數。</p>
-          </div>
-          <div>
-            <span>累計登入</span>
-            <strong>{loginMeta.totalLoginDays} 天</strong>
-            <p>累計登入可解鎖長期學習成就。</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel-card achievement-list-card">
-        <div className="achievement-list-header">
-          <h2>成就總覽</h2>
-          <p>依據已分析影片數量，自動解鎖成就徽章。</p>
-        </div>
-        <div className="achievement-grid">
-          {achievements.map((item) => {
-            const [current, target] = item.progress.split('/').map((value) => Number(value));
-            const currentProgress = Number.isFinite(current) && Number.isFinite(target) ? Math.min(current, target) : 0;
-            const progressPercentage = target > 0 ? (currentProgress / target) * 100 : 0;
-            const isCompleted = currentProgress >= target;
-
-            return (
-              <article key={item.key} className={`achievement-card ${isCompleted ? 'unlocked' : 'locked'}`}>
-                <div className="achievement-card-header">
-                  <div className="achievement-badge">
-                    <img
-                      src={item.badgeImage}
-                      alt={`${item.title} 徽章`}
-                      onError={(event) => {
-                        const img = event.currentTarget;
-                        img.style.display = 'none';
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <strong>{item.title}</strong>
-                    <span>{item.points} 點</span>
-                  </div>
-                </div>
-                <p>{item.description}</p>
-                <div className="achievement-progress-wrapper">
-                  <div className="achievement-progress-text">
-                    <span>{isCompleted ? '已完成' : '進度'}</span>
-                    <span>{currentProgress}/{target}</span>
-                  </div>
-                  <div className="progress-bar-bg">
-                    <div
-                      className="progress-bar-fill"
-                      style={{ width: `${progressPercentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="panel-card">
-        <div className="profile-toolbar">
-          <div className="profile-tab-row">
-            <button
-              type="button"
-              className={`profile-tab-button ${activeTab === "basic" && !showTopup ? "active" : ""}`}
-              onClick={() => {
-                setActiveTab("basic");
-                setShowTopup(false);
+          <strong>{user?.points.toLocaleString() ?? 0}</strong>
+          {accumulatedPoints > 0 ? (
+            <button 
+              onClick={handleClaimPoints} 
+              disabled={saving}
+              style={{ 
+                marginTop: '8px',
+                padding: '8px 16px', 
+                fontSize: '0.9rem',
+                fontWeight: '900',
+                background: 'linear-gradient(135deg, #facc15, #eab308)',
+                color: '#0f172a',
+                border: 'none',
+                borderRadius: '10px',
+                boxShadow: '0 4px 12px rgba(234, 179, 8, 0.3)',
+                cursor: 'pointer',
+                width: '100%',
+                transition: 'transform 0.2s'
               }}
             >
-              Basic Info
+              {saving ? '領取中...' : `領取 (${accumulatedPoints})`}
             </button>
-            <button
-              type="button"
-              className={`profile-tab-button ${activeTab === "records" && !showTopup ? "active" : ""}`}
-              onClick={() => {
-                setActiveTab("records");
-                setShowTopup(false);
-              }}
-            >
-              Recharge Records
-            </button>
-            <button
-              type="button"
-              className={`profile-tab-button ${showTopup ? "active" : ""}`}
-              onClick={() => setShowTopup(true)}
-            >
-              Top Up
-            </button>
-          </div>
+          ) : (
+            <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#64748b' }}>目前無可領取獎勵</p>
+          )}
         </div>
+      </section>
 
-        {showTopup ? (
-          <div className="profile-topup-layout">
-            <div className="profile-balance-card">
-              <span>Available Balance</span>
-              <strong>{user?.points ?? 0}</strong>
-              <p>按下綠界付款後會導向結帳頁面，可選擇刷卡、超商付款或其他綠界支援的付款方式。</p>
-              <p style={{ color: '#10b981', marginTop: '8px' }}>
-                請在綠界結帳頁面完成付款，付款結果將回傳至後端。
-              </p>
-              <p style={{ color: '#6b7280', marginTop: '8px' }}>
-                付款成功後，充值紀錄會顯示在 Recharge Records 頁籤中。
-              </p>
-            </div>
+      {message && <div className={`page-message ${message.includes("失敗") ? "error" : "success"}`}>{message}</div>}
 
-            <div className="profile-plan-grid">
-              {rechargePlans.map((plan) => (
-                <article key={plan.title} className="profile-plan-card">
-                  <div>
-                    <div className="profile-plan-points">{plan.points} points</div>
-                    <h3>{plan.title}</h3>
-                    <p>{plan.caption}</p>
+      <div className="profile-tab-row">
+        <button className={`profile-tab-btn ${activeTab === "basic" ? "active" : ""}`} onClick={() => setActiveTab("basic")}>基本資料</button>
+        <button className={`profile-tab-btn ${activeTab === "records" ? "active" : ""}`} onClick={() => setActiveTab("records")}>儲值紀錄</button>
+      </div>
+
+      <section className="profile-content-layout">
+        {activeTab === "basic" ? (
+          <>
+            <section className="panel-card">
+              <div className="panel-header">
+                <h2>個人資訊設定</h2>
+                <button onClick={() => setShowTopup(true)} className="page-primary-button">點數儲值</button>
+              </div>
+              <form onSubmit={handleUpdate} className="profile-form">
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>姓名</label>
+                    <input type="text" value={formValues.name} onChange={(e) => setFormValues({ ...formValues, name: e.target.value })} />
                   </div>
-                  <button
-                    type="button"
-                    className="page-primary-button"
-                    onClick={() => submitEcpayCheckout(plan)}
-                  >
-                    綠界付款
-                  </button>
-                </article>
-              ))}
-            </div>
-          </div>
-        ) : activeTab === "basic" ? (
-          <div className="profile-content-grid">
-            <div className="profile-summary-card">
-              <div className="profile-avatar">{user?.name?.charAt(0).toUpperCase() || "U"}</div>
-              <div>
-                <h2>{user?.name}</h2>
-                <p>{user?.email}</p>
-                <span>UID: {user?.uid}</span>
-              </div>
-            </div>
+                  <div className="form-group">
+                    <label>電子郵件</label>
+                    <input type="email" value={formValues.email} onChange={(e) => setFormValues({ ...formValues, email: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label>新密碼 (不更改請留空)</label>
+                    <input type="password" placeholder="••••••••" value={formValues.password} onChange={(e) => setFormValues({ ...formValues, password: e.target.value })} />
+                  </div>
+                </div>
+                <div className="profile-action-row">
+                  <button type="submit" disabled={saving} className="page-primary-button">{saving ? "儲存中..." : "更新個人資料"}</button>
+                </div>
+              </form>
+            </section>
 
-            <div className="profile-form-grid">
-              <label>
-                Name
-                <input value={formValues.name} onChange={(e) => handleFieldChange("name", e.target.value)} />
-              </label>
-              <label>
-                Email
-                <input type="email" value={formValues.email} onChange={(e) => handleFieldChange("email", e.target.value)} />
-              </label>
-              <label>
-                New Password
-                <input
-                  type="password"
-                  value={formValues.password}
-                  onChange={(e) => handleFieldChange("password", e.target.value)}
-                  placeholder="留空則不更新密碼"
-                />
-              </label>
-              <label>
-                UID
-                <input value={formValues.uid} readOnly />
-              </label>
-              <div className="profile-action-row">
-                <button type="button" className="page-primary-button" onClick={() => void handleSave()} disabled={saving}>
-                  {saving ? "Saving..." : "Save Changes"}
-                </button>
-                <button type="button" className="page-secondary-button" onClick={resetForm}>Reset</button>
+            <section className="panel-card achievement-panel">
+              <div className="panel-header">
+                <div>
+                  <div className="page-eyebrow">Milestones</div>
+                  <h2>成就與勳章</h2>
+                </div>
               </div>
-            </div>
-          </div>
+              <div className="achievement-grid">
+                {achievements.map((item) => (
+                  <div key={item.key} className={`achievement-item ${item.unlocked ? "unlocked" : "locked"}`}>
+                    <div className="achievement-icon">{item.unlocked ? "🏆" : "🔒"}</div>
+                    <div className="achievement-info">
+                      <h3>{item.title}</h3>
+                      <p>{item.description}</p>
+                      <div className="achievement-progress-bar">
+                        <div className="progress-fill" style={{ width: `${(parseInt(item.progress.split("/")[0]) / item.threshold) * 100}%` }} />
+                      </div>
+                      <span className="achievement-meta">{item.progress} | {item.points} pts</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
         ) : (
-          <div className="profile-record-table-wrap">
-            <table className="profile-record-table">
+          <section className="panel-card">
+            <div className="panel-header">
+              <h2>儲值與點數歷史</h2>
+              <button onClick={() => setShowTopup(true)} className="page-primary-button">點數儲值</button>
+            </div>
+            <table className="history-table">
               <thead>
                 <tr>
-                  <th>儲值日期</th>
+                  <th>日期</th>
                   <th>訂單編號</th>
-                  <th>方案內容</th>
-                  <th>儲值金額</th>
+                  <th>金額</th>
                   <th>獲得點數</th>
-                  <th>儲值後餘額</th>
+                  <th>餘額</th>
                   <th>付款方式</th>
                 </tr>
               </thead>
               <tbody>
-
                 {history.map((record) => (
                   <tr key={record.order_id}>
                     <td>{record.date}</td>
-                    <td>{record.order_id}</td>
-                    <td>{record.plan_content ?? "-"}</td>
-                    <td>NT$ {record.amount}</td>
-                    <td>+{record.points ?? 0}</td>
-                    <td>{record.balance_after ?? "-"}</td>
+                    <td className="order-id">{record.order_id}</td>
+                    <td>${record.amount}</td>
+                    <td className="points-plus">+{record.points}</td>
+                    <td className="balance">{record.balance_after ?? "-"}</td>
                     <td>{record.payment_method ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         )}
       </section>
+
+      {showTopup && (
+        <div className="topup-modal-overlay" onClick={() => setShowTopup(false)}>
+          <div className="topup-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>選擇儲值方案</h2>
+              <button className="close-btn" onClick={() => setShowTopup(false)}>×</button>
+            </div>
+            <div className="topup-grid">
+              {rechargePlans.map((plan) => (
+                <div key={plan.price} className="topup-plan-card">
+                  <h3>{plan.title}</h3>
+                  <div className="plan-points">{plan.points} <span>Points</span></div>
+                  <p>{plan.caption}</p>
+                  <button onClick={() => submitEcpayCheckout(plan)} className="page-primary-button">立即前往付款</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
