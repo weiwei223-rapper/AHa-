@@ -30,6 +30,7 @@ class User(Base):
     quiz_results = relationship("QuizResult", back_populates="user", cascade="all, delete-orphan")
     generation_records = relationship("GenerationRecord", back_populates="user", cascade="all, delete-orphan")
     upload_records = relationship("UploadRecord", back_populates="user", cascade="all, delete-orphan")
+    quiz_drafts = relationship("QuizDraft", back_populates="user", cascade="all, delete-orphan")
 
 
 class Video(Base):
@@ -151,3 +152,16 @@ class QuizResult(Base):
 
     user = relationship("User", back_populates="quiz_results")
     video = relationship("Video", back_populates="quiz_results")
+
+
+class QuizDraft(Base):
+    __tablename__ = "quiz_drafts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    video_id = Column(Integer, ForeignKey("videos.id"))
+    draft_json = Column(Text) # 儲存完整的測驗狀態 (questions, userAnswers, currentQuestionIndex, etc.)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="quiz_drafts")
+    video = relationship("Video")

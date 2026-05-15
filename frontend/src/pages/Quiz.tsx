@@ -39,8 +39,6 @@ type QuizData = {
   consumed_points?: number;
 };
 
-const STORAGE_KEY = "aha-active-quiz-v1";
-
 const Quiz = () => {
   const [searchParams] = useSearchParams();
   const preferredVideoId = Number(searchParams.get("videoId") || 0);
@@ -60,31 +58,40 @@ const Quiz = () => {
   const [codeError, setCodeError] = useState("");
   const [codeLoading, setCodeLoading] = useState(false);
 
-  // 1. 初始化載入
+  // 1. 初始化載入影片清單
   useEffect(() => {
     void fetchVideos();
-    
-    // 檢查是否有未完成的測驗 (從資料庫載入)
-    const loadDraft = async () => {
-      try {
-        const response = await userAPI.getUser(userId);
-        const userData = response.data;
-        if (userData && userData.current_quiz_draft) {
-          const parsed = JSON.parse(userData.current_quiz_draft);
-          if (parsed.quiz) {
-            setQuiz(parsed.quiz);
-            setUserAnswers(parsed.userAnswers || []);
-            setCurrentQuestionIndex(parsed.currentQuestionIndex || 0);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to restore saved quiz from backend", e);
-      }
-    };
-    void loadDraft();
   }, [userId]);
 
-  // 2. 當測驗狀態改變時自動儲存 (寫回資料庫)
+  // 2. 當有指定影片時，自動載入該影片的草稿 (若有)
+  useEffect(() => {
+    if (preferredVideoId > 0) {
+      void loadSpecificDraft(preferredVideoId);
+    }
+  }, [preferredVideoId]);
+
+  const loadSpecificDraft = async (videoId: number) => {
+    try {
+      const response = await quizAPI.getDrafts(userId);
+      const drafts = response.data;
+      const targetDraft = drafts.find((d: any) => d.video_id === videoId);
+      
+      if (targetDraft) {
+        const parsed = JSON.parse(targetDraft.draft_json);
+        if (parsed.quiz) {
+          setQuiz(parsed.quiz);
+          setUserAnswers(parsed.userAnswers || []);
+          setCurrentQuestionIndex(parsed.currentQuestionIndex || 0);
+          setShowResults(false);
+          console.log(`Draft restored for video ${videoId}`);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to restore draft from backend", e);
+    }
+  };
+
+  // 3. 自動儲存進度到該影片專屬的草稿欄位
   useEffect(() => {
     if (quiz && !showResults) {
       const state = {
@@ -93,30 +100,23 @@ const Quiz = () => {
         currentQuestionIndex,
         timestamp: new Date().getTime()
       };
-      const storedUserData = localStorage.getItem('userData');
-      if (storedUserData) {
-        const userData = JSON.parse(storedUserData);
-        userAPI.updateUser(userId, {
-          name: userData.name,
-          email: userData.email,
-          current_quiz_draft: JSON.stringify(state)
-        }).catch(err => console.error("Failed to save quiz draft", err));
-      }
+      // 自動背景儲存
+      quizAPI.upsertDraft({
+        user_id: userId,
+        video_id: quiz.video_id,
+        draft_json: JSON.stringify(state)
+      }).catch(err => console.error("Failed to sync draft", err));
     }
   }, [quiz, userAnswers, currentQuestionIndex, showResults, userId]);
 
   useEffect(() => {
-    if (!quiz) {
-      return;
-    }
+    if (!quiz) return;
     setCodeOutput("");
     setCodeError("");
   }, [quiz, currentQuestionIndex]);
 
   useEffect(() => {
-    if (!preferredVideoId || videos.length === 0) {
-      return;
-    }
+    if (!preferredVideoId || videos.length === 0) return;
     const target = videos.find((video) => video.id === preferredVideoId);
     if (target && !target.outline) {
       setOutlineWarning("Outline is not available for this video yet. Please generate an outline first.");
@@ -139,15 +139,12 @@ const Quiz = () => {
 
   const handleGenerateQuiz = async (videoId: number) => {
     const video = videos.find((v) => v.id === videoId);
-
     if (!video || !video.outline) {
       setOutlineWarning("Outline is not available for this video yet. Please generate an outline first.");
-      setLoading(false);
       return;
     }
 
-    const specificCount = quizCounts[videoId] || 5; // 取得獨立數量
-
+    const specificCount = quizCounts[videoId] || 5;
     setLoading(true);
     setError("");
     setOutlineWarning("");
@@ -158,11 +155,7 @@ const Quiz = () => {
       setCurrentQuestionIndex(0);
       setUserAnswers(nextQuiz.questions.map(q => q.starter_code || ""));
       setShowResults(false);
-
-      // 觸發點數更新事件
-      window.dispatchEvent(new CustomEvent('points-updated', {
-        detail: { userId }
-      }));
+      window.dispatchEvent(new CustomEvent('points-updated', { detail: { userId } }));
     } catch (err: any) {
       console.error("Error generating quiz:", err);
       setError(err.response?.data?.detail || "無法產生影片填空題");
@@ -186,9 +179,7 @@ const Quiz = () => {
   const [backendScore, setBackendScore] = useState(0);
 
   const handleNext = async () => {
-    if (!quiz) {
-      return;
-    }
+    if (!quiz) return;
     if (currentQuestionIndex < quiz.questions.length - 1) {
       setCurrentQuestionIndex((prev) => prev + 1);
       return;
@@ -214,17 +205,9 @@ const Quiz = () => {
         details_json: JSON.stringify(details),
       });
       
-      const storedUserData = localStorage.getItem('userData');
-      if (storedUserData) {
-        const userData = JSON.parse(storedUserData);
-        await userAPI.updateUser(userId, {
-          name: userData.name,
-          email: userData.email,
-          current_quiz_draft: null
-        });
-      }
+      // 測驗完成，清空該影片草稿
+      await quizAPI.deleteDraft(quiz.video_id, userId);
       
-      localStorage.removeItem(STORAGE_KEY);
       setShowResults(true);
     } catch (err: any) {
       console.error("Error grading quiz:", err);
@@ -254,17 +237,31 @@ const Quiz = () => {
     }
   };
 
-  const resetQuiz = async () => {
-    const storedUserData = localStorage.getItem('userData');
-    if (storedUserData) {
-      const userData = JSON.parse(storedUserData);
-      await userAPI.updateUser(userId, {
-        name: userData.name,
-        email: userData.email,
-        current_quiz_draft: null
-      }).catch(e => console.error(e));
+  const handleManualSave = async () => {
+    if (!quiz) return;
+    try {
+      const state = {
+        quiz,
+        userAnswers,
+        currentQuestionIndex,
+        timestamp: new Date().getTime()
+      };
+      await quizAPI.upsertDraft({
+        user_id: userId,
+        video_id: quiz.video_id,
+        draft_json: JSON.stringify(state)
+      });
+      alert("該影片測驗進度已成功儲存至『Unfinished Test』頁面！");
+    } catch (err) {
+      console.error("Failed to save draft manually", err);
+      alert("儲存失敗，請稍後再試。");
     }
-    localStorage.removeItem(STORAGE_KEY);
+  };
+
+  const resetQuiz = async () => {
+    if (quiz) {
+       await quizAPI.deleteDraft(quiz.video_id, userId).catch(e => console.error(e));
+    }
     setQuiz(null);
     setCurrentQuestionIndex(0);
     setUserAnswers([]);
@@ -285,9 +282,7 @@ const Quiz = () => {
           <div className="page-hero-metric">
             <span>Score</span>
             <strong>{backendScore}%</strong>
-            <p>
-              {gradeDetails.filter(d => d.passed).length} / {quiz.questions.length} Passed
-            </p>
+            <p>{gradeDetails.filter(d => d.passed).length} / {quiz.questions.length} Passed</p>
           </div>
         </section>
 
@@ -300,10 +295,7 @@ const Quiz = () => {
                   <div className={`quiz-review-status ${detail?.passed ? "correct" : "review"}`}>
                     {detail?.passed ? "Logic Correct" : "Logic Failed"}
                   </div>
-                  <h3>
-                    {index + 1}. {question.question}
-                  </h3>
-
+                  <h3>{index + 1}. {question.question}</h3>
                   <div style={{ marginTop: "12px" }}>
                     <p><strong>驗證詳情：</strong></p>
                     <ul style={{ listStyle: "none", padding: 0 }}>
@@ -314,48 +306,37 @@ const Quiz = () => {
                       ))}
                     </ul>
                   </div>
-
                   <div style={{ marginTop: "12px" }}>
                     <p><strong>你的作答：</strong></p>
                     <pre className="code-snippet">{userAnswers[index] || "未作答"}</pre>
                   </div>
-
                   <div style={{ marginTop: "12px" }}>
                     <p><strong style={{ color: "#4ade80" }}>參考答案 (填空處)：</strong></p>
                     <code style={{ background: "rgba(0,0,0,0.3)", padding: "4px 8px", borderRadius: "4px", color: "#4ade80", border: "1px solid rgba(74, 222, 128, 0.3)" }}>
                       {question.correct_answer}
                     </code>
                   </div>
-
                   <div style={{ marginTop: "12px" }}>
                     <p><strong>完整正確程式碼：</strong></p>
                     <pre className="code-snippet" style={{ borderColor: "rgba(74, 222, 128, 0.4)" }}>
                       {(question.starter_code || "").replace("___", question.correct_answer)}
                     </pre>
                   </div>
-
                   {detail?.diagnostic && (
                     <div style={{ marginTop: "12px", padding: "10px", background: detail.passed ? "rgba(74, 222, 128, 0.1)" : "rgba(251, 113, 133, 0.1)", borderRadius: "8px", borderLeft: `4px solid ${detail.passed ? "#4ade80" : "#fb7185"}` }}>
                       <strong>{detail.passed ? "通過解析：" : "錯誤診斷："}</strong>
                       <p style={{ margin: "5px 0 0", color: detail.passed ? "#86efac" : "#fca5a5" }}>{detail.diagnostic}</p>
                     </div>
                   )}
-
                   {question.explanation && detail?.passed && (
-                    <p style={{ marginTop: "12px" }}>
-                      <strong>原理補充：</strong>
-                      {question.explanation}
-                    </p>
+                    <p style={{ marginTop: "12px" }}><strong>原理補充：</strong>{question.explanation}</p>
                   )}
                 </article>
               );
             })}
           </div>
-
           <div className="quiz-nav-row">
-            <button onClick={() => void resetQuiz()} className="page-primary-button">
-              回到影片列表
-            </button>
+            <button onClick={() => void resetQuiz()} className="page-primary-button">回到影片列表</button>
           </div>
         </section>
       </div>
@@ -385,7 +366,6 @@ const Quiz = () => {
         {videos.map((video) => {
           const currentCount = quizCounts[video.id] || 5;
           const updateCount = (val: number) => setQuizCounts(prev => ({ ...prev, [video.id]: val }));
-          
           return (
             <article key={video.id} className="video-library-card">
               <div className="video-library-top">
@@ -394,34 +374,16 @@ const Quiz = () => {
                 </div>
                 <h3 className="video-library-title">{video.title || "Untitled Video"}</h3>
               </div>
-              
               <div className="quiz-settings-container">
                 <label className="quiz-settings-label">題目數量<br/>(上限 10 題)</label>
                 <div className="quiz-stepper">
-                  <button 
-                    className="quiz-stepper-btn"
-                    onClick={() => updateCount(Math.max(1, currentCount - 1))}
-                  >
-                    -
-                  </button>
-                  <div className="quiz-stepper-value">
-                    {currentCount}
-                  </div>
-                  <button 
-                    className="quiz-stepper-btn"
-                    onClick={() => updateCount(Math.min(10, currentCount + 1))}
-                  >
-                    +
-                  </button>
+                  <button className="quiz-stepper-btn" onClick={() => updateCount(Math.max(1, currentCount - 1))}>-</button>
+                  <div className="quiz-stepper-value">{currentCount}</div>
+                  <button className="quiz-stepper-btn" onClick={() => updateCount(Math.min(10, currentCount + 1))}>+</button>
                 </div>
               </div>
-
               <div className="video-library-actions">
-                <button
-                  onClick={() => void handleGenerateQuiz(video.id)}
-                  disabled={loading || !video.outline}
-                  className="page-primary-button"
-                >
+                <button onClick={() => void handleGenerateQuiz(video.id)} disabled={loading || !video.outline} className="page-primary-button">
                   {quiz && quiz.video_id === video.id ? "Regenerate" : "Generate"}
                 </button>
               </div>
@@ -438,63 +400,28 @@ const Quiz = () => {
             </div>
           )}
           <div className="quiz-question-card">
-            <div className="quiz-question-number">
-              Question {currentQuestionIndex + 1} / {quiz.questions.length}
-            </div>
+            <div className="quiz-question-number">Question {currentQuestionIndex + 1} / {quiz.questions.length}</div>
             <h2>{currentQuestion.question}</h2>
           </div>
-
           <div style={{ marginTop: "20px" }}>
             <p className="page-eyebrow">Python Editor (填入 ___ 處內容)</p>
             <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
-              <Editor
-                height="100%"
-                language="python"
-                value={userAnswers[currentQuestionIndex]}
-                onChange={(value) => handleAnswerChange(value || "")}
-                theme="vs-dark"
-                options={{ automaticLayout: true, fontSize: 14 }}
-              />
+              <Editor height="100%" language="python" value={userAnswers[currentQuestionIndex]} onChange={(value) => handleAnswerChange(value || "")} theme="vs-dark" options={{ automaticLayout: true, fontSize: 14 }} />
             </div>
-
-            {/* 新增：程式執行結果顯示區 */}
             {(codeOutput || codeError) && (
               <div style={{ marginTop: "15px", padding: "12px", background: "#08111f", borderRadius: "10px", border: "1px solid rgba(148, 163, 184, 0.2)" }}>
                 <p className="page-eyebrow" style={{ marginBottom: "8px" }}>Test Result:</p>
-                {codeOutput && (
-                  <pre style={{ margin: 0, color: "#4ade80", fontSize: "13px", whiteSpace: "pre-wrap" }}>{codeOutput}</pre>
-                )}
-                {codeError && (
-                  <pre style={{ margin: codeOutput ? "10px 0 0" : 0, color: "#fb7185", fontSize: "13px", whiteSpace: "pre-wrap" }}>{codeError}</pre>
-                )}
+                {codeOutput && <pre style={{ margin: 0, color: "#4ade80", fontSize: "13px", whiteSpace: "pre-wrap" }}>{codeOutput}</pre>}
+                {codeError && <pre style={{ margin: codeOutput ? "10px 0 0" : 0, color: "#fb7185", fontSize: "13px", whiteSpace: "pre-wrap" }}>{codeError}</pre>}
               </div>
             )}
           </div>
-
           <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end" }}>
-            <button onClick={() => void resetQuiz()} className="page-secondary-button" style={{ marginRight: 'auto' }}>
-              放棄測驗
-            </button>
-            <button
-              onClick={handlePrevious}
-              disabled={currentQuestionIndex === 0}
-              className="page-secondary-button"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => void handleNext()}
-              className="page-primary-button"
-            >
-              {currentQuestionIndex === quiz.questions.length - 1 ? "Finish" : "Next"}
-            </button>
-            <button
-              onClick={() => void executeCode()}
-              disabled={codeLoading}
-              className="page-primary-button"
-            >
-              {codeLoading ? "Testing..." : "Test"}
-            </button>
+            <button onClick={() => void resetQuiz()} className="page-secondary-button" style={{ marginRight: 'auto' }}>放棄測驗</button>
+            <button onClick={() => void handleManualSave()} className="page-secondary-button" style={{ borderColor: "#facc15", color: "#facc15" }}>儲存進度</button>
+            <button onClick={handlePrevious} disabled={currentQuestionIndex === 0} className="page-secondary-button">Previous</button>
+            <button onClick={() => void handleNext()} className="page-primary-button">{currentQuestionIndex === quiz.questions.length - 1 ? "Finish" : "Next"}</button>
+            <button onClick={() => void executeCode()} disabled={codeLoading} className="page-primary-button">{codeLoading ? "Testing..." : "Test"}</button>
           </div>
         </section>
       )}

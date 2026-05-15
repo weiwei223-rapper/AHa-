@@ -83,7 +83,14 @@ export const quizAPI = {
     api.post('/api/quiz-results', data),
   gradeQuiz: (videoId: number, data: { user_id: number; answers: string[] }) =>
     api.post(`/api/quizzes/${videoId}/grade`, data),
-  };
+  
+  // New Draft APIs
+  getDrafts: (userId: number) => api.get('/api/quiz-drafts', { params: { user_id: userId } }),
+  upsertDraft: (data: { user_id: number; video_id: number; draft_json: string }) =>
+    api.post('/api/quiz-drafts', data),
+  deleteDraft: (videoId: number, userId: number) =>
+    api.delete(`/api/quiz-drafts/${videoId}`, { params: { user_id: userId } }),
+};
 
 
 export const uploadAPI = {
