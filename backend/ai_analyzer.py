@@ -339,7 +339,10 @@ def generate_fallback_questions(
     outline: str = "",
     count: int = 5
 ) -> list[Any]:
-    from . import schema
+    try:
+        from . import schema
+    except ImportError:
+        import schema
     snippets = _extract_transcript_snippets(transcript, limit=max(8, count))
     if not snippets:
         snippets = [outline[:100]] if outline else [title]
