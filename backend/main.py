@@ -65,6 +65,7 @@ def ensure_database_columns() -> None:
         "ALTER TABLE ai_feedbacks ADD COLUMN IF NOT EXISTS video_id INTEGER",
         "ALTER TABLE recharge_records ADD COLUMN IF NOT EXISTS balance_after INTEGER",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS current_quiz_draft TEXT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS claimed_achievement_points INTEGER DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS error_report VARCHAR",
         "ALTER TABLE quiz_results ADD COLUMN IF NOT EXISTS error_report VARCHAR",
     ]
@@ -227,6 +228,7 @@ class UserResponse(BaseModel):
     last_login_date: Optional[str] = None
     consecutive_login_days: int = 0
     total_login_days: int = 0
+    claimed_achievement_points: int = 0 # 新增此欄位
     current_quiz_draft: Optional[str] = None # 新增此欄位以回傳草稿
     model_config = ConfigDict(from_attributes=True)
 
@@ -236,6 +238,7 @@ class UserUpdate(BaseModel):
     email: str
     password: Optional[str] = None
     current_quiz_draft: Optional[str] = None
+    claimed_achievement_points: Optional[int] = None # 新增此欄位
 
 
 class RechargeRequest(BaseModel):
@@ -593,6 +596,81 @@ def recharge_user(user_id: int, payload: RechargeRequest, db: Session = Depends(
     db.commit()
     db.refresh(record)
     return record
+
+
+@app.post("/api/users/claim-achievement-points", response_model=UserResponse)
+def claim_achievement_points(payload: dict, db: Session = Depends(database.get_db)):
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Missing user_id")
+        
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 這裡的邏輯需要與前端的 buildAchievements 保持一致，或者由後端統一計算
+    # 為了簡化且確保安全性，我們假設前端傳入的是「已解鎖但尚未領取」的點數。
+    # 但實際上，最佳做法是在後端重新計算總成就點數。
+    
+    # 獲取使用者統計數據
+    quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).all()
+    total_answered_questions = sum(r.total_questions for r in quiz_results) if quiz_results else 0
+    analyzed_videos = db.query(models.Video).filter(
+        models.Video.user_id == user_id,
+        or_(models.Video.outline != None, models.Video.transcript != None)
+    ).count()
+    
+    # 里程碑定義 (需與 achievement.ts 同步)
+    quiz_milestones = [1, 5, 15, 30, 50, 100]
+    video_milestones = [1, 5, 10]
+    login_milestones = [1, 7, 30, 60, 100]
+    login_points = {1: 20, 7: 30, 30: 100, 60: 200, 100: 300}
+
+    total_unlocked_points = 0
+    
+    # 影片成就
+    for m in video_milestones:
+        if analyzed_videos >= m:
+            total_unlocked_points += 200
+            
+    # 測驗成就
+    for m in quiz_milestones:
+        if total_answered_questions >= m:
+            total_unlocked_points += 30
+            
+    # 登入成就
+    for m in login_milestones:
+        if m == 7:
+            if user.consecutive_login_days >= 7: total_unlocked_points += 30
+        else:
+            if user.total_login_days >= m: total_unlocked_points += login_points[m]
+
+    # 計算可領取點數
+    claimable = max(0, total_unlocked_points - (user.claimed_achievement_points or 0))
+    
+    if claimable <= 0:
+        raise HTTPException(status_code=400, detail="目前沒有可領取的成就獎勵。")
+
+    # 更新使用者點數
+    user.points += claimable
+    user.claimed_achievement_points = (user.claimed_achievement_points or 0) + claimable
+    
+    # 增加一筆儲值紀錄作為歷程 (選擇性，但建議增加)
+    record = models.RechargeRecord(
+        user_id=user.id,
+        date=datetime.now().strftime("%Y/%m/%d"),
+        order_id=f"CLAIM{datetime.now():%Y%m%d%H%M%S}",
+        amount=0,
+        points=claimable,
+        balance_after=user.points,
+        plan_content="成就獎勵領取",
+        payment_method="Achievement",
+    )
+    db.add(record)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @app.get("/api/videos", response_model=List[schema.VideoResponse])

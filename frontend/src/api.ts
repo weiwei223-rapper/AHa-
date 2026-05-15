@@ -49,6 +49,8 @@ export const userAPI = {
     api.post(`/users/${userId}/recharge`, data),
   getStats: (userId: number) =>
     api.get(`/users/${userId}/stats`),
+  claimAchievementPoints: (userId: number) =>
+    api.post('/api/users/claim-achievement-points', { user_id: userId }),
 };
 
 export const videoAPI = {
