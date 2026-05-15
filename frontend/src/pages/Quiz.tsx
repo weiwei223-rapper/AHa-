@@ -219,6 +219,7 @@ const Quiz = () => {
       return;
     }
 
+    if (grading) return;
     setGrading(true);
     setLoading(true);
     try {
@@ -497,7 +498,7 @@ const Quiz = () => {
             <button onClick={() => void resetQuiz()} className="page-secondary-button" style={{ marginRight: 'auto' }}>放棄測驗</button>
             <button onClick={() => void handleManualSave()} className="page-secondary-button" style={{ borderColor: "#facc15", color: "#facc15" }}>儲存進度</button>
             <button onClick={handlePrevious} disabled={currentQuestionIndex === 0} className="page-secondary-button">Previous</button>
-            <button onClick={() => void handleNext()} className="page-primary-button">{currentQuestionIndex === quiz.questions.length - 1 ? "Finish" : "Next"}</button>
+            <button onClick={() => void handleNext()} disabled={grading || loading} className="page-primary-button">{currentQuestionIndex === quiz.questions.length - 1 ? (grading ? "Grading..." : "Finish") : "Next"}</button>
             <button onClick={() => void executeCode()} disabled={codeLoading} className="page-primary-button">{codeLoading ? "Testing..." : "Test"}</button>
           </div>
         </section>
