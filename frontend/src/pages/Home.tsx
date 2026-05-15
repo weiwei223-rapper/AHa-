@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_BASE_URL, parseResponseBody, userAPI } from "../api";
 import "./PageIndex.css";
+import heroImg from "../assets/hero.png";
 
 type UserStatusProps = {
   name: string;
@@ -178,6 +179,9 @@ const Home = ({ name }: UserStatusProps) => {
           <p>
             從影片、聊天到 AI 程式測驗，這裡是你目前的學習總覽。先看進度，再決定下一步要補哪一段。
           </p>
+        </div>
+        <div className="dashboard-hero-visual" style={{ flex: '1', display: 'flex', justifyContent: 'center', alignItems: 'center', maxWidth: '300px' }}>
+          <img src={heroImg} alt="Hero" style={{ width: '100%', height: 'auto', borderRadius: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }} />
         </div>
         <div className="dashboard-highlight-card">
           <span>Study Snapshot</span>

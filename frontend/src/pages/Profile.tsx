@@ -332,15 +332,24 @@ const Profile = () => {
               </div>
               <div className="achievement-grid">
                 {achievements.map((item) => (
-                  <div key={item.key} className={`achievement-item ${item.unlocked ? "unlocked" : "locked"}`}>
-                    <div className="achievement-icon">{item.unlocked ? "🏆" : "🔒"}</div>
-                    <div className="achievement-info">
-                      <h3>{item.title}</h3>
-                      <p>{item.description}</p>
-                      <div className="achievement-progress-bar">
-                        <div className="progress-fill" style={{ width: `${(parseInt(item.progress.split("/")[0]) / item.threshold) * 100}%` }} />
+                  <div key={item.key} className={`achievement-card ${item.unlocked ? "unlocked" : ""}`}>
+                    <div className="achievement-card-header">
+                      <div className="achievement-badge">
+                        <img 
+                          src={item.badgeImage} 
+                          alt={item.title} 
+                          style={{ filter: item.unlocked ? 'none' : 'grayscale(1) opacity(0.3)' }} 
+                        />
                       </div>
-                      <span className="achievement-meta">{item.progress} | {item.points} pts</span>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <strong>{item.title}</strong>
+                        <span style={{ fontSize: '12px', color: '#2bc1f1' }}>{item.points} pts</span>
+                      </div>
+                    </div>
+                    <p>{item.description}</p>
+                    <div className="achievement-progress" style={{ marginTop: 'auto' }}>
+                      <span>Progress</span>
+                      <strong>{item.progress}</strong>
                     </div>
                   </div>
                 ))}

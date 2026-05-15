@@ -64,12 +64,38 @@ const Quiz = () => {
     void fetchVideos();
   }, [userId]);
 
-  // 2. 當有指定影片時，自動載入該影片的草稿 (若有)
+  // 2. 當有指定影片時，自動載入該影片的草稿 (若有)；若無指定且目前沒測驗，載入最新的一份草稿
   useEffect(() => {
     if (preferredVideoId > 0) {
       void loadSpecificDraft(preferredVideoId);
+    } else if (!quiz) {
+      void loadLatestDraft();
     }
-  }, [preferredVideoId]);
+  }, [preferredVideoId, userId]);
+
+  const loadLatestDraft = async () => {
+    try {
+      const response = await quizAPI.getDrafts(userId);
+      const drafts = response.data;
+      if (drafts.length > 0) {
+        // 按照更新時間排序，取最晚的
+        const latest = [...drafts].sort((a: any, b: any) => 
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )[0];
+        
+        const parsed = JSON.parse(latest.draft_json);
+        if (parsed.quiz) {
+          setQuiz(parsed.quiz);
+          setUserAnswers(parsed.userAnswers || []);
+          setCurrentQuestionIndex(parsed.currentQuestionIndex || 0);
+          setShowResults(false);
+          console.log(`Latest draft restored for video ${latest.video_id}`);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load latest draft", e);
+    }
+  };
 
   const loadSpecificDraft = async (videoId: number) => {
     try {
@@ -300,6 +326,13 @@ const Quiz = () => {
         draft_json: JSON.stringify(state)
       });
       alert("該影片測驗進度已成功儲存至『Unfinished Test』頁面！");
+      setQuiz(null);
+      setCurrentQuestionIndex(0);
+      setUserAnswers([]);
+      setShowResults(false);
+      setLastResultId(null);
+      setCodeOutput("");
+      setCodeError("");
     } catch (err) {
       console.error("Failed to save draft manually", err);
       alert("儲存失敗，請稍後再試。");
@@ -443,9 +476,9 @@ const Quiz = () => {
               <div className="quiz-settings-container">
                 <label className="quiz-settings-label">題目數量<br/>(上限 10 題)</label>
                 <div className="quiz-stepper">
-                  <button className="quiz-stepper-btn" onClick={() => updateCount(Math.max(1, currentCount - 1))}>-</button>
+                  <button className="quiz-stepper-btn" onClick={() => updateCount(Math.max(1, currentCount - 1))} disabled={loading || !!quiz}>-</button>
                   <div className="quiz-stepper-value">{currentCount}</div>
-                  <button className="quiz-stepper-btn" onClick={() => updateCount(Math.min(10, currentCount + 1))}>+</button>
+                  <button className="quiz-stepper-btn" onClick={() => updateCount(Math.min(10, currentCount + 1))} disabled={loading || !!quiz}>+</button>
                 </div>
               </div>
               <div className="video-library-actions">

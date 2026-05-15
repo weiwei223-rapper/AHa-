@@ -880,6 +880,39 @@ def generate_quiz_api(video_id: int, user_id: int = 1, count: int = Query(5, ge=
             db.add(models.GenerationRecord(user_id=user.id, quiz_question_id=q_model.id, consumed_points=50))
             
         db.commit()
+
+        # 自動存入草稿，防止使用者跳轉頁面導致 token 浪費
+        try:
+            # 兼容 Pydantic v1/v2
+            quiz_data = quiz_response.model_dump() if hasattr(quiz_response, 'model_dump') else quiz_response.dict()
+            
+            draft_content = {
+                "quiz": quiz_data,
+                "userAnswers": [q.starter_code or "" for q in quiz_response.questions],
+                "currentQuestionIndex": 0,
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            
+            existing_draft = db.query(models.QuizDraft).filter(
+                models.QuizDraft.user_id == user_id,
+                models.QuizDraft.video_id == video_id
+            ).first()
+            
+            if existing_draft:
+                existing_draft.draft_json = json.dumps(draft_content, ensure_ascii=False)
+                existing_draft.updated_at = datetime.now()
+            else:
+                new_draft = models.QuizDraft(
+                    user_id=user_id,
+                    video_id=video_id,
+                    draft_json=json.dumps(draft_content, ensure_ascii=False)
+                )
+                db.add(new_draft)
+            db.commit()
+        except Exception as draft_err:
+            print(f"Failed to auto-save draft: {draft_err}")
+            # 不影響主流程返回
+
         return quiz_response
     except HTTPException:
         raise
