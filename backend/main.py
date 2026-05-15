@@ -699,7 +699,12 @@ def report_video_error(video_id: int, payload: schema.ErrorReportRequest, db: Se
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if video is None:
         raise HTTPException(status_code=404, detail="Video not found")
-    video.error_report = payload.error_report
+    
+    if video.error_report:
+        video.error_report = f"{video.error_report}\n---\n{payload.error_report}"
+    else:
+        video.error_report = payload.error_report
+        
     db.commit()
     return {"message": "Error report saved"}
 
@@ -931,7 +936,10 @@ def update_quiz_result(result_id: int, payload: schema.QuizResultUpdate, db: Ses
     if payload.details_json is not None:
         result.details_json = payload.details_json
     if payload.error_report is not None:
-        result.error_report = payload.error_report
+        if result.error_report:
+            result.error_report = f"{result.error_report}\n---\n{payload.error_report}"
+        else:
+            result.error_report = payload.error_report
         
     db.commit()
     db.refresh(result)
@@ -943,7 +951,12 @@ def report_quiz_error(result_id: int, payload: schema.ErrorReportRequest, db: Se
     result = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
     if result is None:
         raise HTTPException(status_code=404, detail="Quiz result not found")
-    result.error_report = payload.error_report
+    
+    if result.error_report:
+        result.error_report = f"{result.error_report}\n---\n{payload.error_report}"
+    else:
+        result.error_report = payload.error_report
+        
     db.commit()
     return {"message": "Quiz error report saved"}
 
