@@ -5,10 +5,7 @@ export const API_BASE_URL =
 
 export async function parseResponseBody<T>(response: Response): Promise<T | null> {
   const raw = await response.text();
-  if (!raw.trim()) {
-    return null;
-  }
-
+  if (!raw.trim()) return null;
   try {
     return JSON.parse(raw) as T;
   } catch {
@@ -26,7 +23,7 @@ export async function getErrorMessage(response: Response, fallback: string): Pro
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 300000, // 300 seconds timeout (5 minutes)
+  timeout: 300000, 
 });
 
 // Auth APIs
@@ -50,11 +47,7 @@ export const userAPI = {
   getStats: (userId: number) =>
     api.get(`/users/${userId}/stats`),
   claimAchievementPoints: (userId: number) =>
-<<<<<<< HEAD
     api.post(`/users/${userId}/claim-achievement-points`),
-=======
-    api.post('/api/users/claim-achievement-points', { user_id: userId }),
->>>>>>> f5abc542f2b32cde081b4b2f624e26d03fb575b4
 };
 
 export const videoAPI = {
@@ -78,6 +71,8 @@ export const documentAPI = {
     formData.append('user_id', userId.toString());
     return api.post('/api/documents', formData);
   },
+  analyzeDocument: (docId: number, userId: number) =>
+    api.get(`/api/documents/${docId}/analysis`, { params: { user_id: userId } }),
   generateQuiz: (docId: number, userId: number, count?: number) =>
     api.get(`/api/documents/${docId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
 };
@@ -91,35 +86,17 @@ export const feedbackAPI = {
 };
 
 export const quizAPI = {
-  createQuestion: (data: { user_id: number; video_id: number; question_content: string; reference_answer: string; options: string[]; answer_record?: string | null; accuracy?: number }) =>
-    api.post('/api/quiz-questions', data),
-  getQuestions: () => api.get('/api/quiz-questions'),
   getResults: (userId: number) => api.get('/api/quiz-results', { params: { user_id: userId } }),
   deleteResult: (resultId: number) => api.delete(`/api/quiz-results/${resultId}`),
-  updateResult: (resultId: number, data: { title?: string; score?: number; details_json?: string; error_report?: string }) => api.patch(`/api/quiz-results/${resultId}`, data),
-  createResult: (data: { user_id: number; video_id: number; score: number; total_questions: number; details_json?: string; error_report?: string }) =>
+  createResult: (data: { user_id: number; video_id?: number; document_id?: number; score: number; total_questions: number; title?: string; details_json?: string }) =>
     api.post('/api/quiz-results', data),
-  reportQuizError: (resultId: number, errorReport: string) =>
-    api.post(`/api/quiz-results/${resultId}/report-error`, { error_report: errorReport }),
-  gradeQuiz: (videoId: number, data: { user_id: number; answers: string[] }) =>
+  gradeQuiz: (videoId: number, data: { user_id: number; answers: string[]; document_id?: number | null }) =>
     api.post(`/api/quizzes/${videoId}/grade`, data),
-  // New Draft APIs
   getDrafts: (userId: number) => api.get('/api/quiz-drafts', { params: { user_id: userId } }),
-  upsertDraft: (data: { user_id: number; video_id: number; draft_json: string }) =>
+  upsertDraft: (data: { user_id: number; video_id?: number; document_id?: number; draft_json: string }) =>
     api.post('/api/quiz-drafts', data),
   deleteDraft: (videoId: number, userId: number) =>
     api.delete(`/api/quiz-drafts/${videoId}`, { params: { user_id: userId } }),
-};
-
-
-export const uploadAPI = {
-  createUpload: (data: { user_id: number; video_id: number; consumed_points: number }) =>
-    api.post('/api/uploads', data),
-};
-
-export const generationAPI = {
-  createGeneration: (data: { user_id: number; quiz_question_id: number; consumed_points: number }) =>
-    api.post('/api/generations', data),
 };
 
 export const codeAPI = {

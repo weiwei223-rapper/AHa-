@@ -148,6 +148,21 @@ const Video = () => {
     }
   };
 
+  const handleAnalyzeDoc = async (docId: number) => {
+    setActionId(docId);
+    setError("");
+    try {
+      const response = await documentAPI.analyzeDocument(docId, userId);
+      setAnalysis(response.data);
+      await fetchDocs();
+      window.dispatchEvent(new CustomEvent('points-updated', { detail: { userId } }));
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "文件分析失敗");
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const handleOpenQuiz = (id: number, type: 'video' | 'pdf') => {
     if (type === 'video') navigate(`/Quiz?videoId=${id}`);
     else navigate(`/Quiz?docId=${id}`);
@@ -261,7 +276,10 @@ const Video = () => {
                 <h3 className="video-library-title">{d.title}</h3>
               </div>
               <div className="video-library-actions">
-                <button onClick={() => handleOpenQuiz(d.id, 'pdf')} className="page-primary-button">Generate Quiz</button>
+                <button onClick={() => handleAnalyzeDoc(d.id)} disabled={actionId === d.id} className="page-secondary-button">
+                  {actionId === d.id ? "分析中..." : "Analyze"}
+                </button>
+                <button onClick={() => handleOpenQuiz(d.id, 'pdf')} className="page-primary-button">Quiz</button>
               </div>
             </article>
           ))
@@ -270,7 +288,7 @@ const Video = () => {
 
       {analysis && (
         <section className="panel-card" style={{ marginTop: '30px' }}>
-          <div className="panel-header"><h2>{analysis.video_title} - 分析大綱</h2></div>
+          <div className="panel-header"><h2>{analysis.video_title} - 分析內容</h2></div>
           <pre className="code-snippet" style={{ whiteSpace: 'pre-wrap', maxHeight: '400px', overflowY: 'auto' }}>{analysis.outline_markdown}</pre>
         </section>
       )}
