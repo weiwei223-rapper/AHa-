@@ -1,34 +1,7 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { quizAPI } from "../api";
 import "./PageIndex.css";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  RadialLinearScale,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from "chart.js";
-import { Line, Bar, Radar } from "react-chartjs-2";
 import ReportModal from "../component/ReportModal";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  RadialLinearScale,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
 
 type QuizResultItem = {
   id: number;
@@ -95,6 +68,17 @@ const Review = () => {
     }
   };
 
+  const handleDelete = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    if (!window.confirm("確定要刪除這筆測驗紀錄嗎？")) return;
+    try {
+      await quizAPI.deleteResult(id);
+      setResults(results.filter((r) => r.id !== id));
+    } catch (err) {
+      alert("刪除失敗");
+    }
+  };
+
   const renderDetails = (detailsJson: string | null | undefined) => {
     if (!detailsJson) return <p>無詳細作答資料</p>;
     try {
@@ -144,29 +128,6 @@ const Review = () => {
 
       {error && <div className="page-error">{error}</div>}
       {loading && <div className="page-loading">正在載入紀錄...</div>}
-
-      {!loading && !selectedResult && results.length > 0 && (
-        <section className="dashboard-grid" style={{ marginBottom: '40px' }}>
-          <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
-            <h2 style={{ marginBottom: '15px', fontSize: '1.2em' }}>學習分數趨勢</h2>
-            <div style={{ height: '250px' }}>
-              <Line data={lineChartData} options={chartOptions} />
-            </div>
-          </div>
-          <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
-            <h2 style={{ marginBottom: '15px', fontSize: '1.2em' }}>最近測驗表現</h2>
-            <div style={{ height: '250px' }}>
-              <Bar data={barChartData} options={chartOptions} />
-            </div>
-          </div>
-          <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
-            <h2 style={{ marginBottom: '15px', fontSize: '1.2em' }}>概念掌握度分析</h2>
-            <div style={{ height: '250px' }}>
-              <Radar data={radarChartData} options={radarOptions} />
-            </div>
-          </div>
-        </section>
-      )}
 
       {!loading && !selectedResult && (
         <section className="video-library-grid">
