@@ -148,6 +148,7 @@ class QuizResult(Base):
     score = Column(Integer)
     total_questions = Column(Integer, default=5)
     details_json = Column(String, nullable=True) # 新增欄位，儲存詳細作答與比對結果
+    error_report = Column(String, nullable=True) # 新增欄位，儲存錯誤回報
     completed_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="quiz_results")

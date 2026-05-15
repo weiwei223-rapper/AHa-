@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { quizAPI } from "../api";
 import "./PageIndex.css";
+import ReportModal from "../component/ReportModal";
 
 type QuizResultItem = {
   id: number;
@@ -20,10 +21,22 @@ const Review = () => {
   const [selectedResult, setSelectedResult] = useState<QuizResultItem | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [newTitle, setNewTitle] = useState("");
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   useEffect(() => {
     void fetchResults();
   }, []);
+
+  const handleReportQuizError = async (description: string) => {
+    if (!selectedResult) return;
+    try {
+      await quizAPI.reportQuizError(selectedResult.id, description);
+      alert("感謝您的回報！題目錯誤已記錄。");
+    } catch (err) {
+      console.error("Error reporting quiz error:", err);
+      alert("提交回報時發生錯誤，請稍後再試。");
+    }
+  };
 
   const fetchResults = async () => {
     try {
@@ -151,9 +164,12 @@ const Review = () => {
 
       {selectedResult && (
         <section className="panel-card">
-          <div style={{ marginBottom: "20px" }}>
+          <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <button onClick={() => setSelectedResult(null)} className="page-secondary-button">
               ← 返回列表
+            </button>
+            <button onClick={() => setIsReportModalOpen(true)} className="chat-message-report-btn">
+              回報題目錯誤
             </button>
           </div>
           <h2>{selectedResult.title || "測驗詳細回顧"}</h2>
@@ -163,6 +179,13 @@ const Review = () => {
           {renderDetails(selectedResult.details_json)}
         </section>
       )}
+      <ReportModal 
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onSubmit={handleReportQuizError}
+        title="回報題目錯誤"
+        subtitle="如果您發現 AI 生成的題目有亂碼、邏輯錯誤或答案不正確，請告訴我們。"
+      />
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import { codeAPI, quizAPI, videoAPI, userAPI } from "../api";
+import ReportModal from "../component/ReportModal";
 
 type VideoItem = {
   id: number;
@@ -155,6 +156,7 @@ const Quiz = () => {
       setCurrentQuestionIndex(0);
       setUserAnswers(nextQuiz.questions.map(q => q.starter_code || ""));
       setShowResults(false);
+      setLastResultId(null);
       window.dispatchEvent(new CustomEvent('points-updated', { detail: { userId } }));
     } catch (err: any) {
       console.error("Error generating quiz:", err);
@@ -177,6 +179,35 @@ const Quiz = () => {
   const [grading, setGrading] = useState(false);
   const [gradeDetails, setGradeDetails] = useState<any[]>([]);
   const [backendScore, setBackendScore] = useState(0);
+  const [lastResultId, setLastResultId] = useState<number | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  const handleReportQuizError = async (description: string) => {
+    try {
+      if (lastResultId) {
+        await quizAPI.reportQuizError(lastResultId, description);
+      } else if (quiz) {
+        // 如果還沒產生結果，先建立一個初始紀錄
+        const res = await quizAPI.createResult({
+          user_id: userId,
+          video_id: quiz.video_id,
+          score: 0,
+          total_questions: quiz.questions.length,
+          title: `[回報中] ${quiz.video_title}`,
+          error_report: description
+        });
+        if (res.data && res.data.id) {
+          setLastResultId(res.data.id);
+        }
+      } else {
+        return;
+      }
+      alert("感謝您的回報！錯誤內容已記錄。");
+    } catch (err) {
+      console.error("Error reporting quiz error:", err);
+      alert("提交回報時發生錯誤，請稍後再試。");
+    }
+  };
 
   const handleNext = async () => {
     if (!quiz) return;
@@ -197,13 +228,26 @@ const Quiz = () => {
       setBackendScore(total_score);
       setGradeDetails(details);
 
-      await quizAPI.createResult({
-        user_id: userId,
-        video_id: quiz.video_id,
-        score: total_score,
-        total_questions: quiz.questions.length,
-        details_json: JSON.stringify(details),
-      });
+      if (lastResultId) {
+        // 如果已經因為回報而建立了紀錄，則更新它
+        await quizAPI.updateResult(lastResultId, {
+          score: total_score,
+          details_json: JSON.stringify(details),
+          title: quiz.video_title // 移除 [回報中] 標籤
+        });
+      } else {
+        const resultRes = await quizAPI.createResult({
+          user_id: userId,
+          video_id: quiz.video_id,
+          score: total_score,
+          total_questions: quiz.questions.length,
+          details_json: JSON.stringify(details),
+        });
+        
+        if (resultRes.data && resultRes.data.id) {
+          setLastResultId(resultRes.data.id);
+        }
+      }
       
       // 測驗完成，清空該影片草稿
       await quizAPI.deleteDraft(quiz.video_id, userId);
@@ -266,6 +310,7 @@ const Quiz = () => {
     setCurrentQuestionIndex(0);
     setUserAnswers([]);
     setShowResults(false);
+    setLastResultId(null);
     setCodeOutput("");
     setCodeError("");
   };
@@ -283,6 +328,13 @@ const Quiz = () => {
             <span>Score</span>
             <strong>{backendScore}%</strong>
             <p>{gradeDetails.filter(d => d.passed).length} / {quiz.questions.length} Passed</p>
+            <button 
+              onClick={() => setIsReportModalOpen(true)}
+              className="chat-message-report-btn"
+              style={{ marginTop: '10px' }}
+            >
+              回報題目錯誤
+            </button>
           </div>
         </section>
 
@@ -400,7 +452,16 @@ const Quiz = () => {
             </div>
           )}
           <div className="quiz-question-card">
-            <div className="quiz-question-number">Question {currentQuestionIndex + 1} / {quiz.questions.length}</div>
+            <div className="quiz-question-number" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>Question {currentQuestionIndex + 1} / {quiz.questions.length}</span>
+              <button 
+                onClick={() => setIsReportModalOpen(true)}
+                className="chat-message-report-btn"
+                style={{ margin: 0 }}
+              >
+                回報題目錯誤
+              </button>
+            </div>
             <h2>{currentQuestion.question}</h2>
           </div>
           <div style={{ marginTop: "20px" }}>
@@ -425,6 +486,13 @@ const Quiz = () => {
           </div>
         </section>
       )}
+      <ReportModal 
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onSubmit={handleReportQuizError}
+        title="回報題目錯誤"
+        subtitle="如果您發現 AI 生成的題目有亂碼、邏輯錯誤或答案不正確，請告訴我們。"
+      />
     </div>
   );
 };

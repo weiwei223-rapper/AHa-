@@ -130,9 +130,13 @@ class QuizResultCreate(BaseModel):
     total_questions: int = 5
     title: Optional[str] = None # 新增標題欄位
     details_json: Optional[str] = None # 儲存詳細批改細節
+    error_report: Optional[str] = None
 
 class QuizResultUpdate(BaseModel):
-    title: str
+    title: Optional[str] = None
+    score: Optional[int] = None
+    details_json: Optional[str] = None
+    error_report: Optional[str] = None
 
 class QuizResultResponse(BaseModel):
     id: int
@@ -142,6 +146,7 @@ class QuizResultResponse(BaseModel):
     total_questions: int
     title: Optional[str] = None
     details_json: Optional[str] = None
+    error_report: Optional[str] = None
     completed_at: datetime
 
     class Config:
