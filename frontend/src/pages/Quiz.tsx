@@ -181,28 +181,31 @@ const Quiz = () => {
   const [backendScore, setBackendScore] = useState(0);
   const [lastResultId, setLastResultId] = useState<number | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportingContext, setReportingContext] = useState<string>("");
 
   const handleReportQuizError = async (description: string) => {
     try {
+      const fullDescription = reportingContext ? `[${reportingContext}] ${description}` : description;
       if (lastResultId) {
-        await quizAPI.reportQuizError(lastResultId, description);
+        await quizAPI.reportQuizError(lastResultId, fullDescription);
       } else if (quiz) {
         // 如果還沒產生結果，先建立一個初始紀錄
-        const res = await quizAPI.createResult({
+        const resultRes = await quizAPI.createResult({
           user_id: userId,
           video_id: quiz.video_id,
           score: 0,
           total_questions: quiz.questions.length,
           title: `[回報中] ${quiz.video_title}`,
-          error_report: description
+          error_report: fullDescription
         });
-        if (res.data && res.data.id) {
-          setLastResultId(res.data.id);
+        if (resultRes.data && resultRes.data.id) {
+          setLastResultId(resultRes.data.id);
         }
       } else {
         return;
       }
       alert("感謝您的回報！錯誤內容已記錄。");
+      setReportingContext("");
     } catch (err) {
       console.error("Error reporting quiz error:", err);
       alert("提交回報時發生錯誤，請稍後再試。");
@@ -328,13 +331,6 @@ const Quiz = () => {
             <span>Score</span>
             <strong>{backendScore}%</strong>
             <p>{gradeDetails.filter(d => d.passed).length} / {quiz.questions.length} Passed</p>
-            <button 
-              onClick={() => setIsReportModalOpen(true)}
-              className="chat-message-report-btn"
-              style={{ marginTop: '10px' }}
-            >
-              回報題目錯誤
-            </button>
           </div>
         </section>
 
@@ -344,8 +340,18 @@ const Quiz = () => {
               const detail = gradeDetails[index];
               return (
                 <article key={index} className="quiz-review-card">
-                  <div className={`quiz-review-status ${detail?.passed ? "correct" : "review"}`}>
-                    {detail?.passed ? "Logic Correct" : "Logic Failed"}
+                  <div className="quiz-review-status" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: detail?.passed ? 'rgba(74, 222, 128, 0.15)' : 'rgba(251, 113, 133, 0.15)', color: detail?.passed ? '#4ade80' : '#fb7185' }}>
+                    <span>{detail?.passed ? "Logic Correct" : "Logic Failed"}</span>
+                    <button 
+                      onClick={() => {
+                        setReportingContext(`第 ${index + 1} 題批改問題`);
+                        setIsReportModalOpen(true);
+                      }}
+                      className="chat-message-report-btn"
+                      style={{ margin: 0 }}
+                    >
+                      回報批改問題
+                    </button>
                   </div>
                   <h3>{index + 1}. {question.question}</h3>
                   <div style={{ marginTop: "12px" }}>
@@ -391,6 +397,13 @@ const Quiz = () => {
             <button onClick={() => void resetQuiz()} className="page-primary-button">回到影片列表</button>
           </div>
         </section>
+        <ReportModal 
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          onSubmit={handleReportQuizError}
+          title="回報批改問題"
+          subtitle="如果您發現系統批改有誤、診斷訊息不正確，請告訴我們。"
+        />
       </div>
     );
   }
@@ -455,7 +468,10 @@ const Quiz = () => {
             <div className="quiz-question-number" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
               <span>Question {currentQuestionIndex + 1} / {quiz.questions.length}</span>
               <button 
-                onClick={() => setIsReportModalOpen(true)}
+                onClick={() => {
+                  setReportingContext(`第 ${currentQuestionIndex + 1} 題生成錯誤`);
+                  setIsReportModalOpen(true);
+                }}
                 className="chat-message-report-btn"
                 style={{ margin: 0 }}
               >
