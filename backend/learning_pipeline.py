@@ -150,7 +150,9 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
     
     return schema.VideoAnalysisResponse(
         video_id=video_id, video_title=title, transcript_source="direct",
-        transcript_excerpt=transcript[:1000], outline_markdown=outline,
+        transcript_excerpt=transcript[:1000], 
+        full_transcript=transcript,
+        outline_markdown=outline,
         key_topics=topics, retrieved_chunks=[], vector_backend="simple",
         generated_at=datetime.utcnow(),
         token_usage=_to_token_usage_schema(total_usage)

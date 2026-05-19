@@ -153,6 +153,7 @@ class VideoAnalysisResponse(BaseModel):
     video_title: str
     transcript_source: str
     transcript_excerpt: str
+    full_transcript: Optional[str] = None
     outline_markdown: str
     key_topics: List[str]
     retrieved_chunks: List[TranscriptChunk]

@@ -315,6 +315,8 @@ def analyze_video(video_id: int, user_id: int = 1, db: Session = Depends(databas
         user.points -= pts
         db.add(models.UploadRecord(user_id=user.id, video_id=video.id, consumed_points=pts))
         if analysis.outline_markdown: video.outline = analysis.outline_markdown
+        if analysis.full_transcript and not video.transcript:
+            video.transcript = analysis.full_transcript
         db.commit(); db.refresh(video)
         return analysis
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
@@ -322,9 +324,15 @@ def analyze_video(video_id: int, user_id: int = 1, db: Session = Depends(databas
 @app.post("/api/videos", response_model=schema.VideoResponse)
 def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get_db)):
     title = ai_analyzer.get_video_title(payload.video_link) or "Untitled"
-    if not ai_analyzer.is_python_related(title, ai_analyzer.fetch_video_transcript(payload.video_link)[:1500]):
+    transcript = ai_analyzer.fetch_video_transcript(payload.video_link)
+    if not ai_analyzer.is_python_related(title, transcript[:1500]):
         raise HTTPException(status_code=400, detail="僅支援 Python 相關影片")
-    video = models.Video(video_link=payload.video_link, title=payload.title or title, user_id=payload.user_id)
+    video = models.Video(
+        video_link=payload.video_link, 
+        title=payload.title or title, 
+        user_id=payload.user_id,
+        transcript=transcript
+    )
     db.add(video); db.commit(); db.refresh(video)
     return video
 
