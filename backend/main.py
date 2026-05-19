@@ -5,6 +5,7 @@ import json
 import re
 import html
 import math
+import time
 from urllib.parse import quote, quote_plus
 
 import bcrypt
@@ -29,7 +30,7 @@ except ImportError:
         fitz = None
 
 try:
-    from . import ai_analyzer, code_compiler, database, learning_pipeline, models, schema
+    from . import ai_analyzer, code_compiler, database, learning_pipeline, models, schema, email_service
 except ImportError:
     import ai_analyzer
     import code_compiler
@@ -37,6 +38,7 @@ except ImportError:
     import learning_pipeline
     import models
     import schema
+    import email_service
 
 # --- Helper Functions ---
 
@@ -438,7 +440,9 @@ def generate_doc_quiz(doc_id: int, user_id: int = 1, count: int = Query(5), db: 
     res = learning_pipeline.generate_quiz_from_document(doc.id, doc.title, doc.content_text, count=count)
     user.points -= len(res.questions) * 50
     for item in res.questions:
-        db.add(models.QuizQuestion(user_id=user_id, document_id=doc.id, question_content=item.question, reference_answer=item.correct_answer, starter_code=item.starter_code, test_cases_json=json.dumps(item.test_cases), explanation=item.explanation))
+        q = models.QuizQuestion(user_id=user_id, document_id=doc.id, question_content=item.question, reference_answer=item.correct_answer, starter_code=item.starter_code, test_cases_json=json.dumps(item.test_cases), explanation=item.explanation)
+        db.add(q); db.flush()
+        db.add(models.GenerationRecord(user_id=user.id, quiz_question_id=q.id, consumed_points=50))
     db.commit(); return res
 
 @app.post("/api/quiz-results", response_model=schema.QuizResultResponse)
@@ -449,6 +453,21 @@ def create_quiz_result(payload: schema.QuizResultCreate, db: Session = Depends(d
 @app.get("/api/quiz-results", response_model=List[schema.QuizResultResponse])
 def get_quiz_results(user_id: int = 1, db: Session = Depends(database.get_db)):
     return db.query(models.QuizResult).filter(models.QuizResult.user_id == user_id).order_by(models.QuizResult.completed_at.desc()).all()
+
+@app.put("/api/quiz-results/{result_id}", response_model=schema.QuizResultResponse)
+def update_quiz_result(result_id: int, payload: schema.QuizResultUpdate, db: Session = Depends(database.get_db)):
+    res = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
+    if not res: raise HTTPException(status_code=404, detail="Quiz result not found")
+    if payload.title is not None: res.title = payload.title
+    if payload.score is not None: res.score = payload.score
+    if payload.details_json is not None: res.details_json = payload.details_json
+    if payload.error_report is not None: res.error_report = payload.error_report
+    db.commit(); db.refresh(res); return res
+
+@app.delete("/api/quiz-results/{result_id}")
+def delete_quiz_result(result_id: int, db: Session = Depends(database.get_db)):
+    db.query(models.QuizResult).filter(models.QuizResult.id == result_id).delete()
+    db.commit(); return {"message": "Deleted"}
 
 @app.get("/api/documents/{doc_id}/analysis", response_model=schema.VideoAnalysisResponse)
 def analyze_document(doc_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
@@ -492,6 +511,118 @@ def get_user_stats(user_id: int, db: Session = Depends(database.get_db)):
         completed_quizzes=len(results), 
         average_accuracy=round(sum(r.score for r in results)/len(results)) if results else 0
     )
+
+@app.post("/api/videos/{video_id}/report-error")
+def report_video_error(video_id: int, payload: schema.ErrorReportRequest, db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if not video: raise HTTPException(status_code=404, detail="Video not found")
+    
+    is_valid, reason = ai_analyzer.validate_error_report(payload.error_report, video.outline or video.title, "outline")
+    refund = 0
+    
+    if is_valid:
+        record = db.query(models.UploadRecord).filter(models.UploadRecord.video_id == video_id).order_by(models.UploadRecord.id.desc()).first()
+        if record:
+            refund = int(record.consumed_points * 1.5)
+            user = db.query(models.User).filter(models.User.id == video.user_id).first()
+            if user:
+                user.points += refund
+                db.add(models.RechargeRecord(
+                    user_id=user.id,
+                    date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    order_id=f"REFUND_V_{int(time.time())}_{video_id}",
+                    amount=0,
+                    points=refund,
+                    balance_after=user.points,
+                    plan_content=f"錯誤回報退款 (影片: {video.title})",
+                    payment_method="System Refund"
+                ))
+    
+    user = db.query(models.User).filter(models.User.id == video.user_id).first()
+    if user:
+        email_service.send_refund_email(user.email, user.name, video.title, is_valid, refund, reason)
+
+    video.error_report = payload.error_report
+    db.commit()
+    return {"is_valid": is_valid, "message": "Report submitted and processed"}
+
+@app.post("/api/documents/{doc_id}/report-error")
+def report_document_error(doc_id: int, payload: schema.ErrorReportRequest, db: Session = Depends(database.get_db)):
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if not doc: raise HTTPException(status_code=404, detail="Document not found")
+    
+    is_valid, reason = ai_analyzer.validate_error_report(payload.error_report, doc.outline or doc.title, "outline")
+    refund = 0
+    
+    if is_valid:
+        record = db.query(models.UploadRecord).filter(models.UploadRecord.document_id == doc_id).order_by(models.UploadRecord.id.desc()).first()
+        if record:
+            refund = int(record.consumed_points * 1.5)
+            user = db.query(models.User).filter(models.User.id == doc.user_id).first()
+            if user:
+                user.points += refund
+                db.add(models.RechargeRecord(
+                    user_id=user.id,
+                    date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    order_id=f"REFUND_D_{int(time.time())}_{doc_id}",
+                    amount=0,
+                    points=refund,
+                    balance_after=user.points,
+                    plan_content=f"錯誤回報退款 (文件: {doc.title})",
+                    payment_method="System Refund"
+                ))
+    
+    user = db.query(models.User).filter(models.User.id == doc.user_id).first()
+    if user:
+        email_service.send_refund_email(user.email, user.name, doc.title, is_valid, refund, reason)
+
+    doc.error_report = payload.error_report
+    db.commit()
+    return {"is_valid": is_valid, "message": "Report submitted and processed"}
+
+@app.post("/api/quiz-results/{result_id}/report-error")
+def report_quiz_error(result_id: int, payload: schema.ErrorReportRequest, db: Session = Depends(database.get_db)):
+    result = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
+    if not result: raise HTTPException(status_code=404, detail="Quiz result not found")
+    
+    try:
+        details = json.loads(result.details_json or "[]")
+        q_ids = [d.get("question_id") for d in details if d.get("question_id")]
+        questions = db.query(models.QuizQuestion).filter(models.QuizQuestion.id.in_(q_ids)).all()
+        source_content = "\n".join([f"Q: {q.question_content}\nA: {q.reference_answer}\nExplanation: {q.explanation}" for q in questions])
+    except Exception:
+        source_content = result.title or "Quiz Content"
+    
+    is_valid, reason = ai_analyzer.validate_error_report(payload.error_report, source_content, "quiz")
+    total_refund = 0
+    
+    if is_valid:
+        records = db.query(models.GenerationRecord).filter(models.GenerationRecord.quiz_question_id.in_(q_ids)).all()
+        for rec in records:
+            total_refund += int(rec.consumed_points * 1.5)
+        
+        if total_refund > 0:
+            user = db.query(models.User).filter(models.User.id == result.user_id).first()
+            if user:
+                user.points += total_refund
+                db.add(models.RechargeRecord(
+                    user_id=user.id,
+                    date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    order_id=f"REFUND_Q_{int(time.time())}_{result_id}",
+                    amount=0,
+                    points=total_refund,
+                    balance_after=user.points,
+                    plan_content=f"錯誤回報退款 (測驗: {result.title})",
+                    payment_method="System Refund"
+                ))
+    
+    user = db.query(models.User).filter(models.User.id == result.user_id).first()
+    if user:
+        email_service.send_refund_email(user.email, user.name, result.title, is_valid, total_refund, reason)
+
+    result.error_report = payload.error_report
+    db.commit()
+    return {"is_valid": is_valid, "message": "Report submitted and processed"}
 
 if __name__ == "__main__":
     import uvicorn

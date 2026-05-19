@@ -282,7 +282,17 @@ const Profile = () => {
                   
                   return (
                     <div key={item.key} className={`achievement-item ${item.unlocked ? "unlocked" : "locked"}`}>
-                      <div className="achievement-icon">{item.unlocked ? "🏆" : "🔒"}</div>
+                      <div className="achievement-badge">
+                        <img 
+                          src={item.badgeImage} 
+                          alt={item.title}
+                          title={item.title}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                        {!item.unlocked && <div className="lock-overlay">🔒</div>}
+                      </div>
                       <div className="achievement-info">
                         <h3>{item.title}</h3>
                         <p>{item.description}</p>

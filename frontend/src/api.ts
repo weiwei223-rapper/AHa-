@@ -76,6 +76,8 @@ export const documentAPI = {
     api.get(`/api/documents/${docId}/analysis`, { params: { user_id: userId } }),
   generateQuiz: (docId: number, userId: number, count?: number) =>
     api.get(`/api/documents/${docId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
+  reportError: (docId: number, errorReport: string) =>
+    api.post(`/api/documents/${docId}/report-error`, { error_report: errorReport }),
 };
 
 export const feedbackAPI = {
@@ -89,6 +91,8 @@ export const feedbackAPI = {
 export const quizAPI = {
   getResults: (userId: number) => api.get('/api/quiz-results', { params: { user_id: userId } }),
   deleteResult: (resultId: number) => api.delete(`/api/quiz-results/${resultId}`),
+  updateResult: (resultId: number, data: { title?: string; score?: number; details_json?: string; error_report?: string }) =>
+    api.put(`/api/quiz-results/${resultId}`, data),
   createResult: (data: { user_id: number; video_id?: number; document_id?: number; score: number; total_questions: number; title?: string; details_json?: string }) =>
     api.post('/api/quiz-results', data),
   gradeQuiz: (videoId: number, data: { user_id: number; answers: string[]; document_id?: number | null }) =>
@@ -98,6 +102,8 @@ export const quizAPI = {
     api.post('/api/quiz-drafts', data),
   deleteDraft: (videoId: number, userId: number) =>
     api.delete(`/api/quiz-drafts/${videoId}`, { params: { user_id: userId } }),
+  reportQuizError: (resultId: number, errorReport: string) =>
+    api.post(`/api/quiz-results/${resultId}/report-error`, { error_report: errorReport }),
 };
 
 export const codeAPI = {

@@ -373,6 +373,51 @@ def generate_fallback_questions(
     return questions
 
 
+def validate_error_report(report_content: str, source_content: str, report_type: str) -> tuple[bool, str]:
+    """
+    使用 AI 判斷錯誤回報是否屬實，並返回判定結果與理由。
+    report_type: 'outline' (大綱/分析) 或 'quiz' (題目)
+    """
+    prompt = f"""
+你是一個公正的品質審核員。使用者針對 AI 生成的「{ "大綱/分析" if report_type == "outline" else "測驗題目" }」提交了錯誤回報。
+請根據提供的「原始生成內容」與「使用者回報內容」，判斷該回報是否「符合邏輯且屬實」。
+
+原始生成內容：
+{source_content[:3000]}
+
+使用者回報內容：
+{report_content}
+
+判斷標準：
+1. 如果使用者指出的錯誤確實存在（例如：題目答案錯誤、程式碼邏輯有誤、大綱與影片內容完全無關、翻譯嚴重錯誤等），判定為：VALID
+2. 如果使用者的回報不符合事實、純屬無理取鬧、或是回報內容過於簡短無意義，判定為：INVALID
+3. 注意：如果回報是關於「AI 聊天對話的回答不滿意」或是「測驗批改分數 (Grade) 不公」，這些不屬於退款範圍，判定為：INVALID。
+
+請以 JSON 格式回傳：
+{{
+  "decision": "VALID" 或 "INVALID",
+  "reason": "一段簡短的繁體中文說明判定理由 (20-50字)"
+}}
+"""
+    try:
+        response_text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
+        # 嘗試從回應中提取 JSON
+        match = re.search(r"\{.*\}", response_text, re.DOTALL)
+        if match:
+            data = json.loads(match.group(0))
+            decision = data.get("decision", "INVALID").strip().upper()
+            reason = data.get("reason", "經系統初步審核判定。")
+            is_valid = "VALID" in decision and "INVALID" not in decision
+            return is_valid, reason
+        
+        # Fallback if JSON fails
+        is_valid = "VALID" in response_text.upper() and "INVALID" not in response_text.upper()
+        return is_valid, "經 AI 系統分析判定。"
+    except Exception as e:
+        print(f"DEBUG: Error report validation AI failed: {e}")
+        return False, "系統暫時無法處理您的回報，請稍後再試。"
+
+
 def test_gemini_connection(model: str = DEFAULT_GEMINI_MODEL) -> dict:
     text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], model=model)
     return {"ok": text.strip() == "GEMINI_OK", "model": model, "reply": text.strip()}

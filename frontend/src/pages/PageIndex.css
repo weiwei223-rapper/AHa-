@@ -2401,6 +2401,102 @@ body {
   background: rgba(34, 211, 238, 0.2);
 }
 
+/* Achievement Badges - Profile Page */
+.achievement-item {
+  background: #0f1623;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.3s ease;
+}
+
+.achievement-item.unlocked {
+  border-color: #2bc1f1;
+  background: rgba(43, 193, 241, 0.08);
+}
+
+.achievement-item.locked {
+  opacity: 0.65;
+}
+
+.achievement-badge {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.achievement-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 8px;
+  display: block;
+}
+
+.achievement-badge .lock-overlay {
+  position: absolute;
+  font-size: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  width: 100%;
+  height: 100%;
+}
+
+.achievement-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.achievement-info h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #ffffff;
+  line-height: 1.3;
+}
+
+.achievement-info p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.achievement-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2bc1f1, #06b6d4);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.achievement-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  display: flex;
+  justify-content: space-between;
+}
+
 .chat-history-list {
   max-height: 200px;
   overflow-y: auto;
