@@ -295,6 +295,14 @@ def get_videos(user_id: Optional[int] = None, db: Session = Depends(database.get
     if user_id: q = q.filter(models.Video.user_id == user_id)
     return q.order_by(models.Video.id.desc()).all()
 
+@app.delete("/api/videos/{video_id}")
+def delete_video(video_id: int, db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if video:
+        db.delete(video)
+        db.commit()
+    return {"message": "Video deleted"}
+
 @app.get("/api/videos/{video_id}/analysis", response_model=schema.VideoAnalysisResponse)
 def analyze_video(video_id: int, user_id: int = 1, db: Session = Depends(database.get_db)):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
@@ -414,6 +422,14 @@ async def upload_document(file: UploadFile = File(...), user_id: int = Form(...)
 @app.get("/api/documents", response_model=List[schema.DocumentResponse])
 def get_documents(user_id: int = 1, db: Session = Depends(database.get_db)):
     return db.query(models.Document).filter(models.Document.user_id == user_id).all()
+
+@app.delete("/api/documents/{doc_id}")
+def delete_document(doc_id: int, db: Session = Depends(database.get_db)):
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if doc:
+        db.delete(doc)
+        db.commit()
+    return {"message": "Document deleted"}
 
 @app.get("/api/documents/{doc_id}/quiz", response_model=schema.QuizResponse)
 def generate_doc_quiz(doc_id: int, user_id: int = 1, count: int = Query(5), db: Session = Depends(database.get_db)):

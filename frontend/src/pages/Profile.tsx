@@ -34,9 +34,9 @@ type RechargeRecord = {
 };
 
 const rechargePlans = [
-  { title: "NT$ 299", points: 300, price: 299, caption: "適合短期密集練習" },
-  { title: "NT$ 599", points: 650, price: 599, caption: "常用方案，額外多送一些" },
-  { title: "NT$ 999", points: 1100, price: 999, caption: "給長期學習與大量生成使用" },
+  { title: "NT$ 299", points: 300, price: 299 },
+  { title: "NT$ 599", points: 650, price: 599 },
+  { title: "NT$ 999", points: 1100, price: 999 },
 ];
 
 const Profile = () => {

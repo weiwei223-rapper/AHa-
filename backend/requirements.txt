@@ -11,4 +11,5 @@ requests
 youtube-transcript-api
 yt-dlp
 faster-whisper
-pymupdf python-multipart
+pymupdf
+python-multipart

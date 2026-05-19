@@ -71,6 +71,7 @@ export const documentAPI = {
     formData.append('user_id', userId.toString());
     return api.post('/api/documents', formData);
   },
+  deleteDocument: (docId: number) => api.delete(`/api/documents/${docId}`),
   analyzeDocument: (docId: number, userId: number) =>
     api.get(`/api/documents/${docId}/analysis`, { params: { user_id: userId } }),
   generateQuiz: (docId: number, userId: number, count?: number) =>

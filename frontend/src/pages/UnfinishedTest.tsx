@@ -86,14 +86,14 @@ const UnfinishedTest = () => {
                     className="page-primary-button"
                     style={{ flex: 2, justifyContent: 'center' }}
                   >
-                    繼續練習
+                    Continue
                   </button>
                   <button 
                     onClick={() => handleClearDraft(draft.video_id)}
                     className="page-secondary-button"
                     style={{ flex: 1, borderColor: '#fb7185', color: '#fb7185' }}
                   >
-                    捨棄
+                    Delete
                   </button>
                 </div>
               </article>
