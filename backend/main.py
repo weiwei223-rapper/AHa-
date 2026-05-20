@@ -110,6 +110,8 @@ class EcpayCheckoutRequest(BaseModel):
 
 class EcpayCheckoutResponse(BaseModel):
     CheckMacValue: str
+    MerchantTradeNo: str
+    MerchantTradeDate: str
 
 class LoginRequest(BaseModel):
     email: str
@@ -167,6 +169,115 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# --- ECPay Routes ---
+
+class EcpayCheckoutResponse(BaseModel):
+    CheckMacValue: str
+    MerchantTradeNo: str
+    MerchantTradeDate: str
+
+@app.post("/api/ecpay/checkout", response_model=EcpayCheckoutResponse)
+def ecpay_checkout(payload: Dict[str, Any], db: Session = Depends(database.get_db)):
+    """產生綠界支付所需的 CheckMacValue 與訂單資訊"""
+    import time
+    merchant_trade_no = f"AHA{int(time.time())}"
+    merchant_trade_date = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+    
+    ecpay_params = {
+        "MerchantID": ECPAY_MERCHANT_ID,
+        "MerchantTradeNo": merchant_trade_no,
+        "MerchantTradeDate": merchant_trade_date,
+        "PaymentType": "aio",
+        "TotalAmount": payload.get("TotalAmount"),
+        "TradeDesc": "AHa AI 點數儲值",
+        "ItemName": payload.get("ItemName"),
+        "ReturnURL": payload.get("ReturnURL"),
+        "ClientBackURL": payload.get("ClientBackURL"),
+        "ChoosePayment": "ALL",
+        "EncryptType": 1,
+        "CustomField1": str(payload.get("user_id")),
+        "CustomField2": payload.get("plan_id"),
+    }
+    
+    mac = generate_ecpay_check_mac_value(ecpay_params)
+    return EcpayCheckoutResponse(
+        CheckMacValue=mac,
+        MerchantTradeNo=merchant_trade_no,
+        MerchantTradeDate=merchant_trade_date
+    )
+
+@app.post("/ecpay/return")
+async def ecpay_return(request: Request, db: Session = Depends(database.get_db)):
+    # ... existing background webhook logic ...
+    return await process_ecpay_payment(request, db)
+
+@app.post("/ecpay/return-client")
+async def ecpay_return_client(request: Request, db: Session = Depends(database.get_db)):
+    """接收綠界付款結果通知 (前端跳轉用，縮短入帳時間)"""
+    await process_ecpay_payment(request, db)
+    # 付款完後引導使用者回個人頁面
+    from fastapi.responses import RedirectResponse
+    return HTMLResponse(content="""
+        <html>
+            <head><title>付款成功</title></head>
+            <body style="background:#080c16;color:white;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">
+                <div style="text-align:center;">
+                    <h1 style="color:#2bc1f1;">付款完成！</h1>
+                    <p>正在為您同步點數，請稍候...</p>
+                    <script>
+                        setTimeout(() => { window.location.href = '/profile'; }, 2000);
+                    </script>
+                </div>
+            </body>
+        </html>
+    """)
+
+async def process_ecpay_payment(request: Request, db: Session):
+    form_data = await request.form()
+    params = dict(form_data)
+    
+    received_mac = params.get("CheckMacValue")
+    calculated_mac = generate_ecpay_check_mac_value(params)
+    
+    if received_mac != calculated_mac:
+        return PlainTextResponse("0|CheckMacValueVerifyFail")
+    
+    if params.get("RtnCode") == "1":
+        try:
+            user_id = int(params.get("CustomField1"))
+            amount = int(params.get("TradeAmt", 0))
+            merchant_trade_no = params.get("MerchantTradeNo")
+            
+            # Check if record already exists to prevent double entry
+            existing = db.query(models.RechargeRecord).filter(models.RechargeRecord.order_id == merchant_trade_no).first()
+            if existing: return PlainTextResponse("1|OK")
+
+            if amount >= 999: points_to_add = 1100
+            elif amount >= 599: points_to_add = 650
+            elif amount >= 299: points_to_add = 300
+            else: points_to_add = amount
+            
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if user:
+                user.points += points_to_add
+                record = models.RechargeRecord(
+                    user_id=user.id,
+                    date=datetime.now().strftime("%Y/%m/%d"),
+                    order_id=merchant_trade_no,
+                    amount=amount,
+                    points=points_to_add,
+                    balance_after=user.points,
+                    plan_content=f"綠界儲值: {params.get('ItemName')}",
+                    payment_method="ECPay",
+                    plan_id=params.get("CustomField2")
+                )
+                db.add(record)
+                db.commit()
+                return PlainTextResponse("1|OK")
+        except Exception:
+            db.rollback()
+    return PlainTextResponse("0|Fail")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -186,16 +297,35 @@ ECPAY_HASH_KEY = "5294y06JbISpM5x9"
 ECPAY_HASH_IV = "v77hoKGq4kWxNNIS"
 
 def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
-    filtered_params = {k: str(v) for k, v in params.items() if k != "CheckMacValue" and v is not None and str(v).strip() != ""}
+    # 1. 過濾掉 CheckMacValue (綠界規則：此欄位不參與加密)
+    # 注意：綠界回傳的空字串 (例如 CustomField3="") 必須保留並參與加密
+    filtered_params = {k: str(v) for k, v in params.items() if k.lower() != "checkmacvalue"}
+    
     if "MerchantID" not in filtered_params: filtered_params["MerchantID"] = ECPAY_MERCHANT_ID
+    
+    # 2. 排序
     sorted_keys = sorted(filtered_params.keys())
     raw_list = [f"{k}={filtered_params[k]}" for k in sorted_keys]
+    
+    # 3. 組合原始字串
     raw_str = f"HashKey={ECPAY_HASH_KEY}&{'&'.join(raw_list)}&HashIV={ECPAY_HASH_IV}"
-    encoded_str = quote_plus(raw_str).lower().replace("%2d", "-").replace("%5f", "_").replace("%2e", ".").replace("%21", "!").replace("%2a", "*").replace("%28", "(").replace("%29", ")").replace("%7e", "~")
+    
+    # 4. URL Encode 並轉小寫，僅處理 ~ 符號 (根據 verify_mac.py 的成功經驗)
+    encoded_str = quote_plus(raw_str).lower().replace("%7e", "~")
+    
+    # 5. 生成雜湊值
     import hashlib
     encrypt_type = params.get("EncryptType", 1)
-    if str(encrypt_type) == "0": return hashlib.md5(encoded_str.encode("utf-8")).hexdigest().upper()
-    return hashlib.sha256(encoded_str.encode("utf-8")).hexdigest().upper()
+    if str(encrypt_type) == "0":
+        mac = hashlib.md5(encoded_str.encode("utf-8")).hexdigest().upper()
+    else:
+        mac = hashlib.sha256(encoded_str.encode("utf-8")).hexdigest().upper()
+    
+    # Debug 用：在伺服器日誌顯示原始字串（正式上線後可移除）
+    print(f"DEBUG: MAC Raw String: {raw_str}")
+    print(f"DEBUG: MAC Encoded: {encoded_str}")
+    
+    return mac
 
 # --- Achievement Logic ---
 
@@ -258,10 +388,19 @@ def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
 
 @app.post("/api/chat", response_model=schema.ChatResponse)
 def chat_with_ai(payload: schema.ChatRequest, db: Session = Depends(database.get_db)):
-    system_content = "你是一個專業的 AI 學習助理。"
+    system_content = """你是 AHa!! 的 AI 程式家教，專門輔導 Python 程式初學者。
+        你的教學風格遵循「鷹架理論」與「蘇格拉底式引導」：
+        - 【絕對禁止】直接給出任何程式碼片段
+        - 【絕對禁止】出現任何簡體中文
+        - 【必須】先分析使用者的思路或錯誤，再提供邏輯提示或類比
+        - 【必須】以繁體中文回答，語氣親切、鼓勵
+        - 若使用者請求給出完整程式碼，請婉拒並解釋這樣做不利於學習，並提供引導提示幫助他們自己找到答案。
+        - 當使用者多次答錯時，提供更具體的語法提示或類比範例
+        - 當使用者快答對時，引導其思考更佳的時間複雜度或寫法"""
+    
     if payload.video_id:
         video = db.query(models.Video).filter(models.Video.id == payload.video_id).first()
-        if video: system_content += f"\n目前討論影片：{video.title}"
+        if video: system_content += f"\n\n目前討論影片標題：{video.title}"
     history = [{"role": "system", "content": system_content}]
     for item in payload.history: history.append({"role": item.role, "content": item.content})
     if not payload.history or payload.history[-1].content != payload.message: history.append({"role": "user", "content": payload.message})
@@ -278,6 +417,13 @@ def read_user(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user: raise HTTPException(status_code=404, detail="User not found")
     return user
+
+@app.get("/users/{user_id}/recharge-records")
+def get_user_recharge_records(user_id: int, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user: raise HTTPException(status_code=404, detail="User not found")
+    records = db.query(models.RechargeRecord).filter(models.RechargeRecord.user_id == user_id).order_by(models.RechargeRecord.id.desc()).all()
+    return records
 
 @app.put("/users/{user_id}", response_model=schema.UserResponse)
 def update_user(user_id: int, payload: schema.UserUpdate, db: Session = Depends(database.get_db)):

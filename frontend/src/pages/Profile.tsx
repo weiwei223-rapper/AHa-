@@ -170,19 +170,72 @@ const Profile = () => {
     }
   };
 
-  const submitEcpayCheckout = (plan: { title: string; points: number; price: number }) => {
+  const submitEcpayCheckout = async (plan: { title: string; points: number; price: number }) => {
     if (!user) return;
-    const orderId = `AHA${user.id}${Date.now().toString().slice(-10)}`;
-    const payload = {
-      MerchantTradeNo: orderId,
-      MerchantTradeDate: new Date().toLocaleString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).replace(/\//g, "/"),
-      TotalAmount: plan.price,
-      TradeDesc: "AHa AI 點數儲值",
-      ItemName: plan.title,
-      ReturnURL: `${API_BASE_URL}/ecpay/return`,
-      ClientBackURL: window.location.href,
-    };
-    alert("綠界跳轉中...");
+    
+    try {
+      setSaving(true);
+      setMessage("準備跳轉至綠界科技付款頁面...");
+      
+      // 1. 呼叫後端 API 取得 CheckMacValue 與訂單資訊
+      // 測試提醒：若要測試真實回傳入帳，請將下方 ReturnURL 改為您的 ngrok 公開網址
+      const NGROK_URL = "https://f32f-120-113-201-195.ngrok-free.app"; 
+      const currentReturnURL = `${NGROK_URL}/ecpay/return-client`;
+
+      const response = await api.post("/api/ecpay/checkout", {
+        user_id: user.id,
+        TotalAmount: plan.price,
+        ItemName: plan.title,
+        ReturnURL: currentReturnURL,
+        ClientBackURL: window.location.href,
+        plan_id: plan.title
+      });
+      
+      const checkoutData = response.data;
+      
+      // 2. 建立動態表單並自動提交至綠界測試環境 (Stage)
+      const ecpayUrl = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5";
+      
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = ecpayUrl;
+      form.style.display = "none";
+      
+      // 填入綠界所需的參數
+      const params: Record<string, any> = {
+        MerchantID: "2000132", // 測試用 MerchantID
+        MerchantTradeNo: checkoutData.MerchantTradeNo,
+        MerchantTradeDate: checkoutData.MerchantTradeDate,
+        PaymentType: "aio",
+        TotalAmount: plan.price,
+        TradeDesc: "AHa AI 點數儲值",
+        ItemName: plan.title,
+        ReturnURL: currentReturnURL,
+        ClientBackURL: window.location.href,
+        ChoosePayment: "ALL",
+        EncryptType: "1",
+        CheckMacValue: checkoutData.CheckMacValue,
+        CustomField1: user.id.toString(),
+        CustomField2: plan.title
+      };
+      
+      Object.keys(params).forEach((key) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = key;
+        input.value = params[key].toString();
+        form.appendChild(input);
+      });
+      
+      document.body.appendChild(form);
+      form.submit(); // 正式跳轉
+      
+    } catch (err: any) {
+      console.error("ECPay Checkout Error:", err);
+      setMessage("啟動支付失敗，請稍後再試。");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <div className="page-loading">正在讀取個人帳戶資料...</div>;
@@ -204,7 +257,14 @@ const Profile = () => {
         <div className="dashboard-highlight-card">
           <span>Current Points</span>
           <strong>{user?.points.toLocaleString() ?? 0}</strong>
-          {accumulatedPoints > 0 ? (
+          <button 
+            onClick={() => setShowTopup(true)}
+            className="page-primary-button"
+            style={{ marginTop: '12px', width: '100%', justifyContent: 'center' }}
+          >
+            💎 點數儲值
+          </button>
+          {accumulatedPoints > 0 && (
             <button 
               onClick={handleClaimPoints} 
               disabled={saving}
@@ -222,10 +282,8 @@ const Profile = () => {
                 width: '100%'
               }}
             >
-              {saving ? '領取中...' : `領取 (${accumulatedPoints})`}
+              {saving ? '領取中...' : `領取獎勵 (${accumulatedPoints})`}
             </button>
-          ) : (
-            <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#64748b' }}>目前無可領取獎勵</p>
           )}
         </div>
       </section>

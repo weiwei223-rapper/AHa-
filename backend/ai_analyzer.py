@@ -13,6 +13,8 @@ from faster_whisper import WhisperModel
 # Configuration
 DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+OLLAMA_API_URL = "http://localhost:11434/api/chat"
+DEFAULT_OLLAMA_MODEL = "AHa-Tutor:latest"
 
 # Whisper 語音辨識設定 (使用 tiny 模型極速辨識，適合 CPU)
 WHISPER_MODEL_SIZE = "tiny"
@@ -100,9 +102,52 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
     except requests.exceptions.RequestException as e:
         raise ValueError(f"Gemini API request failed: {str(e)}")
 
+
+def generate_text_with_ollama(messages: list[dict], model: str = DEFAULT_OLLAMA_MODEL) -> str:
+    """Send chat history to Ollama and get a response."""
+    # Convert role from 'assistant' to 'assistant' (ollama uses user, assistant, system)
+    # Our internal format: [{'role': 'user', 'content': '...'}, ...]
+    
+    request_payload = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "options": {
+            "temperature": 0.6,
+            "num_ctx": 4096,
+            "min_p": 0.1,
+        }
+    }
+
+    try:
+        response = requests.post(
+            OLLAMA_API_URL,
+            json=request_payload,
+            timeout=120,
+        )
+        if not response.ok:
+            raise ValueError(f"Ollama API error {response.status_code}: {response.text}")
+        
+        data = response.json()
+        message = data.get("message", {})
+        return message.get("content", "").strip()
+    except requests.exceptions.RequestException as e:
+        print(f"DEBUG: Ollama API request failed: {e}")
+        raise ValueError(f"Ollama API request failed: {str(e)}")
+
+
 def get_chat_response(messages: list[dict]) -> str:
-    """Send chat history to Gemini and get a response."""
-    # Convert our internal message format to Gemini's format
+    """Send chat history to the preferred AI (Ollama if available, else Gemini) and get a response."""
+    
+    # 優先嘗試 Ollama (蘇格拉底家教模式)
+    try:
+        # 檢查 Ollama 是否在運行，並且模型存在
+        # 這裡簡單地直接呼叫，如果失敗再 fallback 到 Gemini
+        return generate_text_with_ollama(messages)
+    except Exception as e:
+        print(f"DEBUG: Ollama chat failed, falling back to Gemini: {e}")
+
+    # Fallback to Gemini
     gemini_history = []
     for msg in messages:
         role = msg.get("role", "user")
@@ -376,3 +421,12 @@ def generate_fallback_questions(
 def test_gemini_connection(model: str = DEFAULT_GEMINI_MODEL) -> dict:
     text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": "Reply with exactly: GEMINI_OK"}]}], model=model)
     return {"ok": text.strip() == "GEMINI_OK", "model": model, "reply": text.strip()}
+
+
+def test_ollama_connection(model: str = DEFAULT_OLLAMA_MODEL) -> dict:
+    """Test connection to Ollama server."""
+    try:
+        reply = generate_text_with_ollama([{"role": "user", "content": "Reply with exactly: OLLAMA_OK"}], model=model)
+        return {"ok": reply == "OLLAMA_OK", "model": model, "reply": reply}
+    except Exception as e:
+        return {"ok": False, "model": model, "error": str(e)}
