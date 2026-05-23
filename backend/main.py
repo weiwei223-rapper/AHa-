@@ -327,6 +327,15 @@ def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
     
     return mac
 
+# --- Sign-in / Daily Check-in Logic ---
+SIGNIN_REWARDS = {1: 20, 2: 20, 3: 25, 4: 20, 5: 20, 6: 20, 7: 30}
+
+def get_cycle_day(consecutive_days: int) -> int:
+    if consecutive_days <= 0:
+        return 0
+    return ((consecutive_days - 1) % 7) + 1
+
+
 # --- Achievement Logic ---
 
 def calculate_total_achievement_points(user: models.User, db: Session) -> int:
@@ -385,6 +394,65 @@ def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
         user.last_login_date = today
         db.commit()
     return {"user": user, "message": f"Welcome back, {user.name}"}
+
+
+@app.get("/users/{user_id}/signin-status", response_model=schema.SignInStatusResponse)
+def signin_status(user_id: int, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None: raise HTTPException(status_code=404, detail="User not found")
+    today = datetime.now().date().isoformat()
+    signed_today = (user.last_login_date == today)
+    cycle_day = get_cycle_day(user.consecutive_login_days)
+    rewards = []
+    for d in range(1, 8):
+        rewards.append({
+            "day": d,
+            "points": SIGNIN_REWARDS.get(d, 0),
+            "checked": d <= cycle_day
+        })
+    return {
+        "user_id": user.id,
+        "points": user.points,
+        "last_login_date": user.last_login_date,
+        "consecutive_login_days": user.consecutive_login_days,
+        "cycle_day": cycle_day,
+        "signed_today": signed_today,
+        "rewards": rewards,
+    }
+
+
+@app.post("/users/{user_id}/signin", response_model=schema.SignInResponse)
+def signin(user_id: int, db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None: raise HTTPException(status_code=404, detail="User not found")
+    today_date = datetime.now().date()
+    today = today_date.isoformat()
+    yesterday = (today_date - timedelta(days=1)).isoformat()
+    if user.last_login_date == today:
+        raise HTTPException(status_code=400, detail="Already signed today")
+    if user.last_login_date == yesterday:
+        user.consecutive_login_days = (user.consecutive_login_days or 0) + 1
+    else:
+        user.consecutive_login_days = 1
+    user.total_login_days = (user.total_login_days or 0) + 1
+    user.last_login_date = today
+    cycle_day = get_cycle_day(user.consecutive_login_days)
+    points_awarded = SIGNIN_REWARDS.get(cycle_day, 0)
+    user.points = (user.points or 0) + points_awarded
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "user_id": user.id,
+        "points_awarded": points_awarded,
+        "points_total": user.points,
+        "consecutive_login_days": user.consecutive_login_days,
+        "cycle_day": cycle_day,
+        "last_login_date": user.last_login_date,
+    }
 
 @app.post("/api/chat", response_model=schema.ChatResponse)
 def chat_with_ai(payload: schema.ChatRequest, db: Session = Depends(database.get_db)):

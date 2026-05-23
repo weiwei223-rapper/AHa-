@@ -48,6 +48,8 @@ export const userAPI = {
     api.get(`/users/${userId}/stats`),
   claimAchievementPoints: (userId: number) =>
     api.post(`/users/${userId}/claim-achievement-points`),
+  getSigninStatus: (userId: number) => api.get(`/users/${userId}/signin-status`),
+  signin: (userId: number) => api.post(`/users/${userId}/signin`),
 };
 
 export const videoAPI = {
