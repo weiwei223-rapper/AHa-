@@ -14,18 +14,20 @@ export default function AuthPage() {
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerPasswordConfirm, setRegisterPasswordConfirm] = useState('');
 
-  const handleSkipLogin = () => {
-    const guestUser = {
-      id: 1,
-      name: 'wei',
-      email: 'wei@gmail.com',
-      uid: 'UID-20260419',
-      points: 10000,
-    };
-
-    localStorage.setItem('userId', guestUser.id.toString());
-    localStorage.setItem('userData', JSON.stringify(guestUser));
-    window.location.href = '/';
+  const handleSkipLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await authAPI.guest();
+      const { user, access_token } = response.data;
+      localStorage.setItem('userId', user.id.toString());
+      localStorage.setItem('userData', JSON.stringify(user));
+      localStorage.setItem('access_token', access_token);
+      window.location.href = '/';
+    } catch (err: any) {
+      setError('訪客模式目前無法使用，請稍後再試。');
+      setLoading(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -39,9 +41,10 @@ export default function AuthPage() {
         password: loginPassword,
       });
 
-      const { user } = response.data;
+      const { user, access_token } = response.data;
       localStorage.setItem('userId', user.id.toString());
       localStorage.setItem('userData', JSON.stringify(user));
+      localStorage.setItem('access_token', access_token);
       window.location.href = '/';
     } catch (err: any) {
       setError(err.response?.data?.detail || '登入失敗，請確認帳號密碼。');
@@ -87,9 +90,10 @@ export default function AuthPage() {
         password: registerPassword,
       });
 
-      const user = response.data;
+      const { user, access_token } = response.data;
       localStorage.setItem('userId', user.id.toString());
       localStorage.setItem('userData', JSON.stringify(user));
+      localStorage.setItem('access_token', access_token);
       window.location.href = '/';
     } catch (err: any) {
       setError(err.response?.data?.detail || '註冊失敗，請稍後再試。');

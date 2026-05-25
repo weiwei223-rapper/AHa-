@@ -362,8 +362,8 @@ const Quiz = () => {
       {quiz && currentQuestion && (
         <section className="panel-card" style={{marginTop:'30px'}}>
            <div className="quiz-question-card">
-             <div className="quiz-question-number" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-               <span>Question {currentQuestionIndex+1}/{quiz.questions.length} | {currentQuestion.reference_concept}</span>
+             <div className="quiz-question-number" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
+               <span style={{ whiteSpace: 'nowrap' }}>Question {currentQuestionIndex+1}/{quiz.questions.length} | {currentQuestion.reference_concept}</span>
                <button 
                  onClick={() => {
                    setReportingContext(`第 ${currentQuestionIndex + 1} 題生成錯誤`);
@@ -388,7 +388,7 @@ const Quiz = () => {
                 </div>
               )}
            </div>
-           <div style={{display:'flex', gap:'12px', marginTop:'20px', justifyContent:'flex-end'}}>
+           <div style={{display:'flex', gap:'12px', marginTop:'20px', justifyContent:'flex-end', flexWrap: 'wrap'}}>
              <button onClick={() => void resetQuiz()} className="page-secondary-button" style={{ marginRight: 'auto' }}>放棄測驗</button>
              <button onClick={() => void handleManualSave()} className="page-secondary-button" style={{ borderColor: "#facc15", color: "#facc15" }}>儲存進度</button>
              <button onClick={handlePrevious} disabled={currentQuestionIndex === 0} className="page-secondary-button">Previous</button>

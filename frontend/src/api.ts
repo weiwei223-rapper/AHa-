@@ -26,12 +26,21 @@ const api: AxiosInstance = axios.create({
   timeout: 300000, 
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Auth APIs
 export const authAPI = {
   register: (data: { name: string; email: string; password: string }) =>
     api.post('/auth/register', data),
   login: (data: { email: string; password: string }) =>
     api.post('/auth/login', data),
+  guest: () => api.post('/auth/guest'),
 };
 
 // User APIs

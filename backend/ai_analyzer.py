@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from faster_whisper import WhisperModel
 
 # Configuration
-DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
+DEFAULT_GEMINI_MODEL = "gemini-1.5-flash-latest"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
 DEFAULT_OLLAMA_MODEL = "AHa-Tutor:latest"
@@ -105,9 +105,6 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
 
 def generate_text_with_ollama(messages: list[dict], model: str = DEFAULT_OLLAMA_MODEL) -> str:
     """Send chat history to Ollama and get a response."""
-    # Convert role from 'assistant' to 'assistant' (ollama uses user, assistant, system)
-    # Our internal format: [{'role': 'user', 'content': '...'}, ...]
-    
     request_payload = {
         "model": model,
         "messages": messages,
@@ -138,16 +135,11 @@ def generate_text_with_ollama(messages: list[dict], model: str = DEFAULT_OLLAMA_
 
 def get_chat_response(messages: list[dict]) -> str:
     """Send chat history to the preferred AI (Ollama if available, else Gemini) and get a response."""
-    
-    # 優先嘗試 Ollama (蘇格拉底家教模式)
     try:
-        # 檢查 Ollama 是否在運行，並且模型存在
-        # 這裡簡單地直接呼叫，如果失敗再 fallback 到 Gemini
         return generate_text_with_ollama(messages)
     except Exception as e:
         print(f"DEBUG: Ollama chat failed, falling back to Gemini: {e}")
 
-    # Fallback to Gemini
     gemini_history = []
     for msg in messages:
         role = msg.get("role", "user")
@@ -182,19 +174,16 @@ def is_python_related(title: str, transcript: str) -> bool:
         decision = response_text.strip().upper()
         print(f"DEBUG: Video validation AI response: '{decision}'")
         
-        # 修正 Bug：'INVALID' 包含 'VALID'。必須先檢查 'INVALID'。
         if "INVALID" in decision:
             return False
         return "VALID" in decision
     except Exception as e:
         print(f"DEBUG: Video validation AI failed: {e}")
-        # 如果 AI 判斷失敗，預設允許通過以避免誤殺
         return True
 
 
 def get_video_title(video_link: str) -> Optional[str]:
     """Resiliently fetch the actual YouTube video title."""
-    # 方法 1: 使用 yt-dlp (最全面，但易被擋)
     _setup_ffmpeg()
     ydl_opts = {
         'quiet': True, 'no_warnings': True, 'extract_flat': True,
@@ -208,16 +197,13 @@ def get_video_title(video_link: str) -> Optional[str]:
     except:
         pass
 
-    # 方法 2: 直接爬取 HTML (輕量級，不易被擋)
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
         response = requests.get(video_link, headers=headers, timeout=10)
         if response.ok:
-            # 找 <title> 標籤
             title_match = re.search(r"<title>(.*?)</title>", response.text)
             if title_match:
                 raw_title = title_match.group(1)
-                # 移除 " - YouTube" 尾綴
                 return raw_title.replace(" - YouTube", "").strip()
     except:
         pass
@@ -226,7 +212,7 @@ def get_video_title(video_link: str) -> Optional[str]:
 
 
 def fetch_video_transcript(video_link: str) -> str:
-    """Fetch transcript using YouTube API. Return empty if no subtitles found to trigger Title Fallback."""
+    """Fetch transcript using YouTube API."""
     video_id = extract_youtube_video_id(video_link)
     if not video_id:
         return ""
@@ -236,19 +222,15 @@ def fetch_video_transcript(video_link: str) -> str:
         api = YouTubeTranscriptApi()
         transcript_list = api.list(video_id)
         
-        # 1. 優先找繁體中文 (zh-TW, zh-Hant)
         try:
             transcript = transcript_list.find_transcript(['zh-TW', 'zh-Hant'])
         except:
-            # 2. 找其他形式的中文
             try:
                 transcript = transcript_list.find_transcript(['zh-Hans', 'zh', 'zh-CN'])
             except:
-                # 3. 找英文並自動翻譯成繁中
                 try:
                     transcript = transcript_list.find_transcript(['en']).translate('zh-TW')
                 except:
-                    # 4. 隨便抓一個可用的並翻譯
                     transcript = next(iter(transcript_list)).translate('zh-TW')
 
         data = transcript.fetch()
@@ -257,78 +239,10 @@ def fetch_video_transcript(video_link: str) -> str:
         return result
     except Exception as e:
         print(f"DEBUG: No subtitles found on YouTube for {video_id}: {e}")
-        # 回傳空字串，這會觸發 learning_pipeline.py 中的「標題推理專家模式」
         return ""
 
 
-
-def _transcribe_with_whisper(video_link: str) -> str:
-    """Download audio and use Whisper to transcribe with Anti-Bot bypass."""
-    _setup_ffmpeg()
-    
-    video_id = extract_youtube_video_id(video_link)
-    clean_url = f"https://www.youtube.com/watch?v={video_id}" if video_id else video_link
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # 強力偽裝下載參數
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(temp_dir, 'audio.%(ext)s'),
-            'ffmpeg_location': FFMPEG_PATH,
-            'noplaylist': True,
-            'nocheckcertificate': True,
-            # 偽裝成一般的 Chrome 瀏覽器
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'referer': 'https://www.google.com/',
-            # 關鍵：嘗試從本地瀏覽器借用 Cookie 繞過機器人驗證 (支援 Chrome, Edge)
-            'cookiesfrombrowser': ('chrome', 'edge'), 
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': False,
-            'no_warnings': False,
-        }
-
-        print(f"DEBUG: Starting ARMORED audio download for {clean_url}...")
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([clean_url])
-        except Exception as dl_err:
-            print(f"DEBUG: Armored download failed: {dl_err}. YouTube security is very strong.")
-            raise dl_err
-
-        audio_path = os.path.join(temp_dir, 'audio.mp3')
-        if not os.path.exists(audio_path):
-            print(f"DEBUG: audio.mp3 not found at {audio_path}")
-            raise FileNotFoundError("Audio extraction failed")
-
-        print("DEBUG: Initializing Whisper AI model (tiny)...")
-        # 增加載入模型時的錯誤捕捉
-        try:
-            model = WhisperModel(WHISPER_MODEL_SIZE, device=WHISPER_DEVICE, compute_type="float32")
-        except Exception as model_err:
-            print(f"DEBUG: Whisper model load failed: {model_err}")
-            raise model_err
-        
-        print("DEBUG: Transcribing audio (this may take a while)...")
-        segments, info = model.transcribe(audio_path, beam_size=5)
-        
-        # 遍歷 segments 時印出進度
-        transcript_parts = []
-        for i, segment in enumerate(segments):
-            transcript_parts.append(segment.text)
-            if i % 10 == 0:
-                print(f"DEBUG: Transcribing... segment {i}")
-        
-        transcript_text = " ".join(transcript_parts)
-        print(f"DEBUG: AI Transcription complete. Detected language: {info.language}")
-        return transcript_text
-
-
 def extract_youtube_video_id(video_link: str) -> str | None:
-
     patterns = [
         r"(?:youtube\.com/watch\?v=)([^&#]+)",
         r"(?:youtu\.be/)([^?&#]+)",
