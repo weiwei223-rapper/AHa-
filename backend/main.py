@@ -5,6 +5,7 @@ import json
 import re
 import html
 import math
+import unicodedata
 from urllib.parse import quote, quote_plus
 
 import bcrypt
@@ -12,7 +13,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, validator
 from sqlalchemy import text, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -117,6 +118,24 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
+def validate_user_name(name: str) -> str:
+    cleaned = name.strip()
+    if not cleaned:
+        raise ValueError('姓名不得為空。')
+    if len(cleaned) < 2:
+        raise ValueError('姓名長度至少為 2 個字元。')
+
+    allowed_extra = set(" .'-")
+    for char in cleaned:
+        category = unicodedata.category(char)
+        if category.startswith(('L', 'M', 'N')):
+            continue
+        if char in allowed_extra or char.isspace():
+            continue
+        raise ValueError('姓名僅能包含文字、數字、空白、點、撇號或連字號。')
+
+    return cleaned
+
 class LoginResponse(BaseModel):
     user: schema.UserResponse
     message: str
@@ -125,6 +144,10 @@ class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
+
+    @validator('name')
+    def validate_name(cls, value: str) -> str:
+        return validate_user_name(value)
 
 # --- FastAPI Initialization ---
 
@@ -175,6 +198,7 @@ class EcpayCheckoutResponse(BaseModel):
     CheckMacValue: str
     MerchantTradeNo: str
     MerchantTradeDate: str
+    params: Dict[str, str]
 
 @app.post("/api/ecpay/checkout", response_model=EcpayCheckoutResponse)
 def ecpay_checkout(payload: Dict[str, Any], db: Session = Depends(database.get_db)):
@@ -183,37 +207,45 @@ def ecpay_checkout(payload: Dict[str, Any], db: Session = Depends(database.get_d
     merchant_trade_no = f"AHA{int(time.time())}"
     merchant_trade_date = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
     
+    # 使用簡單的英文描述，避免中文字元或特殊符號造成 WAF 攔截或編碼問題
     ecpay_params = {
         "MerchantID": ECPAY_MERCHANT_ID,
         "MerchantTradeNo": merchant_trade_no,
         "MerchantTradeDate": merchant_trade_date,
         "PaymentType": "aio",
-        "TotalAmount": payload.get("TotalAmount"),
-        "TradeDesc": "AHa AI 點數儲值",
-        "ItemName": payload.get("ItemName"),
+        "TotalAmount": str(payload.get("TotalAmount")),
+        "TradeDesc": "AHa_AI_Points_Topup",
+        "ItemName": "AHa_AI_Points",
         "ReturnURL": payload.get("ReturnURL"),
         "ClientBackURL": payload.get("ClientBackURL"),
         "ChoosePayment": "ALL",
-        "EncryptType": 1,
+        "EncryptType": "1",
         "CustomField1": str(payload.get("user_id")),
-        "CustomField2": payload.get("plan_id"),
+        "CustomField2": str(payload.get("plan_id") or ""),
     }
     
+    # 移除值為 None 的參數，確保雜湊與表單提交一致
+    ecpay_params = {k: v for k, v in ecpay_params.items() if v is not None}
+    
     mac = generate_ecpay_check_mac_value(ecpay_params)
+    ecpay_params["CheckMacValue"] = mac
+    
     return EcpayCheckoutResponse(
         CheckMacValue=mac,
         MerchantTradeNo=merchant_trade_no,
-        MerchantTradeDate=merchant_trade_date
+        MerchantTradeDate=merchant_trade_date,
+        params=ecpay_params
     )
 
 @app.post("/ecpay/return")
 async def ecpay_return(request: Request, db: Session = Depends(database.get_db)):
-    # ... existing background webhook logic ...
+    print("\n>>> HIT: /ecpay/return (Server-to-Server Callback) <<<")
     return await process_ecpay_payment(request, db)
 
 @app.post("/ecpay/return-client")
 async def ecpay_return_client(request: Request, db: Session = Depends(database.get_db)):
     """接收綠界付款結果通知 (前端跳轉用，縮短入帳時間)"""
+    print("\n>>> HIT: /ecpay/return-client (Browser-to-Server Redirect) <<<")
     await process_ecpay_payment(request, db)
     # 付款完後引導使用者回個人頁面
     from fastapi.responses import RedirectResponse
@@ -233,25 +265,51 @@ async def ecpay_return_client(request: Request, db: Session = Depends(database.g
     """)
 
 async def process_ecpay_payment(request: Request, db: Session):
+    import hmac
+    # 讀取 Form Data
     form_data = await request.form()
     params = dict(form_data)
     
-    received_mac = params.get("CheckMacValue")
+    # DEBUG: 紀錄接收到的所有參數
+    print(f"DEBUG: ECPay Callback Received Params: {json.dumps(params, ensure_ascii=False)}")
+    
+    received_mac = params.get("CheckMacValue", "")
     calculated_mac = generate_ecpay_check_mac_value(params)
     
-    if received_mac != calculated_mac:
+    # DEBUG: 檢查 MAC
+    print(f"DEBUG: Received MAC: {received_mac}")
+    print(f"DEBUG: Calculated MAC: {calculated_mac}")
+    
+    if not hmac.compare_digest(received_mac, calculated_mac):
+        print("DEBUG: CheckMacValue Verify Failed!")
         return PlainTextResponse("0|CheckMacValueVerifyFail")
     
-    if params.get("RtnCode") == "1":
+    # AIO 金流的 RtnCode 是字串 '1'
+    rtn_code = str(params.get("RtnCode", ""))
+    print(f"DEBUG: RtnCode: {rtn_code}")
+    
+    if rtn_code == "1":
         try:
-            user_id = int(params.get("CustomField1"))
-            amount = int(params.get("TradeAmt", 0))
+            user_id_str = params.get("CustomField1")
+            amount_str = params.get("TradeAmt", "0")
             merchant_trade_no = params.get("MerchantTradeNo")
             
-            # Check if record already exists to prevent double entry
+            print(f"DEBUG: Processing Order: {merchant_trade_no} for User: {user_id_str}, Amount: {amount_str}")
+            
+            if not user_id_str or not merchant_trade_no:
+                print("DEBUG: Missing critical fields (CustomField1 or MerchantTradeNo)")
+                return PlainTextResponse("0|MissingFields")
+            
+            user_id = int(user_id_str)
+            amount = int(amount_str)
+            
+            # 檢查訂單是否已處理過
             existing = db.query(models.RechargeRecord).filter(models.RechargeRecord.order_id == merchant_trade_no).first()
-            if existing: return PlainTextResponse("1|OK")
+            if existing:
+                print(f"DEBUG: Order {merchant_trade_no} already processed.")
+                return PlainTextResponse("1|OK")
 
+            # 計算點數邏輯
             if amount >= 999: points_to_add = 1100
             elif amount >= 599: points_to_add = 650
             elif amount >= 299: points_to_add = 300
@@ -259,7 +317,7 @@ async def process_ecpay_payment(request: Request, db: Session):
             
             user = db.query(models.User).filter(models.User.id == user_id).first()
             if user:
-                user.points += points_to_add
+                user.points = (user.points or 0) + points_to_add
                 record = models.RechargeRecord(
                     user_id=user.id,
                     date=datetime.now().strftime("%Y/%m/%d"),
@@ -267,15 +325,24 @@ async def process_ecpay_payment(request: Request, db: Session):
                     amount=amount,
                     points=points_to_add,
                     balance_after=user.points,
-                    plan_content=f"綠界儲值: {params.get('ItemName')}",
+                    plan_content=f"ECPay: {params.get('ItemName', 'Points')}",
                     payment_method="ECPay",
                     plan_id=params.get("CustomField2")
                 )
                 db.add(record)
                 db.commit()
+                print(f"DEBUG: Successfully updated points for User {user_id}. New balance: {user.points}")
                 return PlainTextResponse("1|OK")
-        except Exception:
+            else:
+                print(f"DEBUG: User {user_id} not found in database.")
+        except Exception as e:
             db.rollback()
+            print(f"DEBUG: Exception during callback processing: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print(f"DEBUG: RtnCode is not 1 (Success), actual: {rtn_code}")
+        
     return PlainTextResponse("0|Fail")
 
 app.add_middleware(
@@ -292,38 +359,58 @@ app.add_middleware(
 )
 
 # --- ECPay Config ---
-ECPAY_MERCHANT_ID = "2000132"
-ECPAY_HASH_KEY = "5294y06JbISpM5x9"
-ECPAY_HASH_IV = "v77hoKGq4kWxNNIS"
+ECPAY_MERCHANT_ID = "3002607"  # Correct AIO/ECPG Test MerchantID
+ECPAY_HASH_KEY = "pwFHCqoQZGmho4w6"
+ECPAY_HASH_IV = "EkRm7iFT261dpevs"
+
+def ecpay_url_encode(source: str) -> str:
+    """對應 ECPay 官方 UrlService::ecpayUrlEncode() 邏輯"""
+    # 1. urllib.parse.quote_plus 將空格編碼為 +
+    encoded = quote_plus(source)
+    # 2. Python quote_plus 不編碼 ~，但 PHP urlencode 會編碼為 %7E
+    encoded = encoded.replace('~', '%7E')
+    # 3. 全部轉小寫
+    encoded = encoded.lower()
+    # 4. .NET 特殊字元還原
+    replacements = {
+        '%2d': '-', '%5f': '_', '%2e': '.', '%21': '!',
+        '%2a': '*', '%28': '(', '%29': ')',
+    }
+    for old, new in replacements.items():
+        encoded = encoded.replace(old, new)
+    return encoded
 
 def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
-    # 1. 過濾掉 CheckMacValue (綠界規則：此欄位不參與加密)
-    # 注意：綠界回傳的空字串 (例如 CustomField3="") 必須保留並參與加密
+    """產生 ECPay CheckMacValue (符合 V3.2 規範)"""
+    # 1. 過濾掉 CheckMacValue
     filtered_params = {k: str(v) for k, v in params.items() if k.lower() != "checkmacvalue"}
     
-    if "MerchantID" not in filtered_params: filtered_params["MerchantID"] = ECPAY_MERCHANT_ID
+    if "MerchantID" not in filtered_params: 
+        filtered_params["MerchantID"] = ECPAY_MERCHANT_ID
     
-    # 2. 排序
+    # 2. Key 依 ASCII 排序 (區分大小寫)
     sorted_keys = sorted(filtered_params.keys())
     raw_list = [f"{k}={filtered_params[k]}" for k in sorted_keys]
     
     # 3. 組合原始字串
     raw_str = f"HashKey={ECPAY_HASH_KEY}&{'&'.join(raw_list)}&HashIV={ECPAY_HASH_IV}"
     
-    # 4. URL Encode 並轉小寫，僅處理 ~ 符號 (根據 verify_mac.py 的成功經驗)
-    encoded_str = quote_plus(raw_str).lower().replace("%7e", "~")
+    # DEBUG: 紀錄組合好的原始字串 (正式上線可移除)
+    print(f"DEBUG: MAC Raw String: {raw_str}")
     
-    # 5. 生成雜湊值
+    # 4. ECPay URL Encode (urlencode -> lower -> .NET replacements)
+    encoded_str = ecpay_url_encode(raw_str)
+    
+    # DEBUG: 紀錄 URL Encode 後的字串 (正式上線可移除)
+    print(f"DEBUG: MAC Encoded String: {encoded_str}")
+    
+    # 5. 生成雜湊值 (預設 SHA256)
     import hashlib
     encrypt_type = params.get("EncryptType", 1)
     if str(encrypt_type) == "0":
         mac = hashlib.md5(encoded_str.encode("utf-8")).hexdigest().upper()
     else:
         mac = hashlib.sha256(encoded_str.encode("utf-8")).hexdigest().upper()
-    
-    # Debug 用：在伺服器日誌顯示原始字串（正式上線後可移除）
-    print(f"DEBUG: MAC Raw String: {raw_str}")
-    print(f"DEBUG: MAC Encoded: {encoded_str}")
     
     return mac
 

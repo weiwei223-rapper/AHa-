@@ -215,8 +215,8 @@ const Profile = () => {
       
       // 1. 呼叫後端 API 取得 CheckMacValue 與訂單資訊
       // 測試提醒：若要測試真實回傳入帳，請將下方 ReturnURL 改為您的 ngrok 公開網址
-      const NGROK_URL = "https://05cb-2401-e180-88b1-f08a-b43f-69d3-e324-6c7.ngrok-free.app"; 
-      const currentReturnURL = `${NGROK_URL}/ecpay/return-client`;
+      const NGROK_URL = "https://44b6-120-113-180-156.ngrok-free.app"; 
+      const currentReturnURL = `${NGROK_URL}/ecpay/return`;
 
       const response = await api.post("/api/ecpay/checkout", {
         user_id: user.id,
@@ -227,7 +227,7 @@ const Profile = () => {
         plan_id: plan.title
       });
       
-      const checkoutData = response.data;
+      const { params } = response.data;
       
       // 2. 建立動態表單並自動提交至綠界測試環境 (Stage)
       const ecpayUrl = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5";
@@ -237,24 +237,7 @@ const Profile = () => {
       form.action = ecpayUrl;
       form.style.display = "none";
       
-      // 填入綠界所需的參數
-      const params: Record<string, any> = {
-        MerchantID: "2000132", // 測試用 MerchantID
-        MerchantTradeNo: checkoutData.MerchantTradeNo,
-        MerchantTradeDate: checkoutData.MerchantTradeDate,
-        PaymentType: "aio",
-        TotalAmount: plan.price,
-        TradeDesc: "AHa AI 點數儲值",
-        ItemName: plan.title,
-        ReturnURL: currentReturnURL,
-        ClientBackURL: window.location.href,
-        ChoosePayment: "ALL",
-        EncryptType: "1",
-        CheckMacValue: checkoutData.CheckMacValue,
-        CustomField1: user.id.toString(),
-        CustomField2: plan.title
-      };
-      
+      // 使用後端回傳的完整參數，避免前端硬編碼造成 CheckMacValue 錯誤
       Object.keys(params).forEach((key) => {
         const input = document.createElement("input");
         input.type = "hidden";

@@ -1,7 +1,27 @@
 from datetime import datetime
 from typing import List, Optional
+import unicodedata
 
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
+
+
+def validate_user_name(name: str) -> str:
+    cleaned = name.strip()
+    if not cleaned:
+        raise ValueError('姓名不得為空。')
+    if len(cleaned) < 2:
+        raise ValueError('姓名長度至少為 2 個字元。')
+
+    allowed_extra = set(" .'-")
+    for char in cleaned:
+        category = unicodedata.category(char)
+        if category.startswith(('L', 'M', 'N')):
+            continue
+        if char in allowed_extra or char.isspace():
+            continue
+        raise ValueError('姓名僅能包含文字、數字、空白、點、撇號或連字號。')
+
+    return cleaned
 
 class VideoCreate(BaseModel):
     video_link: str
@@ -56,6 +76,10 @@ class UserUpdate(BaseModel):
     email: str
     password: Optional[str] = None
     current_quiz_draft: Optional[str] = None
+
+    @validator('name')
+    def validate_name(cls, value: str) -> str:
+        return validate_user_name(value)
 
 class AIFeedbackCreate(BaseModel):
     user_id: int
