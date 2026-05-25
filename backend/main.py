@@ -207,7 +207,10 @@ def ecpay_checkout(payload: Dict[str, Any], db: Session = Depends(database.get_d
     merchant_trade_no = f"AHA{int(time.time())}"
     merchant_trade_date = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
     
-    # 使用簡單的英文描述，避免中文字元或特殊符號造成 WAF 攔截或編碼問題
+    # 取得前端的 Base URL (例如 http://localhost:5173)，以便支付完跳轉回去
+    frontend_base_url = payload.get("ClientBackURL", "").replace("/profile", "")
+    if not frontend_base_url: frontend_base_url = "http://localhost:5173"
+
     ecpay_params = {
         "MerchantID": ECPAY_MERCHANT_ID,
         "MerchantTradeNo": merchant_trade_no,
@@ -217,16 +220,15 @@ def ecpay_checkout(payload: Dict[str, Any], db: Session = Depends(database.get_d
         "TradeDesc": "AHa_AI_Points_Topup",
         "ItemName": "AHa_AI_Points",
         "ReturnURL": payload.get("ReturnURL"),
-        "ClientBackURL": payload.get("ClientBackURL"),
+        "OrderResultURL": payload.get("ReturnURL").replace("/ecpay/return", "/ecpay/return-client"),
         "ChoosePayment": "ALL",
         "EncryptType": "1",
         "CustomField1": str(payload.get("user_id")),
         "CustomField2": str(payload.get("plan_id") or ""),
+        "CustomField3": frontend_base_url, # 暫存前端網址供跳轉使用
     }
     
-    # 移除值為 None 的參數，確保雜湊與表單提交一致
     ecpay_params = {k: v for k, v in ecpay_params.items() if v is not None}
-    
     mac = generate_ecpay_check_mac_value(ecpay_params)
     ecpay_params["CheckMacValue"] = mac
     
@@ -246,18 +248,24 @@ async def ecpay_return(request: Request, db: Session = Depends(database.get_db))
 async def ecpay_return_client(request: Request, db: Session = Depends(database.get_db)):
     """接收綠界付款結果通知 (前端跳轉用，縮短入帳時間)"""
     print("\n>>> HIT: /ecpay/return-client (Browser-to-Server Redirect) <<<")
+    # 先讀取參數以取得 CustomField3
+    form_data = await request.form()
+    params = dict(form_data)
+    frontend_url = params.get("CustomField3", "http://localhost:5173")
+    
+    # 執行入帳邏輯
     await process_ecpay_payment(request, db)
-    # 付款完後引導使用者回個人頁面
-    from fastapi.responses import RedirectResponse
-    return HTMLResponse(content="""
+    
+    # 付款完後引導使用者回前端的個人頁面
+    return HTMLResponse(content=f"""
         <html>
             <head><title>付款成功</title></head>
             <body style="background:#080c16;color:white;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">
                 <div style="text-align:center;">
                     <h1 style="color:#2bc1f1;">付款完成！</h1>
-                    <p>正在為您同步點數，請稍候...</p>
+                    <p>正在將您導回系統，請稍候...</p>
                     <script>
-                        setTimeout(() => { window.location.href = '/profile'; }, 2000);
+                        setTimeout(() => {{ window.location.href = '{frontend_url}/profile'; }}, 1500);
                     </script>
                 </div>
             </body>
