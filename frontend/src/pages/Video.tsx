@@ -196,26 +196,6 @@ const Video = () => {
     else navigate(`/Quiz?docId=${id}`);
   };
 
-  const handleDeleteVideo = async (videoId: number) => {
-    if (!window.confirm("確定要刪除此影片嗎？")) return;
-    try {
-      await videoAPI.deleteVideo(videoId);
-      setVideos(prev => prev.filter(v => v.id !== videoId));
-    } catch (err) {
-      alert("刪除影片失敗");
-    }
-  };
-
-  const handleDeleteDoc = async (docId: number) => {
-    if (!window.confirm("確定要刪除此文件嗎？")) return;
-    try {
-      await documentAPI.deleteDocument(docId);
-      setDocs(prev => prev.filter(d => d.id !== docId));
-    } catch (err) {
-      alert("刪除文件失敗");
-    }
-  };
-
   const handleReportError = async (report: string) => {
     if (!reportingVideoId) return;
     try {
@@ -334,7 +314,6 @@ const Video = () => {
                   setReportingVideoId(v.id);
                   setIsReportModalOpen(true);
                 }} className="page-secondary-button">Report</button>
-                <button onClick={() => handleDeleteVideo(v.id)} className="page-secondary-button" style={{color: '#ef4444'}}>Delete</button>
                 <button onClick={() => handleOpenQuiz(v.id, 'video')} className="page-primary-button">Quiz</button>
                 <button onClick={() => handleDeleteVideo(v.id)} className="page-secondary-button" style={{ color: '#ef4444' }}>Delete</button>
               </div>
@@ -351,7 +330,6 @@ const Video = () => {
                 <button onClick={() => handleAnalyzeDoc(d.id)} disabled={actionId === d.id} className="page-secondary-button">
                   {actionId === d.id ? "分析中..." : "Analyze"}
                 </button>
-                <button onClick={() => handleDeleteDoc(d.id)} className="page-secondary-button" style={{color: '#ef4444'}}>Delete</button>
                 <button onClick={() => handleOpenQuiz(d.id, 'pdf')} className="page-primary-button">Quiz</button>
                 <button onClick={() => handleDeleteDoc(d.id)} className="page-secondary-button" style={{ color: '#ef4444' }}>Delete</button>
               </div>
