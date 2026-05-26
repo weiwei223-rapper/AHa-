@@ -318,6 +318,15 @@ def create_video(payload: schema.VideoCreate, db: Session = Depends(database.get
     db.add(video); db.commit(); db.refresh(video)
     return video
 
+@app.delete("/api/videos/{video_id}")
+def delete_video(video_id: int, db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    db.delete(video)
+    db.commit()
+    return {"detail": "Video deleted successfully"}
+
 @app.get("/api/videos/{video_id}/quiz", response_model=schema.QuizResponse)
 def generate_quiz_api(video_id: int, user_id: int = 1, count: int = Query(5, ge=1, le=10), db: Session = Depends(database.get_db)):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
@@ -414,6 +423,15 @@ async def upload_document(file: UploadFile = File(...), user_id: int = Form(...)
 @app.get("/api/documents", response_model=List[schema.DocumentResponse])
 def get_documents(user_id: int = 1, db: Session = Depends(database.get_db)):
     return db.query(models.Document).filter(models.Document.user_id == user_id).all()
+
+@app.delete("/api/documents/{doc_id}")
+def delete_document(doc_id: int, db: Session = Depends(database.get_db)):
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    db.delete(doc)
+    db.commit()
+    return {"detail": "Document deleted successfully"}
 
 @app.get("/api/documents/{doc_id}/quiz", response_model=schema.QuizResponse)
 def generate_doc_quiz(doc_id: int, user_id: int = 1, count: int = Query(5), db: Session = Depends(database.get_db)):

@@ -10,6 +10,8 @@ import {
 } from "../utils/achievement";
 import "./PageIndex.css";
 
+import { usePoints } from "../context/PointsContext";
+
 type UserData = {
   id: number;
   name: string;
@@ -40,6 +42,7 @@ const rechargePlans = [
 ];
 
 const Profile = () => {
+  const { setPoints } = usePoints();
   const [activeTab, setActiveTab] = useState<"basic" | "records">("basic");
   const [showTopup, setShowTopup] = useState(false);
   const [user, setUser] = useState<UserData | null>(null);
@@ -99,6 +102,7 @@ const Profile = () => {
       const userResp = await api.get(`/users/${id}`);
       const data: UserData = userResp.data;
       setUser(data);
+      setPoints(data.points);
       setFormValues({
         name: data.name,
         password: "",
@@ -141,10 +145,12 @@ const Profile = () => {
       const data = resp.data;
       // update user points and streak
       const updatedUserResp = await api.get(`/users/${user.id}`);
-      setUser(updatedUserResp.data);
+      const updatedData = updatedUserResp.data;
+      setUser(updatedData);
+      setPoints(updatedData.points);
       await loadSigninStatus(user.id);
       setMessage(`已簽到 +${data.points_awarded} 點，連續第 ${data.consecutive_login_days} 天`);
-      refreshAchievements(updatedUserResp.data);
+      refreshAchievements(updatedData);
     } catch (err: any) {
       setMessage(err.response?.data?.detail || '簽到失敗，請稍後再試。');
     } finally {
@@ -179,6 +185,7 @@ const Profile = () => {
       const resp = await userAPI.claimAchievementPoints(user.id);
       const updated = resp.data as UserData;
       setUser(updated);
+      setPoints(updated.points);
       setAccumulatedPoints(0);
       setMessage(`🎉 領取成功！已領取 ${accumulatedPoints} 點成就獎勵。`);
       refreshAchievements(updated);

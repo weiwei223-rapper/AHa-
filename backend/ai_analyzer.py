@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from faster_whisper import WhisperModel
 
 # Configuration
-DEFAULT_GEMINI_MODEL = "gemini-1.5-flash-latest"
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
 DEFAULT_OLLAMA_MODEL = "AHa-Tutor:latest"

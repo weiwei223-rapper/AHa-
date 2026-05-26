@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { videoAPI, documentAPI } from "../api";
 import ReportModal from "../component/ReportModal";
+import { usePoints } from "../context/PointsContext";
 
 type VideoItem = {
   id: number;
@@ -51,6 +52,7 @@ type VideoAnalysis = {
 };
 
 const Video = () => {
+  const { availablePoints, usePoints: deductPoints } = usePoints();
   const navigate = useNavigate();
   const userId = Number(localStorage.getItem("userId") || 1);
   const [activeTab, setActiveTab] = useState<'video' | 'pdf'>('video');
@@ -134,10 +136,23 @@ const Video = () => {
   };
 
   const handleAnalyzeVideo = async (videoId: number) => {
+    if (availablePoints < 5) {
+      setError("點數不足，分析影片需要 5 點。");
+      return;
+    }
+
     setActionId(videoId);
     setError("");
     try {
       const response = await videoAPI.analyzeVideo(videoId, userId);
+
+      const success = deductPoints(5);
+      if (!success) {
+        setError("點數不足，分析失敗。");
+        setActionId(null);
+        return;
+      }
+
       setAnalysis(response.data);
       await fetchVideos();
       window.dispatchEvent(new CustomEvent('points-updated', { detail: { userId } }));
@@ -149,10 +164,23 @@ const Video = () => {
   };
 
   const handleAnalyzeDoc = async (docId: number) => {
+    if (availablePoints < 5) {
+      setError("點數不足，分析文件需要 5 點。");
+      return;
+    }
+
     setActionId(docId);
     setError("");
     try {
       const response = await documentAPI.analyzeDocument(docId, userId);
+
+      const success = deductPoints(5);
+      if (!success) {
+        setError("點數不足，分析失敗。");
+        setActionId(null);
+        return;
+      }
+
       setAnalysis(response.data);
       await fetchDocs();
       window.dispatchEvent(new CustomEvent('points-updated', { detail: { userId } }));

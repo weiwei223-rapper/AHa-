@@ -4,6 +4,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import { codeAPI, quizAPI, videoAPI, documentAPI } from "../api";
 import ReportModal from "../component/ReportModal";
+import { usePoints } from "../context/PointsContext";
 
 type VideoItem = {
   id: number;
@@ -41,6 +42,7 @@ type QuizData = {
 };
 
 const Quiz = () => {
+  const { availablePoints, usePoints: deductPoints } = usePoints();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preferredVideoId = Number(searchParams.get("videoId") || 0);
@@ -145,11 +147,25 @@ const Quiz = () => {
   const handleGenerateQuiz = async (id: number, type: 'video' | 'doc') => {
     const key = `${type}-${id}`;
     const specificCount = quizCounts[key] || 5;
+
+    if (availablePoints < specificCount) {
+      setError(`點數不足，生成 ${specificCount} 題需要 ${specificCount} 點。`);
+      return;
+    }
+
     setLoading(true); setError("");
     try {
       const response = type === 'video' 
         ? await videoAPI.generateQuiz(id, userId, specificCount)
         : await documentAPI.generateQuiz(id, userId, specificCount);
+
+      const success = deductPoints(specificCount);
+      if (!success) {
+        setError("點數不足，無法生成。");
+        setLoading(false);
+        return;
+      }
+
       const nextQuiz = response.data as QuizData;
       setQuiz(nextQuiz);
       setCurrentQuestionIndex(0);

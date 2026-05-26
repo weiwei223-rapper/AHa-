@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { API_BASE_URL, parseResponseBody, userAPI } from "../api";
 import "./PageIndex.css";
 import heroImg from "../assets/hero.png";
+import { usePoints } from "../context/PointsContext";
 
 type UserStatusProps = {
   name: string;
@@ -29,6 +30,7 @@ type HomeStats = {
 const QUIZ_RESULTS_KEY = "quizResults";
 
 const Home = ({ name }: UserStatusProps) => {
+  const { setPoints } = usePoints();
   const [stats, setStats] = useState<HomeStats>({
     videoCount: 0,
     points: 0,
@@ -74,17 +76,18 @@ const Home = ({ name }: UserStatusProps) => {
         Promise.resolve(getQuizResults()),
       ]);
 
-      const stats = statsResp.data;
+      const statsData = statsResp.data;
       const totalCorrect = quizResults.reduce((sum, item) => sum + item.score, 0);
       const totalQuestions = quizResults.reduce((sum, item) => sum + item.totalQuestions, 0);
 
       setStats({
-        videoCount: stats.video_count,
-        points: stats.remaining_points,
-        completedQuizCount: stats.completed_quizzes,
-        averageAccuracy: stats.average_accuracy,
-        analyzedVideoCount: stats.analyzed_video_count, // Add this
+        videoCount: statsData.video_count,
+        points: statsData.remaining_points,
+        completedQuizCount: statsData.completed_quizzes,
+        averageAccuracy: statsData.average_accuracy,
+        analyzedVideoCount: statsData.analyzed_video_count, // Add this
       });
+      setPoints(statsData.remaining_points);
     } catch (error) {
       console.error("Failed to load stats:", error);
     }
