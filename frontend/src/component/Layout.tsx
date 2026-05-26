@@ -34,7 +34,6 @@ const Layout = ({ onLogout }: LayoutProps) => {
           <NavLink to="/Tutorial" className={navClassName}>Tutorial</NavLink>
           <NavLink to="/Video" className={navClassName}>Video</NavLink>
           <NavLink to="/Quiz" className={navClassName}>Quiz</NavLink>
-          <NavLink to="/Chat" className={navClassName}>Chat</NavLink>
           <NavLink to="/UnfinishedTest" className={navClassName}>Unfinished Test</NavLink>
           <NavLink to="/Review" className={navClassName}>Review</NavLink>
           <NavLink to="/Profile" className={navClassName}>Profile</NavLink>
