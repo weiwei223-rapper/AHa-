@@ -124,7 +124,7 @@ class PythonCodeCompiler:
     
     def execute(self, code: str, timeout: Optional[int] = None) -> Tuple[str, str]:
         """
-        Execute Python code and return (output, error).
+        Execute Python code using Docker for sandboxing.
         
         Args:
             code: Python code to execute
@@ -133,10 +133,6 @@ class PythonCodeCompiler:
         Returns:
             Tuple of (stdout, stderr)
         """
-        # 增加 UTF-8 宣告以防止 Windows 環境下的編碼錯誤
-        if not code.startswith("# -*- coding: utf-8 -*-"):
-            code = "# -*- coding: utf-8 -*-\n" + code
-
         # Validate code first
         is_valid, error = self.compile(code)
         if not is_valid:
@@ -145,17 +141,59 @@ class PythonCodeCompiler:
         exec_timeout = timeout or self.timeout
         
         try:
+            # Check if Docker is available
+            use_docker = os.getenv("USE_DOCKER_SANDBOX", "true").lower() == "true"
+            
+            if use_docker:
+                try:
+                    # Execute using Docker
+                    # --rm: Remove container after execution
+                    # --network none: Disable networking for security
+                    # --memory 128m: Limit memory usage
+                    # --cpus 0.5: Limit CPU usage
+                    # --read-only: Make root filesystem read-only (if possible, but might break some things)
+                    
+                    # We pass the code via stdin to avoid file mounting complexities
+                    result = subprocess.run(
+                        [
+                            "docker", "run", "--rm", "-i",
+                            "--network", "none",
+                            "--memory", "128m",
+                            "--cpus", "0.5",
+                            "aha-python-executor",
+                            "python", "-c", code
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=exec_timeout,
+                        encoding='utf-8'
+                    )
+                    
+                    output = result.stdout[:self.MAX_OUTPUT_SIZE]
+                    error = result.stderr[:self.MAX_OUTPUT_SIZE]
+                    
+                    if len(result.stdout) > self.MAX_OUTPUT_SIZE:
+                        output += f"\n... [output truncated]"
+                    if len(result.stderr) > self.MAX_OUTPUT_SIZE:
+                        error += f"\n... [error truncated]"
+                    
+                    return output, error
+                except subprocess.CalledProcessError as e:
+                    return e.stdout, e.stderr
+                except FileNotFoundError:
+                    # Docker not installed, fallback to local (log warning in real app)
+                    pass
+            
+            # Fallback to local execution (original logic)
             # Create temporary file with explicit utf-8 encoding
             with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as f:
                 f.write(code)
                 temp_file = f.name
             
             try:
-                # Prepare environment with UTF-8 encoding
                 env = os.environ.copy()
                 env["PYTHONIOENCODING"] = "utf-8"
 
-                # Execute the code
                 result = subprocess.run(
                     [sys.executable, temp_file],
                     capture_output=True,
@@ -166,24 +204,14 @@ class PythonCodeCompiler:
                     env=env
                 )
                 
-                # Capture output and error
                 output = result.stdout[:self.MAX_OUTPUT_SIZE]
                 error = result.stderr[:self.MAX_OUTPUT_SIZE]
-                
-                # If output was truncated, add a note
-                if len(result.stdout) > self.MAX_OUTPUT_SIZE:
-                    output += f"\n... [output truncated, total size: {len(result.stdout)} chars]"
-                if len(result.stderr) > self.MAX_OUTPUT_SIZE:
-                    error += f"\n... [error truncated, total size: {len(result.stderr)} chars]"
                 
                 return output, error
                 
             finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(temp_file)
-                except:
-                    pass
+                try: os.unlink(temp_file)
+                except: pass
         
         except subprocess.TimeoutExpired:
             return "", f"Execution timeout: Code took longer than {exec_timeout} seconds"

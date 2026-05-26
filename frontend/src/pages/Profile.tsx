@@ -53,6 +53,7 @@ const Profile = () => {
     consecutiveLoginDays: 0,
     totalLoginDays: 0,
   });
+  const [signinStatus, setSigninStatus] = useState<any>(null);
   const [formValues, setFormValues] = useState({
     name: "",
     password: "",
@@ -107,12 +108,47 @@ const Profile = () => {
       
       const historyResp = await api.get(`/users/${id}/recharge-records`);
       setHistory(historyResp.data);
+      // load sign-in status
+      try {
+        const resp = await userAPI.getSigninStatus(id);
+        setSigninStatus(resp.data);
+      } catch (err) {
+        console.error('Failed to load signin status', err);
+      }
       refreshAchievements(data);
     } catch (error) {
       console.error(error);
       setMessage("無法讀取使用者資料，請稍後再試。");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSigninStatus = async (id: number) => {
+    try {
+      const resp = await userAPI.getSigninStatus(id);
+      setSigninStatus(resp.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSignin = async () => {
+    if (!user) return;
+    try {
+      setSaving(true);
+      const resp = await userAPI.signin(user.id);
+      const data = resp.data;
+      // update user points and streak
+      const updatedUserResp = await api.get(`/users/${user.id}`);
+      setUser(updatedUserResp.data);
+      await loadSigninStatus(user.id);
+      setMessage(`已簽到 +${data.points_awarded} 點，連續第 ${data.consecutive_login_days} 天`);
+      refreshAchievements(updatedUserResp.data);
+    } catch (err: any) {
+      setMessage(err.response?.data?.detail || '簽到失敗，請稍後再試。');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -170,19 +206,55 @@ const Profile = () => {
     }
   };
 
-  const submitEcpayCheckout = (plan: { title: string; points: number; price: number }) => {
+  const submitEcpayCheckout = async (plan: { title: string; points: number; price: number }) => {
     if (!user) return;
-    const orderId = `AHA${user.id}${Date.now().toString().slice(-10)}`;
-    const payload = {
-      MerchantTradeNo: orderId,
-      MerchantTradeDate: new Date().toLocaleString("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).replace(/\//g, "/"),
-      TotalAmount: plan.price,
-      TradeDesc: "AHa AI 點數儲值",
-      ItemName: plan.title,
-      ReturnURL: `${API_BASE_URL}/ecpay/return`,
-      ClientBackURL: window.location.href,
-    };
-    alert("綠界跳轉中...");
+    
+    try {
+      setSaving(true);
+      setMessage("準備跳轉至綠界科技付款頁面...");
+      
+      // 1. 呼叫後端 API 取得 CheckMacValue 與訂單資訊
+      // 測試提醒：若要測試真實回傳入帳，請將下方 ReturnURL 改為您的 ngrok 公開網址
+      const NGROK_URL = "https://44b6-120-113-180-156.ngrok-free.app"; 
+      const currentReturnURL = `${NGROK_URL}/ecpay/return`;
+
+      const response = await api.post("/api/ecpay/checkout", {
+        user_id: user.id,
+        TotalAmount: plan.price,
+        ItemName: plan.title,
+        ReturnURL: currentReturnURL,
+        ClientBackURL: window.location.href,
+        plan_id: plan.title
+      });
+      
+      const { params } = response.data;
+      
+      // 2. 建立動態表單並自動提交至綠界測試環境 (Stage)
+      const ecpayUrl = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5";
+      
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = ecpayUrl;
+      form.style.display = "none";
+      
+      // 使用後端回傳的完整參數，避免前端硬編碼造成 CheckMacValue 錯誤
+      Object.keys(params).forEach((key) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = key;
+        input.value = params[key].toString();
+        form.appendChild(input);
+      });
+      
+      document.body.appendChild(form);
+      form.submit(); // 正式跳轉
+      
+    } catch (err: any) {
+      console.error("ECPay Checkout Error:", err);
+      setMessage("啟動支付失敗，請稍後再試。");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <div className="page-loading">正在讀取個人帳戶資料...</div>;
@@ -204,7 +276,14 @@ const Profile = () => {
         <div className="dashboard-highlight-card">
           <span>Current Points</span>
           <strong>{user?.points.toLocaleString() ?? 0}</strong>
-          {accumulatedPoints > 0 ? (
+          <button 
+            onClick={() => setShowTopup(true)}
+            className="page-primary-button"
+            style={{ marginTop: '12px', width: '100%', justifyContent: 'center' }}
+          >
+            💎 點數儲值
+          </button>
+          {accumulatedPoints > 0 && (
             <button 
               onClick={handleClaimPoints} 
               disabled={saving}
@@ -222,10 +301,8 @@ const Profile = () => {
                 width: '100%'
               }}
             >
-              {saving ? '領取中...' : `領取 (${accumulatedPoints})`}
+              {saving ? '領取中...' : `領取獎勵 (${accumulatedPoints})`}
             </button>
-          ) : (
-            <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#64748b' }}>目前無可領取獎勵</p>
           )}
         </div>
       </section>
@@ -264,6 +341,48 @@ const Profile = () => {
                   <button type="submit" disabled={saving} className="page-primary-button">{saving ? "儲存中..." : "更新個人資料"}</button>
                 </div>
               </form>
+            </section>
+
+            <section className="panel-card signin-panel">
+              <div className="panel-header">
+                <div>
+                  <div className="page-eyebrow">Daily Check-in</div>
+                  <h2>每日簽到</h2>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: '0.9rem', color: '#64748b' }}>{signinStatus ? `連續 ${signinStatus.cycle_day || 0} 天` : ''}</div>
+                  <button
+                    onClick={handleSignin}
+                    disabled={saving || (signinStatus && signinStatus.signed_today)}
+                    className="page-primary-button"
+                  >
+                    {signinStatus && signinStatus.signed_today ? '已簽到' : '簽到'}
+                  </button>
+                </div>
+              </div>
+              <div style={{ padding: '12px 18px' }}>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-end' }}>
+                  {(signinStatus?.rewards || Array.from({ length: 7 }, (_, i) => ({ day: i + 1, points: [20,20,25,20,20,20,30][i], checked: false }))).map((d: any) => (
+                    <div key={d.day} style={{ textAlign: 'center' }}>
+                      <div style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: 12,
+                        background: d.checked ? 'linear-gradient(180deg,#facc15,#f59e0b)' : '#fff7ed',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: d.checked ? '0 6px 18px rgba(250, 204, 21, 0.18)' : '0 1px 3px rgba(15,23,42,0.06)'
+                      }}>
+                        <div style={{ textAlign: 'center' }}>
+                          {d.checked ? <div style={{ fontSize: 18, fontWeight: 800 }}>✓</div> : <div style={{ fontSize: 14, color: '#92400e', fontWeight: 700 }}>Day{d.day}</div>}
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 12, color: '#92400e', fontWeight: 700 }}>{d.points} pts</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </section>
 
             <section className="panel-card achievement-panel">

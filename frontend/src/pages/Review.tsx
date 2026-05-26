@@ -132,7 +132,7 @@ const Review = () => {
       datasets: [
         {
           label: "當前能力分布",
-          data: labels.map(l => stats[l] ? (stats[l].passed / stats[l].total) * 100 : Math.random() * 20 + 30),
+          data: labels.map(l => stats[l] ? (stats[l].passed / stats[l].total) * 100 : 20),
           backgroundColor: "rgba(129, 140, 248, 0.2)",
           borderColor: "#818cf8",
           borderWidth: 2,
@@ -301,7 +301,7 @@ const Review = () => {
       {loading && <div className="page-loading">正在載入紀錄...</div>}
 
       {!loading && !selectedResult && results.length > 0 && (
-        <section className="dashboard-grid" style={{ marginBottom: '40px', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))' }}>
+        <section className="dashboard-grid" style={{ marginBottom: '40px', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
           <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
             <h2 style={{ marginBottom: '15px', fontSize: '1.1em', color: '#2bc1f1' }}>學習進度曲線</h2>
             <div style={{ height: '250px' }}>
