@@ -2,7 +2,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import json
+import os
 import re
+import sys
 import html
 import math
 from urllib.parse import quote, quote_plus
@@ -28,43 +30,21 @@ except ImportError:
     except ImportError:
         fitz = None
 
-try:
-    from . import ai_analyzer, code_compiler, database, learning_pipeline, models, schema
-except ImportError:
-    import ai_analyzer
-    import code_compiler
-    import database
-    import learning_pipeline
-    import models
-    import schema
+# Ensure backend root is in sys.path
+backend_path = os.path.dirname(os.path.abspath(__file__))
+if backend_path not in sys.path:
+    sys.path.append(backend_path)
 
-# --- Helper Functions ---
+import database
+import models
+import auth_schemas
+import schema
+import ai_analyzer
+import code_compiler
+from routers import auth, users, videos, documents, quizzes, payments, ai
 
-def extract_youtube_title(url: str) -> str:
-    try:
-        if "youtube.com/watch?v=" in url:
-            video_id = url.split("v=")[1].split("&")[0]
-            return f"YouTube Video - {video_id}"
-        if "youtu.be/" in url:
-            video_id = url.split("youtu.be/")[1].split("?")[0]
-            return f"YouTube Video - {video_id}"
-        if "youtube.com/playlist?list=" in url:
-            playlist_id = url.split("list=")[1].split("&")[0]
-            return f"YouTube Playlist - {playlist_id}"
-        return "YouTube Video"
-    except Exception:
-        return "YouTube Video"
-
-
-def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-    return hashed.decode("utf-8")
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
-
+load_dotenv()
+load_dotenv("API_key.env")
 
 def ensure_database_columns() -> None:
     schema_updates = [
@@ -95,37 +75,6 @@ def ensure_database_columns() -> None:
         connection.execute(text("ALTER TABLE users ALTER COLUMN role SET DEFAULT 1"))
         connection.execute(text("ALTER TABLE users ALTER COLUMN role SET NOT NULL"))
 
-# --- Pydantic Models for ECPay ---
-
-class EcpayCheckoutRequest(BaseModel):
-    MerchantTradeNo: str
-    MerchantTradeDate: str
-    TotalAmount: int
-    TradeDesc: str
-    ItemName: str
-    ReturnURL: str
-    ClientBackURL: Optional[str] = None
-    CustomField1: Optional[str] = None
-    CustomField2: Optional[str] = None
-
-class EcpayCheckoutResponse(BaseModel):
-    CheckMacValue: str
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-class LoginResponse(BaseModel):
-    user: schema.UserResponse
-    message: str
-
-class RegisterRequest(BaseModel):
-    name: str
-    email: str
-    password: str
-
-# --- FastAPI Initialization ---
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -139,7 +88,7 @@ async def lifespan(app: FastAPI):
                     id=1,
                     name="wei",
                     email="wei@gmail.com",
-                    password=hash_password("password"),
+                    password=auth_schemas.hash_password("password"),
                     uid="UID-20260419",
                     points=10000,
                 )
@@ -169,64 +118,20 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", "http://localhost:5173", "http://localhost:5174",
-        "http://localhost:5175", "http://localhost:5176", "http://localhost:5177",
-        "http://localhost:5178", "http://127.0.0.1:5173", "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- ECPay Config ---
-ECPAY_MERCHANT_ID = "2000132"
-ECPAY_HASH_KEY = "5294y06JbISpM5x9"
-ECPAY_HASH_IV = "v77hoKGq4kWxNNIS"
-
-def generate_ecpay_check_mac_value(params: Dict[str, Any]) -> str:
-    filtered_params = {k: str(v) for k, v in params.items() if k != "CheckMacValue" and v is not None and str(v).strip() != ""}
-    if "MerchantID" not in filtered_params: filtered_params["MerchantID"] = ECPAY_MERCHANT_ID
-    sorted_keys = sorted(filtered_params.keys())
-    raw_list = [f"{k}={filtered_params[k]}" for k in sorted_keys]
-    raw_str = f"HashKey={ECPAY_HASH_KEY}&{'&'.join(raw_list)}&HashIV={ECPAY_HASH_IV}"
-    encoded_str = quote_plus(raw_str).lower().replace("%2d", "-").replace("%5f", "_").replace("%2e", ".").replace("%21", "!").replace("%2a", "*").replace("%28", "(").replace("%29", ")").replace("%7e", "~")
-    import hashlib
-    encrypt_type = params.get("EncryptType", 1)
-    if str(encrypt_type) == "0": return hashlib.md5(encoded_str.encode("utf-8")).hexdigest().upper()
-    return hashlib.sha256(encoded_str.encode("utf-8")).hexdigest().upper()
-
-# --- Achievement Logic ---
-
-def calculate_total_achievement_points(user: models.User, db: Session) -> int:
-    video_count = db.query(models.Video).filter(models.Video.user_id == user.id, models.Video.outline != None).count()
-    quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user.id).all()
-    question_count = sum(r.total_questions for r in quiz_results) if quiz_results else 0
-    total = 0
-    for threshold in [1, 5, 10]:
-        if video_count >= threshold: total += 200
-    for threshold in [1, 5, 15, 30, 50, 100]:
-        if question_count >= threshold: total += 30
-    for threshold, pts in {1: 20, 7: 30, 30: 100, 60: 200, 100: 300}.items():
-        if threshold == 7:
-            if user.consecutive_login_days >= 7: total += pts
-        elif user.total_login_days >= threshold: total += pts
-    return total
-
-@app.post("/users/{user_id}/claim-achievement-points", response_model=schema.UserResponse)
-def claim_achievement_points(user_id: int, db: Session = Depends(database.get_db)):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None: raise HTTPException(status_code=404, detail="User not found")
-    total_unlocked = calculate_total_achievement_points(user, db)
-    already_claimed = user.claimed_achievement_points or 0
-    if total_unlocked <= already_claimed: raise HTTPException(status_code=400, detail="目前沒有新的成就獎勵可以領取。")
-    user.points += (total_unlocked - already_claimed)
-    user.claimed_achievement_points = total_unlocked
-    db.commit(); db.refresh(user)
-    return user
-
-# --- Routes ---
+# Include Routers
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(videos.router)
+app.include_router(documents.router)
+app.include_router(quizzes.router)
+app.include_router(payments.router)
+app.include_router(ai.router)
 
 @app.get("/")
 def read_root(): return {"message": "AHa AI API Server is running", "status": "ok"}
@@ -237,16 +142,17 @@ def gemini_health_check():
     except Exception as exc: raise HTTPException(status_code=503, detail=f"Gemini connection failed: {exc}")
 
 @app.post("/auth/register", response_model=schema.UserResponse)
-def register_user(payload: RegisterRequest, db: Session = Depends(database.get_db)):
+def register_user(payload: auth_schemas.RegisterRequest, db: Session = Depends(database.get_db)):
     if db.query(models.User).filter(models.User.email == payload.email).first(): raise HTTPException(status_code=400, detail="Email exists")
-    new_user = models.User(name=payload.name, email=payload.email, password=hash_password(payload.password), uid=f"UID-{datetime.now():%Y%m%d%H%M}", points=0)
+    new_user = models.User(name=payload.name, email=payload.email, password=auth_schemas.hash_password(payload.password), uid=f"UID-{datetime.now():%Y%m%d%H%M}", points=0)
     db.add(new_user); db.commit(); db.refresh(new_user)
     return new_user
 
-@app.post("/auth/login", response_model=LoginResponse)
-def login_user(payload: LoginRequest, db: Session = Depends(database.get_db)):
+@app.post("/auth/login", response_model=auth_schemas.LoginResponse)
+def login_user(payload: auth_schemas.LoginRequest, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.password): raise HTTPException(status_code=401, detail="Invalid email/password")
+    if not user or not auth_schemas.verify_password(payload.password, user.password): raise HTTPException(status_code=401, detail="Invalid email/password")
+
     today = datetime.now().date().isoformat()
     if user.last_login_date != today:
         if user.last_login_date == (datetime.now().date() - timedelta(days=1)).isoformat(): user.consecutive_login_days += 1
@@ -284,7 +190,7 @@ def update_user(user_id: int, payload: schema.UserUpdate, db: Session = Depends(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user: raise HTTPException(status_code=404, detail="User not found")
     user.name = payload.name; user.email = payload.email
-    if payload.password: user.password = hash_password(payload.password)
+    if payload.password: user.password = auth_schemas.hash_password(payload.password)
     if payload.current_quiz_draft is not None: user.current_quiz_draft = payload.current_quiz_draft
     db.commit(); db.refresh(user)
     return user

@@ -72,4 +72,3 @@ if __name__ == "__main__":
     test_params["CheckMacValue"] = calculated_mac
     is_valid = verify_check_mac_value(test_params, hash_key, hash_iv)
     print(f"Verify Result: {is_valid}")
-
