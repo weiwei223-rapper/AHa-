@@ -249,16 +249,6 @@ const Review = () => {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
-    e.stopPropagation();
-    if (!window.confirm("確定要刪除這筆測驗紀錄嗎？")) return;
-    try {
-      await quizAPI.deleteResult(id);
-      setResults(results.filter((r) => r.id !== id));
-    } catch (err) {
-      alert("刪除失敗");
-    }
-  };
 
   const renderDetails = (detailsJson: string | null | undefined) => {
     if (!detailsJson) return <p>無詳細作答資料</p>;
@@ -371,7 +361,6 @@ const Review = () => {
               </div>
               <div className="video-library-actions" style={{ marginTop: '12px' }}>
                 <button className="page-primary-button" style={{ flex: 1 }}>查看詳情</button>
-                <button className="page-secondary-button" style={{ color: '#fb7185', borderColor: '#fb7185' }} onClick={(e) => handleDelete(e, res.id)}>刪除紀錄</button>
               </div>
             </article>
           ))}

@@ -3,6 +3,7 @@ import { chatAPI, feedbackAPI, videoAPI } from '../api';
 import './PageIndex.css';
 import ChatDB from './ChatDB';
 import ReportModal from '../component/ReportModal';
+import { usePoints } from '../context/PointsContext';
 
 type MessageRole = 'user' | 'assistant';
 
@@ -58,6 +59,7 @@ const formatUpdatedAt = (value: string) => {
 };
 
 const Chat: React.FC = () => {
+  const { availablePoints, usePoints: deductPoints } = usePoints();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState('');
   const [input, setInput] = useState('');
@@ -220,6 +222,17 @@ const Chat: React.FC = () => {
   const handleSend = async () => {
     if (!activeSession || !input.trim() || loading) return;
     if (!activeSession.selectedVideoId) return;
+
+    if (availablePoints <= 0) {
+      setError('點數不足，請先儲值。');
+      return;
+    }
+
+    const success = deductPoints(1);
+    if (!success) {
+      setError('點數不足，請先儲值。');
+      return;
+    }
 
     const trimmedInput = input.trim();
     const userMessage: Message = { role: 'user', content: trimmedInput };
