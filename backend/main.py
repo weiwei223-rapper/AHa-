@@ -62,6 +62,7 @@ def ensure_database_columns() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS claimed_achievement_points INTEGER DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS error_report VARCHAR",
         "ALTER TABLE quiz_results ADD COLUMN IF NOT EXISTS error_report VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_checkin_date VARCHAR",
     ]
     with database.engine.begin() as connection:
         for update in schema_updates:
@@ -155,9 +156,6 @@ def login_user(payload: auth_schemas.LoginRequest, db: Session = Depends(databas
 
     today = datetime.now().date().isoformat()
     if user.last_login_date != today:
-        if user.last_login_date == (datetime.now().date() - timedelta(days=1)).isoformat(): user.consecutive_login_days += 1
-        else: user.consecutive_login_days = 1
-        user.total_login_days += 1
         user.last_login_date = today
         db.commit()
     return {"user": user, "message": f"Welcome back, {user.name}"}

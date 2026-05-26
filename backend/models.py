@@ -19,6 +19,7 @@ class User(Base):
     points = Column(Integer, default=0)
     role = Column(Integer, default=1, nullable=False)
     last_login_date = Column(String, nullable=True)
+    last_checkin_date = Column(String, nullable=True)
     consecutive_login_days = Column(Integer, default=0)
     total_login_days = Column(Integer, default=0)
     claimed_achievement_points = Column(Integer, default=0)

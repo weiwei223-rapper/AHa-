@@ -47,19 +47,20 @@ def claim_achievement_points(user_id: int, current_user: models.User = Depends(g
 def signin_status(user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     if current_user.id != user_id: raise HTTPException(status_code=403, detail="Forbidden")
     today = datetime.now().date().isoformat()
-    signed_today = (current_user.last_login_date == today)
+    signed_today = (current_user.last_checkin_date == today)
     cycle_day = get_cycle_day(current_user.consecutive_login_days)
     rewards = []
     for d in range(1, 8):
         rewards.append({
             "day": d,
             "points": SIGNIN_REWARDS.get(d, 0),
-            "checked": d <= cycle_day
+            "checked": d <= cycle_day and (signed_today or d < cycle_day)
         })
     return {
         "user_id": current_user.id,
         "points": current_user.points,
         "last_login_date": current_user.last_login_date,
+        "last_checkin_date": current_user.last_checkin_date,
         "consecutive_login_days": current_user.consecutive_login_days,
         "cycle_day": cycle_day,
         "signed_today": signed_today,
@@ -73,14 +74,14 @@ def signin(user_id: int, current_user: models.User = Depends(get_current_user), 
     today_date = datetime.now().date()
     today = today_date.isoformat()
     yesterday = (today_date - timedelta(days=1)).isoformat()
-    if current_user.last_login_date == today:
+    if current_user.last_checkin_date == today:
         raise HTTPException(status_code=400, detail="Already signed today")
-    if current_user.last_login_date == yesterday:
+    if current_user.last_checkin_date == yesterday:
         current_user.consecutive_login_days = (current_user.consecutive_login_days or 0) + 1
     else:
         current_user.consecutive_login_days = 1
     current_user.total_login_days = (current_user.total_login_days or 0) + 1
-    current_user.last_login_date = today
+    current_user.last_checkin_date = today
     cycle_day = get_cycle_day(current_user.consecutive_login_days)
     points_awarded = SIGNIN_REWARDS.get(cycle_day, 0)
     current_user.points = (current_user.points or 0) + points_awarded
@@ -97,6 +98,7 @@ def signin(user_id: int, current_user: models.User = Depends(get_current_user), 
         "consecutive_login_days": current_user.consecutive_login_days,
         "cycle_day": cycle_day,
         "last_login_date": current_user.last_login_date,
+        "last_checkin_date": current_user.last_checkin_date,
     }
 
 @router.get("/{user_id}", response_model=schema.UserResponse)

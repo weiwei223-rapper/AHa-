@@ -63,6 +63,7 @@ class UserResponse(BaseModel):
     uid: str
     points: int
     last_login_date: Optional[str] = None
+    last_checkin_date: Optional[str] = None
     consecutive_login_days: int = 0
     total_login_days: int = 0
     current_quiz_draft: Optional[str] = None
@@ -323,6 +324,7 @@ class SignInStatusResponse(BaseModel):
     user_id: int
     points: int
     last_login_date: Optional[str] = None
+    last_checkin_date: Optional[str] = None
     consecutive_login_days: int = 0
     cycle_day: int = 0
     signed_today: bool = False
@@ -336,3 +338,4 @@ class SignInResponse(BaseModel):
     consecutive_login_days: int
     cycle_day: int
     last_login_date: Optional[str] = None
+    last_checkin_date: Optional[str] = None

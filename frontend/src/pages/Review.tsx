@@ -112,20 +112,18 @@ const Review = () => {
 
     const stats: Record<string, { total: number; passed: number }> = {};
     recentDetails.forEach((d: any) => {
-      const concept = d.reference_concept || "基礎語法";
+      let concept = d.reference_concept || "基礎語法";
+      // Legacy mapping
+      if (concept === "關鍵字熟練") concept = "基礎語法";
+      if (concept === "邏輯運算") concept = "條件判斷";
+      if (concept === "函式架構") concept = "函式應用";
+
       if (!stats[concept]) stats[concept] = { total: 0, passed: 0 };
       stats[concept].total += 1;
       if (d.passed) stats[concept].passed += 1;
     });
 
-    const labels = Object.keys(stats).slice(0, 6);
-    const placeholders = ["資料處理", "邏輯控制", "函式應用", "物件導向", "異常處理"];
-    let i = 0;
-    while (labels.length < 5 && i < placeholders.length) {
-      const p = placeholders[i];
-      if (!labels.includes(p)) labels.push(p);
-      i++;
-    }
+    const labels = ["基礎語法", "條件判斷", "迴圈控制", "資料處理", "函式應用", "物件導向"];
 
     return {
       labels,

@@ -32,11 +32,6 @@ def login_user(payload: auth_schemas.LoginRequest, db: Session = Depends(databas
         raise HTTPException(status_code=401, detail="Invalid email/password")
     today = datetime.now().date().isoformat()
     if user.last_login_date != today:
-        if user.last_login_date == (datetime.now().date() - timedelta(days=1)).isoformat(): 
-            user.consecutive_login_days += 1
-        else: 
-            user.consecutive_login_days = 1
-        user.total_login_days += 1
         user.last_login_date = today
         db.commit()
     

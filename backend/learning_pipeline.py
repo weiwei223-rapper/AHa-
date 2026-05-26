@@ -178,12 +178,14 @@ def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, 
 部分內容：{snippet}
 
 出題要求：
-1. **題型混合要求**：請平均分配以下四種風格：
-   - 『關鍵字熟練』：針對 Python 保留字或內建函數。
-   - 『邏輯運算』：針對 if/while/for 邏輯判斷。
-   - 『資料處理』：針對串列、字典或字串切片。
-   - 『函式架構』：針對參數傳遞或回傳值。
-2. **嚴禁**使用 'class Solution' 或物件導向。
+1. **題型混合要求**：請從以下六種分類中挑選適合本次內容的主題出題：
+   - 『基礎語法』：針對 Python 基礎保留字、基本型態或內建函數。
+   - 『條件判斷』：針對 if/else/elif 邏輯。
+   - 『迴圈控制』：針對 for/while 迴圈。
+   - 『資料處理』：針對 List, Tuple, Dictionary 的操作與切片。
+   - 『函式應用』：針對 def 定義、參數傳遞與回傳值。
+   - 『物件導向』：針對 class 定義、屬性與方法。
+2. **嚴禁**使用 'class Solution' 這種 LeetCode 刷題風格。
 3. **嚴禁**使用 input()。
 4. 程式碼包含中文注釋。
 5. 填空處使用唯一的 `___`。
@@ -194,7 +196,7 @@ JSON 範例：
 [
   {{
     "question": "場景描述",
-    "reference_concept": "關鍵字熟練",
+    "reference_concept": "資料處理",
     "correct_answer": "...",
     "explanation": "...",
     "starter_code": "...",
