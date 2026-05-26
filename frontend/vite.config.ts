@@ -10,6 +10,7 @@ const backendProxy = {
 export default defineConfig({
   plugins: [react()],
   server: {
+    allowedHosts: true,   //允許所有 host（包含 ngrok 隨機網址）連線
     proxy: {
       '/api': backendProxy,
       '/auth': backendProxy,
