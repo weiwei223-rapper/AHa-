@@ -1,5 +1,7 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import logoIcon from "../assets/logo_v3.jpg";
+import api from "../api";
 
 interface LayoutProps {
   onLogout?: () => void;
@@ -38,9 +40,11 @@ const Layout = ({ onLogout }: LayoutProps) => {
           <NavLink to="/Profile" className={navClassName}>Profile</NavLink>
         </div>
 
-        <button onClick={handleLogout} className="workspace-logout-button">
-          Logout
-        </button>
+        <div className="workspace-sidebar-footer">
+          <button onClick={handleLogout} className="workspace-logout-button">
+            Logout
+          </button>
+        </div>
       </nav>
 
       <main className="workspace-main">

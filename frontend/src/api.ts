@@ -86,10 +86,11 @@ export const documentAPI = {
     api.get(`/api/documents/${docId}/analysis`, { params: { user_id: userId } }),
   generateQuiz: (docId: number, userId: number, count?: number) =>
     api.get(`/api/documents/${docId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
+  deleteDocument: (docId: number) => api.delete(`/api/documents/${docId}`),
 };
 
 export const feedbackAPI = {
-  createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null }) =>
+  createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null; video_id?: number | null }) =>
     api.post('/api/feedbacks', data),
   getFeedbacks: () => api.get('/api/feedbacks'),
   deleteConversation: (conversationId: string, userId: number) =>
@@ -108,6 +109,10 @@ export const quizAPI = {
     api.post('/api/quiz-drafts', data),
   deleteDraft: (videoId: number, userId: number) =>
     api.delete(`/api/quiz-drafts/${videoId}`, { params: { user_id: userId } }),
+  reportQuizError: (resultId: number, description: string) =>
+    api.post(`/api/quiz-results/${resultId}/report-error`, { description }),
+  updateResult: (resultId: number, data: { title: string }) =>
+    api.put(`/api/quiz-results/${resultId}`, data),
 };
 
 export const codeAPI = {

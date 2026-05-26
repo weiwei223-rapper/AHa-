@@ -83,3 +83,13 @@ def analyze_document(doc_id: int, current_user: models.User = Depends(get_curren
     except Exception as e: 
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{doc_id}")
+def delete_document(doc_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if not doc: raise HTTPException(status_code=404, detail="Document not found")
+    if doc.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
+    
+    db.delete(doc)
+    db.commit()
+    return {"message": "Document deleted successfully"}

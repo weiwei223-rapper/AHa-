@@ -5,7 +5,7 @@ import "./PageIndex.css";
 import heroImg from "../assets/hero.png";
 
 type UserStatusProps = {
-  name: string;
+  name?: string;
 };
 
 type Video = {
@@ -175,7 +175,7 @@ const Home = ({ name }: UserStatusProps) => {
       <section className="dashboard-hero">
         <div className="dashboard-hero-copy">
           <div className="page-eyebrow">AHa Learning Workspace</div>
-          <h1>Welcome back, {name}</h1>
+          <h1>Welcome back, {name || 'Learner'}</h1>
           <p>
             從影片、聊天到 AI 程式測驗，這裡是你目前的學習總覽。先看進度，再決定下一步要補哪一段。
           </p>

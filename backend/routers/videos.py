@@ -45,3 +45,13 @@ def create_video(payload: schema.VideoCreate, current_user: models.User = Depend
     video = models.Video(video_link=payload.video_link, title=payload.title or title, user_id=current_user.id)
     db.add(video); db.commit(); db.refresh(video)
     return video
+
+@router.delete("/{video_id}")
+def delete_video(video_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if not video: raise HTTPException(status_code=404, detail="Video not found")
+    if video.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
+    
+    db.delete(video)
+    db.commit()
+    return {"message": "Video deleted successfully"}

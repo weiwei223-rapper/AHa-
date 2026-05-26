@@ -91,6 +91,13 @@
   color: #ffffff !important; /* 強制設定為白色 */
 }
 
+.workspace-sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .workspace-main {
   margin-left: 240px;
   min-height: 100vh;

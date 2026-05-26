@@ -178,6 +178,28 @@ const Video = () => {
     }
   };
 
+  const handleDeleteVideo = async (videoId: number) => {
+    if (!window.confirm("確定要刪除此影片嗎？")) return;
+    try {
+      await videoAPI.deleteVideo(videoId);
+      setVideos((prev) => prev.filter((v) => v.id !== videoId));
+      window.dispatchEvent(new CustomEvent('video-updated', { detail: { userId } }));
+    } catch (err) {
+      alert("刪除影片失敗");
+    }
+  };
+
+  const handleDeleteDoc = async (docId: number) => {
+    if (!window.confirm("確定要刪除此文件嗎？")) return;
+    try {
+      await documentAPI.deleteDocument(docId);
+      setDocs((prev) => prev.filter((d) => d.id !== docId));
+      window.dispatchEvent(new CustomEvent('video-updated', { detail: { userId } }));
+    } catch (err) {
+      alert("刪除文件失敗");
+    }
+  };
+
   return (
     <div className="page-shell">
       <section className="page-hero">
@@ -265,6 +287,7 @@ const Video = () => {
                   setIsReportModalOpen(true);
                 }} className="page-secondary-button">Report</button>
                 <button onClick={() => handleOpenQuiz(v.id, 'video')} className="page-primary-button">Quiz</button>
+                <button onClick={() => handleDeleteVideo(v.id)} className="page-secondary-button" style={{ color: '#ef4444' }}>Delete</button>
               </div>
             </article>
           ))
@@ -280,6 +303,7 @@ const Video = () => {
                   {actionId === d.id ? "分析中..." : "Analyze"}
                 </button>
                 <button onClick={() => handleOpenQuiz(d.id, 'pdf')} className="page-primary-button">Quiz</button>
+                <button onClick={() => handleDeleteDoc(d.id)} className="page-secondary-button" style={{ color: '#ef4444' }}>Delete</button>
               </div>
             </article>
           ))
