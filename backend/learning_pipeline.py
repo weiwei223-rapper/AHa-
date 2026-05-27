@@ -171,38 +171,39 @@ def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, 
     
     prompt = f"""
 [SYSTEM: RETURN RAW JSON ARRAY ONLY. NO TEXT AROUND IT.]
-你是一位專業的 Python 導師。請根據提供內容產出 {count} 題「直覺式」的程式填空題。
+你是一位專業的 Python 導師。請根據提供內容產出 {count} 題適合「紙筆測驗」的手寫填空題。
 
 標題：{title}
 重點摘要：{outline}
 部分內容：{snippet}
 
-出題要求：
-1. **題型混合要求**：請從以下六種分類中挑選適合本次內容的主題出題：
-   - 『基礎語法』：針對 Python 基礎保留字、基本型態或內建函數。
-   - 『條件判斷』：針對 if/else/elif 邏輯。
-   - 『迴圈控制』：針對 for/while 迴圈。
-   - 『資料處理』：針對 List, Tuple, Dictionary 的操作與切片。
-   - 『函式應用』：針對 def 定義、參數傳遞與回傳值。
-   - 『物件導向』：針對 class 定義、屬性與方法。
-2. **嚴禁**使用 'class Solution' 這種 LeetCode 刷題風格。
-3. **嚴禁**使用 input()。
-4. 程式碼包含中文注釋。
-5. 填空處使用唯一的 `___`。
-6. 提供 **精確 3 個** `print()` 測試案例。
+出題要求（手寫題導向）：
+1. **題型混合要求**：請平均分配以下四種風格：
+   - 『關鍵字熟練』：針對 Python 保留字或內建函數（考查手寫拼字與語法精準度）。
+   - 『邏輯運算』：針對 if/while/for 邏輯判斷與邊界條件。
+   - 『資料處理』：針對串列、字典操作或字串切片（考查手寫索引值的計算）。
+   - 『函式架構』：針對參數傳遞、預設值或回傳值架構。
+2. **手寫題規格**：
+   - 程式碼必須是一個完整、可閱讀的獨立情境（非片段），讓學生能一眼看懂這段程式的邏輯。
+   - 填空處使用唯一的 `___`，該填空處應為「一個關鍵字」、「一個運算式」或「一個變數」，避免讓學生手寫過長的程式碼。
+3. **嚴禁**使用 'class Solution' 或物件導向。
+4. **嚴禁**使用 input()。
+5. 程式碼必須包含中文註釋以引導解題。
+6. **手寫輸出追蹤**：除了程式碼填空外，每題必須設計「當此程式執行時，預期在螢幕上印出的正確結果」，用以模擬手寫考卷中的「看 code 寫出輸出結果」題型。
 7. 使用繁體中文。
 
-JSON 範例：
+JSON 格式要求：
 [
-  {{
-    "question": "場景描述",
-    "reference_concept": "資料處理",
-    "correct_answer": "...",
-    "explanation": "...",
-    "starter_code": "...",
-    "test_cases": ["print(...)"]
-  }}
+  {
+    "question": "題目情境與手寫引導說明",
+    "reference_concept": "關鍵字熟練 / 邏輯運算 / 資料處理 / 函式架構",
+    "correct_answer": "填空處的正確程式碼（答案）",
+    "expected_output": "填空完成後，該段程式碼完整執行會印出的標準輸出（手寫閱卷用）",
+    "explanation": "針對該填空原理與手寫易錯點的詳細解析",
+    "starter_code": "含有 ___ 的完整程式碼（包含最後用來檢驗輸出的 print 行）"
+  }
 ]
+
 """
     try:
         payload, usage = _call_llm(prompt)
