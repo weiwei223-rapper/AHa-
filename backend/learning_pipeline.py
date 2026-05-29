@@ -194,15 +194,16 @@ def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, 
 
 JSON 格式要求：
 [
-  {
+  {{
     "question": "題目情境與手寫引導說明",
     "reference_concept": "關鍵字熟練 / 邏輯運算 / 資料處理 / 函式架構",
     "correct_answer": "填空處的正確程式碼（答案）",
     "expected_output": "填空完成後，該段程式碼完整執行會印出的標準輸出（手寫閱卷用）",
     "explanation": "針對該填空原理與手寫易錯點的詳細解析",
     "starter_code": "含有 ___ 的完整程式碼（包含最後用來檢驗輸出的 print 行）"
-  }
+  }}
 ]
+
 
 """
     try:

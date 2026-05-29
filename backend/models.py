@@ -66,6 +66,7 @@ class Document(Base):
     content_text = Column(Text, nullable=True)
     outline = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    error_report = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
     uploader = relationship("User", back_populates="documents")

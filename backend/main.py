@@ -62,6 +62,7 @@ def ensure_database_columns() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS claimed_achievement_points INTEGER DEFAULT 0",
         "ALTER TABLE videos ADD COLUMN IF NOT EXISTS error_report VARCHAR",
         "ALTER TABLE quiz_results ADD COLUMN IF NOT EXISTS error_report VARCHAR",
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS error_report VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_checkin_date VARCHAR",
     ]
     with database.engine.begin() as connection:

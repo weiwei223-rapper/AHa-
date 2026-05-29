@@ -51,6 +51,7 @@ class DocumentResponse(BaseModel):
     content_text: Optional[str] = None
     outline: Optional[str] = None
     user_id: int
+    error_report: Optional[str] = None
     created_at: datetime
 
     class Config:

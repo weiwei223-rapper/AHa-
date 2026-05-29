@@ -1,12 +1,13 @@
 import math
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 import models
 import database
 import schema
 import ai_analyzer
 import learning_pipeline
+from report_utils import process_error_report_task
 from auth_utils import get_current_user
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
@@ -55,3 +56,14 @@ def delete_video(video_id: int, current_user: models.User = Depends(get_current_
     db.delete(video)
     db.commit()
     return {"message": "Video deleted successfully"}
+
+@router.post("/{video_id}/report-error", response_model=schema.VideoResponse)
+def report_video_error(video_id: int, payload: schema.ErrorReportRequest, background_tasks: BackgroundTasks, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if not video: raise HTTPException(status_code=404, detail="Video not found")
+    if video.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
+    video.error_report = payload.error_report
+    db.commit(); db.refresh(video)
+    
+    background_tasks.add_task(process_error_report_task, video.id, "video", current_user.id)
+    return video

@@ -222,7 +222,7 @@ const Profile = () => {
       
       // 1. 呼叫後端 API 取得 CheckMacValue 與訂單資訊
       // 測試提醒：若要測試真實回傳入帳，請將下方 ReturnURL 改為您的 ngrok 公開網址
-      const NGROK_URL = "https://b247-120-113-180-156.ngrok-free.app"; 
+      const NGROK_URL = "https://22bb-120-113-201-195.ngrok-free.app"; 
       const currentReturnURL = `${NGROK_URL}/ecpay/return`;
 
       const response = await api.post("/api/ecpay/checkout", {

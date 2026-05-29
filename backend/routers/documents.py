@@ -1,12 +1,13 @@
 import math
 from typing import List
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 import models
 import database
 import schema
 import learning_pipeline
+from report_utils import process_error_report_task
 from auth_utils import get_current_user
 
 # --- Helper for PDF ---
@@ -93,3 +94,14 @@ def delete_document(doc_id: int, current_user: models.User = Depends(get_current
     db.delete(doc)
     db.commit()
     return {"message": "Document deleted successfully"}
+
+@router.post("/{doc_id}/report-error", response_model=schema.DocumentResponse)
+def report_document_error(doc_id: int, payload: schema.ErrorReportRequest, background_tasks: BackgroundTasks, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+    if not doc: raise HTTPException(status_code=404, detail="Document not found")
+    if doc.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
+    doc.error_report = payload.error_report
+    db.commit(); db.refresh(doc)
+    
+    background_tasks.add_task(process_error_report_task, doc.id, "document", current_user.id)
+    return doc

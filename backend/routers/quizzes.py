@@ -1,7 +1,7 @@
 import json
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import models
@@ -9,6 +9,9 @@ import database
 import schema
 import learning_pipeline
 import code_compiler
+import ai_analyzer
+import email_service
+from report_utils import process_error_report_task
 from auth_utils import get_current_user
 
 router = APIRouter(prefix="/api", tags=["quizzes"])
@@ -100,3 +103,14 @@ def upsert_quiz_draft(payload: schema.QuizDraftBase, current_user: models.User =
 def delete_quiz_draft(video_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     db.query(models.QuizDraft).filter(models.QuizDraft.user_id == current_user.id, or_(models.QuizDraft.video_id == video_id, models.QuizDraft.document_id == video_id)).delete()
     db.commit(); return {"message": "Deleted"}
+
+@router.post("/quiz-results/{result_id}/report-error", response_model=schema.QuizResultResponse)
+def report_quiz_error(result_id: int, payload: schema.ErrorReportRequest, background_tasks: BackgroundTasks, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    res = db.query(models.QuizResult).filter(models.QuizResult.id == result_id).first()
+    if not res: raise HTTPException(status_code=404, detail="Quiz result not found")
+    if res.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
+    res.error_report = payload.error_report
+    db.commit(); db.refresh(res)
+    
+    background_tasks.add_task(process_error_report_task, res.id, "quiz", current_user.id)
+    return res
