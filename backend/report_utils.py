@@ -19,6 +19,10 @@ def process_error_report_task(report_id: int, report_type: str, user_id: int):
             res = db.query(models.Document).filter(models.Document.id == report_id).first()
             source_content = res.outline or ""
             item_title = res.title or "文件大綱"
+        elif report_type == "feedback":
+            res = db.query(models.AIFeedback).filter(models.AIFeedback.id == report_id).first()
+            source_content = res.ai_message or ""
+            item_title = "AI 聊天回覆"
         else: return
 
         user = db.query(models.User).filter(models.User.id == user_id).first()

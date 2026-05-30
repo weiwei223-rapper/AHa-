@@ -92,7 +92,7 @@ export const documentAPI = {
 };
 
 export const feedbackAPI = {
-  createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null; video_id?: number | null }) =>
+  createFeedback: (data: { user_id: number; ai_message: string; user_message: string; error_report?: string | null; video_id?: number | null; document_id?: number | null }) =>
     api.post('/api/feedbacks', data),
   getFeedbacks: () => api.get('/api/feedbacks'),
   deleteConversation: (conversationId: string, userId: number) =>

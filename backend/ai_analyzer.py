@@ -155,14 +155,14 @@ def get_chat_response(messages: list[dict]) -> str:
     return text
 
 
-def is_python_related(title: str, transcript: str) -> bool:
+def is_python_related(title: str, content: str, content_type: str = "影片") -> bool:
     """Use Gemini to determine if the content is related to Python programming."""
     prompt = f"""
-請判斷以下影片內容是否與「Python 程式設計」有關。
+請判斷以下{content_type}內容是否與「Python 程式設計」有關。
 這包括：Python 語法、開發環境、資料科學、自動化腳本、Web 開發 (Django/Flask) 或任何 Python 相關教學。
 
-影片標題：{title}
-影片內容摘要：{transcript[:1000]}
+{content_type}標題：{title}
+{content_type}內容摘要：{content[:1500]}
 
 要求：
 1. 如果有關聯，請回傳：VALID
@@ -172,13 +172,13 @@ def is_python_related(title: str, transcript: str) -> bool:
     try:
         response_text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
         decision = response_text.strip().upper()
-        print(f"DEBUG: Video validation AI response: '{decision}'")
+        print(f"DEBUG: {content_type} validation AI response: '{decision}'")
         
         if "INVALID" in decision:
             return False
         return "VALID" in decision
     except Exception as e:
-        print(f"DEBUG: Video validation AI failed: {e}")
+        print(f"DEBUG: {content_type} validation AI failed: {e}")
         return True
 
 
@@ -335,10 +335,14 @@ def generate_fallback_questions(
 def validate_error_report(report_content: str, source_content: str, report_type: str) -> tuple[bool, str]:
     """
     使用 AI 判斷錯誤回報是否屬實，並返回判定結果與理由。
-    report_type: 'outline' (大綱/分析) 或 'quiz' (題目)
+    report_type: 'outline' (大綱/分析), 'quiz' (題目) 或 'feedback' (AI 聊天回覆)
     """
+    type_name = "大綱/分析"
+    if report_type == "quiz": type_name = "測驗題目"
+    elif report_type == "feedback": type_name = "AI 聊天回覆"
+
     prompt = f"""
-你是一個公正的品質審核員。使用者針對 AI 生成的「{ "大綱/分析" if report_type == "outline" else "測驗題目" }」提交了錯誤回報。
+你是一個公正的品質審核員。使用者針對 AI 生成的「{type_name}」提交了錯誤回報。
 請根據提供的「原始生成內容」與「使用者回報內容」，判斷該回報是否「符合邏輯且屬實」。
 
 原始生成內容：

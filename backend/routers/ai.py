@@ -1,13 +1,53 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 import models
 import database
 import schema
 import ai_analyzer
 import code_compiler
+from report_utils import process_error_report_task
 from auth_utils import get_current_user
 
 router = APIRouter(tags=["ai"])
+
+@router.post("/api/feedbacks", response_model=schema.AIFeedbackResponse)
+def create_feedback(payload: schema.AIFeedbackCreate, background_tasks: BackgroundTasks, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    feedback = models.AIFeedback(
+        user_id=current_user.id,
+        video_id=payload.video_id,
+        document_id=payload.document_id,
+        ai_message=payload.ai_message,
+        user_message=payload.user_message,
+        error_report=payload.error_report
+    )
+    db.add(feedback)
+    db.commit()
+    db.refresh(feedback)
+    
+    if payload.user_message == "USER_ERROR_REPORT" and payload.error_report:
+        background_tasks.add_task(process_error_report_task, feedback.id, "feedback", current_user.id)
+        
+    return feedback
+
+@router.get("/api/feedbacks", response_model=List[schema.AIFeedbackResponse])
+def get_feedbacks(current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    # 這裡可以考慮是否只回傳該使用者的回饋，但根據 ChatDB.tsx 的邏輯，它在 frontend 過濾 user_id
+    # 為了效能與隱私，最好在後端過濾
+    return db.query(models.AIFeedback).filter(models.AIFeedback.user_id == current_user.id).all()
+
+@router.delete("/api/feedbacks/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str, user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    # 根據 frontend 邏輯，conversation_id 儲存在 error_report 中，格式為 "chat-session:{id}"
+    prefix = f"chat-session:{conversation_id}"
+    db.query(models.AIFeedback).filter(
+        models.AIFeedback.user_id == current_user.id,
+        models.AIFeedback.error_report.like(f"{prefix}%")
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": "Conversation deleted"}
 
 @router.get("/api/health/gemini", response_model=schema.GeminiHealthResponse)
 def gemini_health_check():

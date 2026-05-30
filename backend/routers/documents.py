@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 import models
 import database
 import schema
+import ai_analyzer
 import learning_pipeline
 from report_utils import process_error_report_task
 from auth_utils import get_current_user
@@ -41,9 +42,13 @@ async def upload_document(file: UploadFile = File(...), current_user: models.Use
         if not text_content.strip():
             raise ValueError("無法從此 PDF 中提取文字內容。請確認該 PDF 並非純圖片掃描檔，或是具備可搜尋文字。")
 
+        title = file.filename.rsplit(".", 1)[0]
+        if not ai_analyzer.is_python_related(title, text_content, content_type="文件"):
+            raise HTTPException(status_code=400, detail="僅支援 Python 相關文件內容")
+
         doc_model = models.Document(
             filename=file.filename,
-            title=file.filename.rsplit(".", 1)[0],
+            title=title,
             content_text=text_content,
             user_id=current_user.id
         )
@@ -53,6 +58,7 @@ async def upload_document(file: UploadFile = File(...), current_user: models.Use
         return doc_model
     except Exception as e:
         db.rollback()
+        if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("", response_model=List[schema.DocumentResponse])

@@ -390,23 +390,6 @@ const Chat: React.FC = () => {
       </aside>
 
       <section className="chat-panel">
-        <div className="chat-hero">
-          <div className="chat-hero-copy">
-            <div className="chat-hero-label">Powered by AHa AI</div>
-            <h1>聊天工作台</h1>
-          </div>
-          <div className="chat-hero-stats">
-            <div className="chat-stat-card">
-              <span>Conversations</span>
-              <strong>{sessions.length}</strong>
-            </div>
-            <div className="chat-stat-card">
-              <span>Messages</span>
-              <strong>{activeSession?.messages.length ?? 0}</strong>
-            </div>
-          </div>
-        </div>
-
         <div className="chat-thread-shell">
           <div className="chat-thread-header">
             <div>

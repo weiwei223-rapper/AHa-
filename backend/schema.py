@@ -94,6 +94,8 @@ class AIFeedbackCreate(BaseModel):
 class AIFeedbackResponse(BaseModel):
     id: int
     user_id: int
+    video_id: Optional[int] = None
+    document_id: Optional[int] = None
     ai_message: str
     user_message: str
     error_report: Optional[str] = None
