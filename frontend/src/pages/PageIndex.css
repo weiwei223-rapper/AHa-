@@ -2505,21 +2505,19 @@ body {
   }
 }
 
-
-/* Fix Monaco Suggestion Widget Visibility */
-.monaco-editor .suggest-widget,
-.monaco-editor .suggest-widget .monaco-list-row .label-name,
-.monaco-editor .suggest-widget .monaco-list-row .details-label,
-.monaco-editor .suggest-widget .monaco-list-row .read-more {
-  color: #ffffff !important;
-}
-
 .monaco-editor .suggest-widget .monaco-list-row:hover {
   background-color: rgba(255, 255, 255, 0.1) !important;
+  
 }
 
 .monaco-editor .suggest-widget .monaco-list-row.focused {
   background-color: #2b415e !important;
+  color: #e5eef9 !important;
+  transform: translateY(-16px) ;
+  height: 40px !important;
+  line-height: 40px !important;
+  font-size: 12px !important;
+  
 }
 
 /* Workspace Chat Enhancements */

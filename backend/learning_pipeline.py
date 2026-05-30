@@ -67,7 +67,9 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
         source_time="unknown",
         source_excerpt=None,
         starter_code=str(item.get("starter_code") or ""),
-        test_cases=item.get("test_cases") or ["print('No tests')"],
+        
+        # 將原本吃不到的 test_cases，改為接住 Prompt 產出的 expected_output
+        test_cases=[str(item.get("expected_output") or "print('No output')")], 
     )
 
 def _parse_bullets(markdown: str) -> list[str]:
@@ -171,41 +173,35 @@ def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, 
     
     prompt = f"""
 [SYSTEM: RETURN RAW JSON ARRAY ONLY. NO TEXT AROUND IT.]
-你是一位專業的 Python 導師。請根據提供內容產出 {count} 題適合「紙筆測驗」的手寫填空題。
+你是一位專業的 Python 程式語言導師。請根據提供的影片/文件內容，產出 {count} 題適合用來訓練學生「演算法思維」與「程式邏輯」的程式填空題。
 
 標題：{title}
 重點摘要：{outline}
 部分內容：{snippet}
 
-出題要求（手寫題導向）：
-1. **題型混合要求**：請平均分配以下四種風格：
-   - 『關鍵字熟練』：針對 Python 保留字或內建函數（考查手寫拼字與語法精準度）。
-   - 『邏輯運算』：針對 if/while/for 邏輯判斷與邊界條件。
-   - 『資料處理』：針對串列、字典操作或字串切片（考查手寫索引值的計算）。
-   - 『函式架構』：針對參數傳遞、預設值或回傳值架構。
-2. **手寫題規格**：
-   - 程式碼必須是一個完整、可閱讀的獨立情境（非片段），讓學生能一眼看懂這段程式的邏輯。
-   - 填空處使用唯一的 `___`，該填空處應為「一個關鍵字」、「一個運算式」或「一個變數」，避免讓學生手寫過長的程式碼。
-3. **嚴禁**使用 'class Solution' 或物件導向。
-4. **嚴禁**使用 input()。
-5. 程式碼必須包含中文註釋以引導解題。
-6. **手寫輸出追蹤**：除了程式碼填空外，每題必須設計「當此程式執行時，預期在螢幕上印出的正確結果」，用以模擬手寫考卷中的「看 code 寫出輸出結果」題型。
-7. 使用繁體中文。
+出題要求（邏輯訓練導向）：
+1. **測驗核心**：題目必須包含具體的運算邏輯，例如：數學級數計算（如階乘、加總）、迴圈邊界條件（for/while）、條件分支（if/elif/else）、字串或陣列的資料處理（如解析特定字元、尋找極值）。
+2. **填空設計**：填空處 `___` 不能只是單一語法關鍵字（如 with、open）。它必須是**「核心的邏輯運算式」**、**「完整的條件判斷行」**或**「關鍵的變數更新」**。
+   - 好的例子：`if ___:`（考驗條件設計）、`sum = ___`（考驗公式實作）、`while ___:`（考驗迴圈終止條件）。
+3. **鷹架引導註解（Scaffolding）**：
+   - **必須**在關鍵邏輯步驟的上方，加上簡潔的「中文指引註解」（例如：`# 判斷是否為偶數以決定加減`、`# 計算目前數字的階乘並累加`），以鷹架方式引導學生完成邏輯實作。
+4. **變數與輸入**：為了讓產出的程式碼可獨立執行與驗證，請用「直接宣告變數賦值」來取代 `input()`。
+5. **架構限制**：嚴禁使用 'class Solution' 或複雜的物件導向架構。請保持為直觀的結構化程式設計，需要時可定義單一函式（如 `def factorial(N):`）。
+6. **手寫輸出追蹤**：每題必須設計「預期輸出」，用以模擬「看 code 寫出輸出結果」的程式碼追蹤能力。
 
 JSON 格式要求：
 [
   {{
-    "question": "題目情境與手寫引導說明",
-    "reference_concept": "關鍵字熟練 / 邏輯運算 / 資料處理 / 函式架構",
-    "correct_answer": "填空處的正確程式碼（答案）",
-    "expected_output": "填空完成後，該段程式碼完整執行會印出的標準輸出（手寫閱卷用）",
-    "explanation": "針對該填空原理與手寫易錯點的詳細解析",
-    "starter_code": "含有 ___ 的完整程式碼（包含最後用來檢驗輸出的 print 行）"
+    "question": "題目情境說明（例如：請完成以下程式碼以計算 N 的階乘）",
+    "reference_concept": "迴圈控制 / 數學邏輯 / 條件判斷 / 字串處理",
+    "correct_answer": "填空處的正確程式碼（即填入 ___ 的內容）",
+    "expected_output": "填空完成後，完整執行該段程式碼會印出的標準輸出結果",
+    "explanation": "針對此邏輯實作的原理、變數變化過程與易錯點解析",
+    "starter_code": "含有 ___ 的完整程式碼（必須包含適當的引導註解與最後的 print 驗證行）"
   }}
-]
+]"""
 
 
-"""
     try:
         payload, usage = _call_llm(prompt)
         _add_tokens(total_usage, usage)
