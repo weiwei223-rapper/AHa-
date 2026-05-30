@@ -40,6 +40,16 @@ def analyze_video(video_id: int, current_user: models.User = Depends(get_current
 
 @router.post("", response_model=schema.VideoResponse)
 def create_video(payload: schema.VideoCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+    # 提取影片 ID 並檢查重複
+    new_video_id = ai_analyzer.extract_youtube_video_id(payload.video_link)
+    if not new_video_id:
+        raise HTTPException(status_code=400, detail="無效的 YouTube 連結")
+        
+    existing_videos = db.query(models.Video).filter(models.Video.user_id == current_user.id).all()
+    for v in existing_videos:
+        if ai_analyzer.extract_youtube_video_id(v.video_link) == new_video_id:
+            raise HTTPException(status_code=400, detail="此影片已存在於您的教材庫中")
+
     title = ai_analyzer.get_video_title(payload.video_link) or "Untitled"
     if not ai_analyzer.is_python_related(title, ai_analyzer.fetch_video_transcript(payload.video_link)[:1500]):
         raise HTTPException(status_code=400, detail="僅支援 Python 相關影片")

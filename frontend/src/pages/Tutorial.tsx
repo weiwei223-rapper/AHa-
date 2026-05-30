@@ -158,9 +158,10 @@ const Tutorial = () => {
       
       setMessage(`成功新增：${video.title}`);
       setTimeout(() => setMessage(null), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to add video:", error);
-      alert("新增影片失敗，請稍後再試。");
+      const msg = error.response?.data?.detail || "新增影片失敗，請稍後再試。";
+      alert(msg);
     } finally {
       setAdding(prev => ({ ...prev, [seriesIndex]: false }));
     }
