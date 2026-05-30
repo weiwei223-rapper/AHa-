@@ -53,7 +53,7 @@ const UnfinishedTest = () => {
         <div>
           <div className="page-eyebrow">Active Drafts</div>
           <h1>未完成的測驗</h1>
-          <p>這裡儲存了您所有尚未完成的練習進度。每部影片都可以擁有獨立的練習進度。</p>
+          <p>這裡儲存了您所有尚未完成的練習進度。每個教材都可以擁有獨立的練習進度。</p>
         </div>
       </section>
 
@@ -105,7 +105,7 @@ const UnfinishedTest = () => {
           <div style={{ fontSize: '3.5rem', marginBottom: '20px' }}>📋</div>
           <h3>目前沒有存檔</h3>
           <p style={{ color: '#64748b', marginTop: '10px', maxWidth: '400px', margin: '10px auto' }}>
-            當您在 Quiz 頁面按下「儲存進度」後，該影片的進度就會出現在這裡，不會被其他影片覆蓋。
+            當您在 Quiz 頁面按下「儲存進度」後，該教材的進度就會出現在這裡，不會被其他教材覆蓋。
           </p>
           <button 
             onClick={() => navigate('/Quiz')}

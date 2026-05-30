@@ -325,7 +325,7 @@ const Quiz = () => {
         <div>
           <div className="page-eyebrow">Interactive Learning</div>
           <h1>即時測驗生成</h1>
-          <p>支援 YouTube 影片與 PDF 講義，混合四種題型（關鍵字、邏輯、資料處理、函式架構）。</p>
+          <p>支援 YouTube 教材與 PDF 講義，混合四種題型（關鍵字、邏輯、資料處理、函式架構）。</p>
         </div>
       </section>
 
@@ -338,7 +338,7 @@ const Quiz = () => {
           const count = quizCounts[key] || 5;
           return (
             <article key={v.id} className="video-library-card">
-              <div className="video-library-top"><div className="video-library-badge">Video</div><h3 className="video-library-title">{v.title}</h3></div>
+              <div className="video-library-top"><div className="video-library-badge">Material</div><h3 className="video-library-title">{v.title}</h3></div>
               <div className="quiz-settings-container">
                 <label className="quiz-settings-label">題數</label>
                 <div className="quiz-stepper">

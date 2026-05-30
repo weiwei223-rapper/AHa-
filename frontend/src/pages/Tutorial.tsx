@@ -196,10 +196,10 @@ const Tutorial = () => {
 
       <section className="page-hero">
         <div>
-          <div className="page-eyebrow">Video Library</div>
-          <h1>精選推薦影片</h1>
+          <div className="page-eyebrow">Learning Library</div>
+          <h1>精選推薦教材</h1>
           <p>
-            我們為您挑選了優質的 Python 教學系列。您可以點擊列表中的影片直接觀看，並點擊「新增」按鈕將其收藏至您的影片庫。
+            我們為您挑選了優質的 Python 教學系列。您可以點擊列表中的教材直接觀看，並點擊「新增」按鈕將其收藏至您的教材庫。
           </p>
         </div>
       </section>
@@ -331,7 +331,7 @@ const Tutorial = () => {
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    {adding[index] ? '處理中...' : '✚ 新增至影片庫'}
+                    {adding[index] ? '處理中...' : '✚ 新增至教材庫'}
                   </button>
                 </div>
               </div>

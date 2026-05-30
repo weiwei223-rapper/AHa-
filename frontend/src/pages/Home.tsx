@@ -125,9 +125,9 @@ const Home = ({ name }: UserStatusProps) => {
 
   const cards = [
     {
-      label: "Uploaded Videos",
+      label: "Uploaded Materials",
       value: stats.videoCount.toString(),
-      hint: "管理已上傳的學習影片與教材來源",
+      hint: "管理已上傳的教材與學習來源",
       to: "/Video",
     },
     {
@@ -152,13 +152,13 @@ const Home = ({ name }: UserStatusProps) => {
 
   const tutorialSteps = [
     {
-      title: "1. 探索影片",
-      content: "在『Video』頁面貼上 YouTube 連結。我們支援 Python 相關的教學影片，系統會自動為您生成大綱與逐字稿。",
-      icon: "📺"
+      title: "1. 探索教材",
+      content: "在『Material』頁面貼上 YouTube 連結或上傳 PDF。我們支援 Python 相關的學習內容，系統會自動為您生成大綱與解析。",
+      icon: "📚"
     },
     {
       title: "2. 生成測驗",
-      content: "前往『Quiz』頁面選擇已解析的影片，調整您想要練習的題目數量（1-10 題），點擊 Generate 即可開始。",
+      content: "前往『Quiz』頁面選擇已解析的教材，調整您想要練習的題目數量（1-10 題），點擊 Generate 即可開始。",
       icon: "🎯"
     },
     {
@@ -168,7 +168,7 @@ const Home = ({ name }: UserStatusProps) => {
     },
     {
       title: "4. AI 助教",
-      content: "測驗完成後，系統會給予邏輯診斷。遇到困難時，右下角的 Workspace Chat 隨時待命為您解答影片中的難點。",
+      content: "測驗完成後，系統會給予邏輯診斷。遇到困難時，右下角的 Workspace Chat 隨時待命為您解答教材中的難點。",
       icon: "🤖"
     }
   ];
@@ -180,7 +180,7 @@ const Home = ({ name }: UserStatusProps) => {
           <div className="page-eyebrow">AHa Learning Workspace</div>
           <h1>Welcome back, {name || 'Learner'}</h1>
           <p>
-            從影片、聊天到 AI 程式測驗，這裡是你目前的學習總覽。先看進度，再決定下一步要補哪一段。
+            從教材、聊天到 AI 程式測驗，這裡是你目前的學習總覽。先看進度，再決定下一步要補哪一段。
           </p>
         </div>
         <div className="dashboard-hero-visual" style={{ flex: '1', display: 'flex', justifyContent: 'center', alignItems: 'center', maxWidth: '300px' }}>
@@ -189,7 +189,7 @@ const Home = ({ name }: UserStatusProps) => {
         <div className="dashboard-highlight-card">
           <span>Study Snapshot</span>
           <strong>{stats.videoCount}</strong>
-          <p>支影片已可用來生成聊天上下文與 AI 程式題。</p>
+          <p>個教材已可用來生成聊天上下文與 AI 程式題。</p>
         </div>
       </section>
 
@@ -205,11 +205,11 @@ const Home = ({ name }: UserStatusProps) => {
       <section className="dashboard-action-band">
         <div className="dashboard-action-copy">
           <div className="page-eyebrow">Next Move</div>
-          <h2>先上傳影片，再讓 AI 依完整內容出題</h2>
-          <p>新的 Quiz 流程會優先根據影片逐字稿，生成偏程式理解、除錯與流程推理的題目。</p>
+          <h2>先上傳教材，再讓 AI 依完整內容出題</h2>
+          <p>新的 Quiz 流程會優先根據教材解析內容，生成偏程式理解、除錯與流程推理的題目。</p>
         </div>
         <div className="dashboard-action-links">
-          <Link to="/Video" className="dashboard-primary-link">Upload Video</Link>
+          <Link to="/Video" className="dashboard-primary-link">Upload Material</Link>
           <Link to="/Quiz" className="dashboard-secondary-link">Open Quiz</Link>
         </div>
       </section>
@@ -239,7 +239,7 @@ const Home = ({ name }: UserStatusProps) => {
         <h2>常見問題</h2>
         <div style={{ marginTop: '20px', display: 'grid', gap: '20px' }}>
           <div>
-            <h4 style={{ color: 'white', marginBottom: '8px' }}>Q: 為什麼有些影片無法上傳？</h4>
+            <h4 style={{ color: 'white', marginBottom: '8px' }}>Q: 為什麼有些教材無法上傳？</h4>
             <p style={{ color: '#94a3b8' }}>為了保持平台專業性，我們僅允許與 Python 程式設計相關的內容。系統會自動偵測標題與內容進行過濾。</p>
           </div>
           <div>

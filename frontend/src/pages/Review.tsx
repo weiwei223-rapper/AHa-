@@ -259,22 +259,37 @@ const Review = () => {
               <div className={`quiz-review-status ${detail.passed ? "correct" : "review"}`}>
                 {detail.passed ? "Logic Correct" : "Logic Failed"}
               </div>
-              {detail.question_text && (
-                <h3 style={{ marginTop: "12px", fontSize: "1.1em" }}>{detail.question_text}</h3>
-              )}
-              <div style={{ marginTop: "12px" }}>
-                <p><strong>驗證詳情：</strong></p>
+              
+              <div style={{ marginTop: "16px" }}>
+                <p><strong>題目：</strong></p>
+                <h3 style={{ marginTop: "8px", fontSize: "1.05em", color: "#e2e8f0", lineHeight: "1.5" }}>
+                  {detail.question_text || "未記錄題目內容"}
+                </h3>
+              </div>
+
+              <div style={{ marginTop: "16px" }}>
+                <p><strong>回答：</strong></p>
+                <pre className="code-snippet" style={{ marginTop: "8px" }}>
+                  {detail.user_answer || detail.user_full_code || "N/A"}
+                </pre>
+              </div>
+
+              <div style={{ marginTop: "16px" }}>
+                <p><strong>參考答案：</strong></p>
+                <pre className="code-snippet" style={{ marginTop: "8px", borderLeft: "4px solid #4ade80", backgroundColor: "rgba(74, 222, 128, 0.05)" }}>
+                  {detail.reference_answer || "無參考答案"}
+                </pre>
+              </div>
+
+              <div style={{ marginTop: "16px", padding: "12px", backgroundColor: "rgba(148, 163, 184, 0.05)", borderRadius: "8px" }}>
+                <p style={{ fontSize: "0.9em", color: "#94a3b8", marginBottom: "8px" }}><strong>驗證詳情 (測試案例)：</strong></p>
                 <ul style={{ listStyle: "none", padding: 0 }}>
                   {detail.test_results?.map((res: any, i: number) => (
-                    <li key={i} style={{ color: res.passed ? "#4ade80" : "#fb7185", fontSize: "0.9em", marginBottom: "4px" }}>
+                    <li key={i} style={{ color: res.passed ? "#4ade80" : "#fb7185", fontSize: "0.85em", marginBottom: "4px" }}>
                       Test {i+1}: {res.passed ? "✓ Passed" : `✗ Failed (Expected: ${res.expected}, Actual: ${res.actual})`}
                     </li>
                   ))}
                 </ul>
-              </div>
-              <div style={{ marginTop: "12px" }}>
-                <p><strong>當時作答：</strong></p>
-                <pre className="code-snippet">{detail.user_answer || detail.user_full_code || "N/A"}</pre>
               </div>
             </article>
           ))}

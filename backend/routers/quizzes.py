@@ -69,7 +69,14 @@ def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models
             if not match: passed = False
             q_res.append({"test_case": tc, "passed": match, "expected": ref_out.strip(), "actual": user_out.strip()})
         if passed: correct += 1
-        details.append({"question_id": q.id, "passed": passed, "test_results": q_res})
+        details.append({
+            "question_id": q.id,
+            "question_text": q.question_content,
+            "user_answer": user_code,
+            "reference_answer": q.reference_answer,
+            "passed": passed,
+            "test_results": q_res
+        })
     return schema.GradeResponse(total_score=round(correct/len(questions)*100) if questions else 0, details=details)
 
 @router.get("/quiz-results", response_model=List[schema.QuizResultResponse])

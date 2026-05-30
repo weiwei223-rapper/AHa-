@@ -102,7 +102,7 @@ const ChatDB: React.FC = () => {
   const fetchVideos = async () => {
     if (!userId) {
       setVideos([]);
-      setVideosError('請先登入以載入影片列表。');
+      setVideosError('請先登入以載入教材列表。');
       return [];
     }
 
@@ -116,7 +116,7 @@ const ChatDB: React.FC = () => {
     } catch (requestError: unknown) {
       console.error('Error fetching videos:', requestError);
       const errorObject = requestError as { response?: { data?: { detail?: string } } };
-      setVideosError(errorObject.response?.data?.detail || '無法載入影片列表');
+      setVideosError(errorObject.response?.data?.detail || '無法載入教材列表');
       setVideos([]);
       return [];
     } finally {
@@ -321,7 +321,7 @@ const ChatDB: React.FC = () => {
     }
 
     if (!activeSession.selectedVideoId) {
-      setError('這個聊天尚未綁定影片，請開新聊天並選擇影片後再提問。');
+      setError('這個聊天尚未綁定教材，請開新聊天並選擇教材後再提問。');
       return;
     }
 
@@ -507,7 +507,7 @@ const ChatDB: React.FC = () => {
                     type="button"
                   >
                     <span className="chat-history-title">{session.title}</span>
-                    <span className="chat-history-preview">{lastMessage || '請先選擇影片'}</span>
+                    <span className="chat-history-preview">{lastMessage || '請先選擇教材'}</span>
                     <span className="chat-history-time">{formatUpdatedAt(session.updatedAt)}</span>
                   </button>
                   {session.isPersisted ? (
@@ -538,7 +538,7 @@ const ChatDB: React.FC = () => {
               <h3>{activeSession?.title || 'New conversation'}</h3>
               {activeSession?.selectedVideoTitle ? (
                 <div className="chat-session-source">
-                  <span>影片</span>
+                  <span>教材</span>
                   <strong>{activeSession.selectedVideoTitle}</strong>
                   {activeSession.selectedVideoId ? <em>#{activeSession.selectedVideoId}</em> : null}
                 </div>
@@ -557,9 +557,9 @@ const ChatDB: React.FC = () => {
           {!isConversationInitialized ? (
             <div className="chat-video-picker">
               <div className="chat-video-picker-head">
-                <div className="chat-video-picker-title">請選擇要討論的影片</div>
+                <div className="chat-video-picker-title">請選擇要討論的教材</div>
                 <div className="chat-video-picker-subtitle">
-                  選定後我會用該影片作為上下文，幫你整理重點、回答問題與延伸學習。
+                  選定後我會用該教材作為上下文，幫你整理重點、回答問題與延伸學習。
                 </div>
               </div>
 
@@ -572,14 +572,14 @@ const ChatDB: React.FC = () => {
                   disabled={videosLoading}
                   type="button"
                 >
-                  {videosLoading ? '載入中...' : '重新載入影片'}
+                  {videosLoading ? '載入中...' : '重新載入教材'}
                 </button>
               </div>
 
               <div className="chat-video-picker-list" role="list">
                 {!videosLoading && videos.length === 0 ? (
                   <div className="chat-video-picker-empty">
-                    目前沒有可用影片。請先到 Video 頁上傳影片後再回來。
+                    目前沒有可用教材。請先到 Material 頁上傳教材後再回來。
                   </div>
                 ) : (
                   videos.map((video) => (
@@ -590,7 +590,7 @@ const ChatDB: React.FC = () => {
                       type="button"
                       role="listitem"
                     >
-                      <div className="chat-video-card-title">{video.title || `Video #${video.id}`}</div>
+                      <div className="chat-video-card-title">{video.title || `Material #${video.id}`}</div>
                       <div className="chat-video-card-meta">ID: {video.id}</div>
                     </button>
                   ))
@@ -629,7 +629,7 @@ const ChatDB: React.FC = () => {
                     <div className="chat-avatar">AI</div>
                     <div className="chat-message-card typing">
                       <div className="chat-message-role">Assistant</div>
-                      <p>正在依照影片與題目整理回答...</p>
+                      <p>正在依照教材與題目整理回答...</p>
                     </div>
                   </article>
                 )}
@@ -648,7 +648,7 @@ const ChatDB: React.FC = () => {
                 />
                 <div className="chat-composer-footer">
                   <div className="chat-composer-hint">
-                    可以詢問影片內容整理、重點摘要、題目解析或延伸學習方向。
+                    可以詢問教材內容整理、重點摘要、題目解析或延伸學習方向。
                   </div>
                   <button className="chat-send-button" onClick={() => void handleSend()} disabled={loading || !input.trim()}>
                     {loading ? 'Sending...' : 'Send Message'}

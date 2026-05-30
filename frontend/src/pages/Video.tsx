@@ -97,7 +97,7 @@ const Video = () => {
   };
 
   const handleVideoUpload = async () => {
-    if (!videoLink.trim()) { setError("請輸入 YouTube 影片連結"); return; }
+    if (!videoLink.trim()) { setError("請輸入 YouTube 教材連結"); return; }
     setLoading(true);
     setError("");
     try {
@@ -111,7 +111,7 @@ const Video = () => {
       setVideoTitle("");
       window.dispatchEvent(new CustomEvent('video-updated', { detail: { userId } }));
     } catch (err: any) {
-      setError(err.response?.data?.detail || "新增影片失敗");
+      setError(err.response?.data?.detail || "新增教材失敗");
     } finally {
       setLoading(false);
     }
@@ -137,7 +137,7 @@ const Video = () => {
 
   const handleAnalyzeVideo = async (videoId: number) => {
     if (availablePoints < 5) {
-      setError("點數不足，分析影片需要 5 點。");
+      setError("點數不足，分析教材需要 5 點。");
       return;
     }
 
@@ -157,7 +157,7 @@ const Video = () => {
       await fetchVideos();
       window.dispatchEvent(new CustomEvent('points-updated', { detail: { userId } }));
     } catch (err: any) {
-      setError(err.response?.data?.detail || "影片分析失敗");
+      setError(err.response?.data?.detail || "教材分析失敗");
     } finally {
       setActionId(null);
     }
@@ -207,13 +207,13 @@ const Video = () => {
   };
 
   const handleDeleteVideo = async (videoId: number) => {
-    if (!window.confirm("確定要刪除此影片嗎？")) return;
+    if (!window.confirm("確定要刪除此教材嗎？")) return;
     try {
       await videoAPI.deleteVideo(videoId);
       setVideos((prev) => prev.filter((v) => v.id !== videoId));
       window.dispatchEvent(new CustomEvent('video-updated', { detail: { userId } }));
     } catch (err) {
-      alert("刪除影片失敗");
+      alert("刪除教材失敗");
     }
   };
 
@@ -233,8 +233,8 @@ const Video = () => {
       <section className="page-hero">
         <div>
           <div className="page-eyebrow">Knowledge Library</div>
-          <h1>影片與文件資料庫</h1>
-          <p>支援 YouTube 影片解析與 PDF 文件匯入，AI 將自動為您提取 Python 知識要點。</p>
+          <h1>教材與文件資料庫</h1>
+          <p>支援 YouTube 教材解析與 PDF 文件匯入，AI 將自動為您提取 Python 知識要點。</p>
         </div>
         <div className="page-hero-metric">
           <span>Sources</span>
@@ -247,7 +247,7 @@ const Video = () => {
           className={`profile-tab-btn ${activeTab === 'video' ? 'active' : ''}`}
           onClick={() => setActiveTab('video')}
         >
-          YouTube 影片
+          YouTube 教材
         </button>
         <button 
           className={`profile-tab-btn ${activeTab === 'pdf' ? 'active' : ''}`}
@@ -261,15 +261,15 @@ const Video = () => {
         <section className="panel-card">
           <div className="panel-header">
             <div>
-              <div className="page-eyebrow">Video Upload</div>
+              <div className="page-eyebrow">Material Upload</div>
               <h2>新增 YouTube 來源</h2>
             </div>
           </div>
           <div className="video-upload-grid">
-            <input type="text" value={videoTitle} onChange={e => setVideoTitle(e.target.value)} placeholder="影片標題 (可選)" />
+            <input type="text" value={videoTitle} onChange={e => setVideoTitle(e.target.value)} placeholder="教材標題 (可選)" />
             <input type="text" value={videoLink} onChange={e => setVideoLink(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
             <button onClick={handleVideoUpload} disabled={loading} className="page-primary-button">
-              {loading ? "處理中..." : "Add Video"}
+              {loading ? "處理中..." : "Add Material"}
             </button>
           </div>
           {error && activeTab === 'video' && <div className="page-error">{error}</div>}
@@ -303,8 +303,8 @@ const Video = () => {
           videos.map(v => (
             <article key={v.id} className="video-library-card">
               <div className="video-library-top">
-                <div className="video-library-badge">Video</div>
-                <h3 className="video-library-title">{v.title || "Untitled Video"}</h3>
+                <div className="video-library-badge">Material</div>
+                <h3 className="video-library-title">{v.title || "Untitled Material"}</h3>
               </div>
               <div className="video-library-actions">
                 <button onClick={() => handleAnalyzeVideo(v.id)} disabled={actionId === v.id} className="page-secondary-button">
