@@ -947,7 +947,7 @@ button:hover span:after {
 }
 .chat-sidebar {
   background: #0b1220;
-  border-radius: 18px;
+  border-radius: 0;
   padding: 14px;
   display: grid;
   grid-template-columns: 1fr;
@@ -1266,9 +1266,33 @@ button:hover span:after {
   color: #dbeafe;
 }
 
+.chat-picker-section-label {
+  grid-column: 1 / -1;
+  color: #67e8f9;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.2);
+  padding-bottom: 8px;
+  margin-top: 10px;
+}
+
+.chat-video-card.video {
+  border-left: 4px solid #2bc1f1;
+}
+
+.chat-video-card.doc {
+  border-left: 4px solid #34d399;
+}
+
 .chat-video-card-title {
   font-weight: 800;
   color: white;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
 }
 
 .chat-video-card-meta {
@@ -2254,13 +2278,28 @@ body {
 }
 
 .video-library-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
+  margin-top: 15px;
 }
 
 .video-library-actions .page-primary-button {
+  grid-column: 1 / -1;
   width: 100%;
   justify-content: center;
+  order: 2;
+}
+
+.video-library-actions .page-secondary-button {
+  order: 1;
+}
+
+.video-library-actions .page-danger-button {
+  grid-column: 1 / 1;
+  order: 3;
+  padding: 8px 12px;
+  font-size: 14px;
 }
 
 .video-library-badge,
@@ -2564,6 +2603,7 @@ body {
   cursor: pointer;
   font-size: 12px;
   transition: all 0.2s;
+  margin-right: 14px;
 }
 
 .chat-sidebar-toggle-v-btn:hover {

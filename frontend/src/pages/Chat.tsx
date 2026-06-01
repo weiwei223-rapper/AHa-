@@ -19,6 +19,8 @@ interface ChatSession {
   messages: Message[];
   selectedVideoId?: number | null;
   selectedVideoTitle?: string | null;
+  selectedDocumentId?: number | null;
+  selectedDocumentTitle?: string | null;
 }
 
 const STORAGE_KEY = 'aha-chat-history-v1';
@@ -43,6 +45,8 @@ const createEmptySession = (): ChatSession => ({
   messages: [],
   selectedVideoId: null,
   selectedVideoTitle: null,
+  selectedDocumentId: null,
+  selectedDocumentTitle: null,
 });
 
 const formatUpdatedAt = (value: string) => {
@@ -66,8 +70,9 @@ const Chat: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [videos, setVideos] = useState<Array<{ id: number; title?: string | null }>>([]);
-  const [videosLoading, setVideosLoading] = useState(false);
-  const [videosError, setVideosError] = useState('');
+  const [documents, setDocuments] = useState<Array<{ id: number; title?: string | null }>>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialsError, setMaterialsError] = useState('');
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   // Modal State
@@ -121,7 +126,7 @@ const Chat: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    void fetchVideos();
+    void fetchMaterials();
   }, []);
 
   useEffect(() => {
@@ -135,27 +140,31 @@ const Chat: React.FC = () => {
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null;
 
-  const fetchVideos = async () => {
+  const fetchMaterials = async () => {
     const userId = Number(localStorage.getItem('userId') || 0);
     if (!userId) {
       setVideos([]);
-      setVideosError('請先登入以載入教材列表。');
+      setDocuments([]);
+      setMaterialsError('請先登入以載入教材列表。');
       return;
     }
 
-    setVideosLoading(true);
-    setVideosError('');
+    setMaterialsLoading(true);
+    setMaterialsError('');
     try {
-      const response = await videoAPI.getVideos(userId);
-      const rawVideos = (response.data ?? []) as Array<{ id: number; title?: string | null }>;
-      setVideos(rawVideos);
+      const [vRes, dRes] = await Promise.all([
+        videoAPI.getVideos(userId),
+        import('../api').then(m => m.documentAPI.getDocuments(userId))
+      ]);
+      setVideos((vRes.data ?? []) as Array<{ id: number; title?: string | null }>);
+      setDocuments((dRes.data ?? []) as Array<{ id: number; title?: string | null }>);
     } catch (requestError: unknown) {
-      console.error('Error fetching videos:', requestError);
-      const errorObject = requestError as { response?: { data?: { detail?: string } } };
-      setVideosError(errorObject.response?.data?.detail || '無法載入教材列表');
+      console.error('Error fetching materials:', requestError);
+      setMaterialsError('無法載入教材列表');
       setVideos([]);
+      setDocuments([]);
     } finally {
-      setVideosLoading(false);
+      setMaterialsLoading(false);
     }
   };
 
@@ -178,34 +187,6 @@ const Chat: React.FC = () => {
     );
   };
 
-  const updateSessionSelection = (sessionId: string, videoId: number, videoTitle: string) => {
-    const nextUpdatedAt = new Date().toISOString();
-    const greeting: Message = {
-      role: 'assistant',
-      content: `你好！我是你的 AI 學習助理。關於「${videoTitle}」，你有什麼問題想問嗎？`,
-    };
-
-    setSessions((prev) =>
-      prev
-        .map((session) =>
-          session.id === sessionId
-            ? {
-              ...session,
-              selectedVideoId: videoId,
-              selectedVideoTitle: videoTitle,
-              updatedAt: nextUpdatedAt,
-              messages: session.messages.length === 0 ? [greeting] : session.messages,
-              title:
-                session.title === 'New conversation'
-                  ? `「${videoTitle}」`
-                  : session.title,
-            }
-            : session
-        )
-        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
-    );
-  };
-
   const handleCreateSession = () => {
     const newSession = createEmptySession();
     setSessions((prev) => [newSession, ...prev]);
@@ -221,7 +202,7 @@ const Chat: React.FC = () => {
 
   const handleSend = async () => {
     if (!activeSession || !input.trim() || loading) return;
-    if (!activeSession.selectedVideoId) return;
+    if (!activeSession.selectedVideoId && !activeSession.selectedDocumentId) return;
 
     if (availablePoints <= 0) {
       setError('點數不足，請先儲值。');
@@ -249,6 +230,7 @@ const Chat: React.FC = () => {
         history: nextMessages,
         user_id: Number(localStorage.getItem('userId') || 0) || undefined,
         video_id: activeSession.selectedVideoId ?? null,
+        document_id: activeSession.selectedDocumentId ?? null,
       });
 
       let reply =
@@ -294,12 +276,13 @@ const Chat: React.FC = () => {
     }
   };
 
-  const handleSelectVideo = (videoId: number) => {
+  const handleSelectMaterial = (type: 'video' | 'document', id: number) => {
     if (!activeSession) return;
-    const selected = videos.find((video) => video.id === videoId);
-    const videoTitle = (selected?.title || `Material #${videoId}`).toString();
+    const list = type === 'video' ? videos : documents;
+    const selected = list.find((item) => item.id === id);
+    const title = (selected?.title || `Material #${id}`).toString();
     
-    const greeting = `你好！我是你的 AI 學習助理。關於「${videoTitle}」，你有什麼問題想問嗎？`;
+    const greeting = `你好！我是你的 AI 學習助理。關於這份${type === 'video' ? '影片' : '文件'}「${title}」，你有什麼問題想問嗎？`;
     const greetingMessage: Message = { role: 'assistant', content: greeting };
 
     setSessions((prev) =>
@@ -307,9 +290,11 @@ const Chat: React.FC = () => {
         session.id === activeSession.id
           ? {
             ...session,
-            selectedVideoId: videoId,
-            selectedVideoTitle: videoTitle,
-            title: videoTitle,
+            selectedVideoId: type === 'video' ? id : null,
+            selectedVideoTitle: type === 'video' ? title : null,
+            selectedDocumentId: type === 'document' ? id : null,
+            selectedDocumentTitle: type === 'document' ? title : null,
+            title: `「${title}」`,
             messages: session.messages.length === 0 ? [greetingMessage] : session.messages,
             updatedAt: new Date().toISOString()
           }
@@ -332,6 +317,7 @@ const Chat: React.FC = () => {
       await feedbackAPI.createFeedback({
         user_id: userId,
         video_id: activeSession?.selectedVideoId ?? null,
+        document_id: activeSession?.selectedDocumentId ?? null,
         ai_message: reportingMessage.content,
         user_message: 'USER_ERROR_REPORT',
         error_report: errorDesc,
@@ -401,7 +387,7 @@ const Chat: React.FC = () => {
             </div>
           </div>
 
-          {!activeSession?.selectedVideoId ? (
+          {!activeSession?.selectedVideoId && !activeSession?.selectedDocumentId ? (
             <div className="chat-video-picker">
               <div className="chat-video-picker-head">
                 <div className="chat-video-picker-title">請選擇要討論的教材</div>
@@ -410,37 +396,53 @@ const Chat: React.FC = () => {
                 </div>
               </div>
 
-              {videosError && <div className="chat-video-picker-error">{videosError}</div>}
+              {materialsError && <div className="chat-video-picker-error">{materialsError}</div>}
 
               <div className="chat-video-picker-actions">
                 <button
                   className="chat-video-picker-refresh"
-                  onClick={() => void fetchVideos()}
-                  disabled={videosLoading}
+                  onClick={() => void fetchMaterials()}
+                  disabled={materialsLoading}
                   type="button"
                 >
-                  {videosLoading ? '載入中...' : '重新載入教材'}
+                  {materialsLoading ? '載入中...' : '重新載入教材'}
                 </button>
               </div>
 
               <div className="chat-video-picker-list" role="list">
-                {!videosLoading && videos.length === 0 ? (
+                {!materialsLoading && videos.length === 0 && documents.length === 0 ? (
                   <div className="chat-video-picker-empty">
-                    目前沒有可用教材。請先到 Material 頁上傳教材後再回來。
+                    目前沒有可用教材。請先到 Material 頁上傳影片或 PDF 後再回來。
                   </div>
                 ) : (
-                  videos.map((video) => (
-                    <button
-                      key={video.id}
-                      className="chat-video-card"
-                      onClick={() => handleSelectVideo(video.id)}
-                      type="button"
-                      role="listitem"
-                    >
-                      <div className="chat-video-card-title">{video.title || `Material #${video.id}`}</div>
-                      <div className="chat-video-card-meta">ID: {video.id}</div>
-                    </button>
-                  ))
+                  <>
+                    {videos.length > 0 && <div className="chat-picker-section-label">影片教材 (Videos)</div>}
+                    {videos.map((video) => (
+                      <button
+                        key={`v-${video.id}`}
+                        className="chat-video-card video"
+                        onClick={() => handleSelectMaterial('video', video.id)}
+                        type="button"
+                        role="listitem"
+                      >
+                        <div className="chat-video-card-title">{video.title || `Video #${video.id}`}</div>
+                        <div className="chat-video-card-meta">ID: {video.id}</div>
+                      </button>
+                    ))}
+                    {documents.length > 0 && <div className="chat-picker-section-label" style={{marginTop: '20px'}}>PDF 教材 (Documents)</div>}
+                    {documents.map((doc) => (
+                      <button
+                        key={`d-${doc.id}`}
+                        className="chat-video-card doc"
+                        onClick={() => handleSelectMaterial('document', doc.id)}
+                        type="button"
+                        role="listitem"
+                      >
+                        <div className="chat-video-card-title">{doc.title || `Document #${doc.id}`}</div>
+                        <div className="chat-video-card-meta">ID: {doc.id}</div>
+                      </button>
+                    ))}
+                  </>
                 )}
               </div>
             </div>

@@ -144,9 +144,7 @@ export default function AuthPage() {
             <button type="submit" className="auth-button" disabled={loading}>
               {loading ? '驗證中...' : '進入工作台'}
             </button>
-            <button type="button" className="auth-button skip-button" onClick={handleSkipLogin} disabled={loading} style={{ background: 'transparent', border: '1px solid rgba(43, 193, 241, 0.4)', color: '#94a3b8', boxShadow: 'none', marginTop: '14px' }}>
-              訪客模式 (跳過登入)
-            </button>
+            
           </form>
 
           <div className="auth-toggle">
@@ -228,9 +226,7 @@ export default function AuthPage() {
             <button type="submit" className="auth-button" disabled={loading}>
               {loading ? '註冊中...' : '註冊帳號'}
             </button>
-            <button type="button" className="auth-button skip-button" onClick={handleSkipLogin} disabled={loading} style={{ background: 'transparent', border: '1px solid rgba(43, 193, 241, 0.4)', color: '#94a3b8', boxShadow: 'none', marginTop: '14px' }}>
-              訪客模式 (跳過登入)
-            </button>
+            
           </form>
 
           <div className="auth-toggle">

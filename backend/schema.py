@@ -305,6 +305,7 @@ class ChatRequest(BaseModel):
     history: List[ChatMessage] = []
     user_id: Optional[int] = None
     video_id: Optional[int] = None
+    document_id: Optional[int] = None
 
 class ChatResponse(BaseModel):
     reply: str

@@ -315,7 +315,7 @@ const Video = () => {
                   setIsReportModalOpen(true);
                 }} className="page-secondary-button">Report</button>
                 <button onClick={() => handleOpenQuiz(v.id, 'video')} className="page-primary-button">Quiz</button>
-                <button onClick={() => handleDeleteVideo(v.id)} className="page-secondary-button" style={{ color: '#ef4444' }}>Delete</button>
+                <button onClick={() => handleDeleteVideo(v.id)} className="page-danger-button">Delete</button>
               </div>
             </article>
           ))
@@ -331,7 +331,7 @@ const Video = () => {
                   {actionId === d.id ? "分析中..." : "Analyze"}
                 </button>
                 <button onClick={() => handleOpenQuiz(d.id, 'pdf')} className="page-primary-button">Quiz</button>
-                <button onClick={() => handleDeleteDoc(d.id)} className="page-secondary-button" style={{ color: '#ef4444' }}>Delete</button>
+                <button onClick={() => handleDeleteDoc(d.id)} className="page-danger-button">Delete</button>
               </div>
             </article>
           ))

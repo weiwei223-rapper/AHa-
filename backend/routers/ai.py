@@ -68,7 +68,22 @@ def chat_with_ai(payload: schema.ChatRequest, current_user: models.User = Depend
     
     if payload.video_id:
         video = db.query(models.Video).filter(models.Video.id == payload.video_id).first()
-        if video: system_content += f"\n\n目前討論影片標題：{video.title}"
+        if video:
+            system_content += f"\n\n目前討論影片標題：{video.title}"
+            if video.outline:
+                system_content += f"\n影片大綱：\n{video.outline}"
+            if video.transcript:
+                system_content += f"\n影片逐字稿：\n{video.transcript[:3000]}"
+    
+    if payload.document_id:
+        doc = db.query(models.Document).filter(models.Document.id == payload.document_id).first()
+        if doc:
+            system_content += f"\n\n目前討論教材(PDF)標題：{doc.title}"
+            if doc.outline:
+                system_content += f"\n教材大綱：\n{doc.outline}"
+            if doc.content_text:
+                system_content += f"\n教材內容全文：\n{doc.content_text[:3000]}"
+
     history = [{"role": "system", "content": system_content}]
     for item in payload.history: history.append({"role": item.role, "content": item.content})
     if not payload.history or payload.history[-1].content != payload.message: history.append({"role": "user", "content": payload.message})
