@@ -18,6 +18,7 @@ type DocumentItem = {
   id: number;
   filename: string;
   title: string;
+  outline?: string | null;
 };
 
 type QuizQuestion = {
@@ -348,7 +349,14 @@ const Quiz = () => {
                 </div>
               </div>
               <div className="video-library-actions">
-                <button onClick={() => handleGenerateQuiz(v.id, 'video')} className="page-primary-button">Generate</button>
+                <button 
+                  onClick={() => handleGenerateQuiz(v.id, 'video')} 
+                  className="page-primary-button"
+                  style={{ opacity: v.outline ? 1 : 0.5, cursor: v.outline ? 'pointer' : 'not-allowed' }}
+                  title={v.outline ? "" : "請先在教材庫點擊 Analyze 進行分析"}
+                >
+                  Generate
+                </button>
               </div>
             </article>
           );
@@ -368,7 +376,14 @@ const Quiz = () => {
                 </div>
               </div>
               <div className="video-library-actions">
-                <button onClick={() => handleGenerateQuiz(d.id, 'doc')} className="page-primary-button">Generate</button>
+                <button 
+                  onClick={() => handleGenerateQuiz(d.id, 'doc')} 
+                  className="page-primary-button"
+                  style={{ opacity: d.outline ? 1 : 0.5, cursor: d.outline ? 'pointer' : 'not-allowed' }}
+                  title={d.outline ? "" : "請先在教材庫點擊 Analyze 進行分析"}
+                >
+                  Generate
+                </button>
               </div>
             </article>
           );

@@ -42,6 +42,18 @@ async def upload_document(file: UploadFile = File(...), current_user: models.Use
         if not text_content.strip():
             raise ValueError("無法從此 PDF 中提取文字內容。請確認該 PDF 並非純圖片掃描檔，或是具備可搜尋文字。")
 
+        # 正規化文字內容以利比較 (移除多餘空白、換行)
+        normalized_content = " ".join(text_content.split())
+        
+        # 檢查是否已存在相同名稱或內容的 PDF
+        # 先抓出該使用者的所有文件進行比對 (避免大型 Text 欄位在不同 DB 上的比較差異)
+        user_docs = db.query(models.Document).filter(models.Document.user_id == current_user.id).all()
+        for d in user_docs:
+            d_normalized = " ".join((d.content_text or "").split())
+            if d.filename == file.filename or d_normalized == normalized_content:
+                print(f"DEBUG: Duplicate document found. Filename match: {d.filename == file.filename}, Content match: {d_normalized == normalized_content}")
+                raise HTTPException(status_code=400, detail="此影片已存在於您的教材庫中")
+
         title = file.filename.rsplit(".", 1)[0]
         if not ai_analyzer.is_python_related(title, text_content, content_type="文件"):
             raise HTTPException(status_code=400, detail="僅支援 Python 相關文件內容")

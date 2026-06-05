@@ -113,10 +113,12 @@ const Review = () => {
     const stats: Record<string, { total: number; passed: number }> = {};
     recentDetails.forEach((d: any) => {
       let concept = d.reference_concept || "基礎語法";
-      // Legacy mapping
-      if (concept === "關鍵字熟練") concept = "基礎語法";
+      // Legacy or internal mapping
+      if (concept === "關鍵字熟練" || concept === "Python" || concept === "Python 基礎應用") concept = "基礎語法";
       if (concept === "邏輯運算") concept = "條件判斷";
       if (concept === "函式架構") concept = "函式應用";
+      if (concept === "數學邏輯") concept = "基礎語法";
+      if (concept === "字串處理") concept = "資料處理";
 
       if (!stats[concept]) stats[concept] = { total: 0, passed: 0 };
       stats[concept].total += 1;

@@ -92,6 +92,10 @@ export default function AuthPage() {
       setError('兩次輸入的密碼不一致。');
       return;
     }
+    if (!registerOTP) {
+      setError('請輸入驗證碼。');
+      return;
+    }
 
     setLoading(true);
 

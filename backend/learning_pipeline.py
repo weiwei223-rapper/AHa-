@@ -108,7 +108,7 @@ def generate_outline(transcript: str, title: str) -> tuple[str, dict]:
         _add_tokens(total_usage, usage)
 
     merged_prompt = f"""
-請把以下分段摘要整合成一份重點整理，使用繁體中文 Markdown 條列。
+請把以下分段摘要整整合一份重點整理，使用繁體中文 Markdown 條列。
 要求：
 1. 產出 4 到 8 點。
 2. 每點精簡明確。
@@ -163,13 +163,15 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
 def generate_quiz(video_id: int, title: str, video_link: str, count: int = 5, existing_outline: str | None = None) -> schema.QuizResponse:
     if existing_outline:
         transcript = ai_analyzer.fetch_video_transcript(video_link)
-        return _generate_quiz_core(video_id, title, existing_outline, transcript[:1000] if transcript else "無法取得內容文字", count, is_video=True)
+        return _generate_quiz_core(video_id, title, existing_outline, transcript[:1000] if transcript else "無法取得內容", count, is_video=True)
+    
     analysis = analyze_video(video_id, title, video_link)
     return _generate_quiz_core(video_id, title, analysis.outline_markdown, analysis.transcript_excerpt, count, is_video=True)
 
 def generate_quiz_from_document(doc_id: int, title: str, content: str, count: int = 5, existing_outline: str | None = None) -> schema.QuizResponse:
     if existing_outline:
         return _generate_quiz_core(doc_id, title, existing_outline, content[:1000], count, is_video=False)
+        
     outline, usage = generate_outline(content, title)
     return _generate_quiz_core(doc_id, title, outline, content[:1000], count, is_video=False)
 
@@ -197,12 +199,12 @@ def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, 
 JSON 格式要求：
 [
   {{
-    "question": "題目情境說明（例如：請完成以下程式碼以計算 N 的階乘）",
-    "reference_concept": "迴圈控制 / 數學邏輯 / 條件判斷 / 字串處理",
-    "correct_answer": "填空處的正確程式碼（即填入 ___ 的內容）",
-    "expected_output": "填空完成後，完整執行該段程式碼會印出的標準輸出結果",
-    "explanation": "針對此邏輯實作的原理、變數變化過程與易錯點解析",
-    "starter_code": "含有 ___ 的完整程式碼（必須包含適當的引導註解與最後的 print 驗證行）"
+    "question": "題目情境說明",
+    "reference_concept": "必須從以下標籤擇一：基礎語法、條件判斷、迴圈控制、資料處理、函式應用、物件導向",
+    "correct_answer": "填空處的正確程式碼",
+    "expected_output": "填空完成後執行程式碼會印出的標準輸出結果",
+    "explanation": "原理與易錯點解析",
+    "starter_code": "含有 ___ 的完整程式碼"
   }}
 ]"""
 

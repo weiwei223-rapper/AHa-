@@ -158,28 +158,39 @@ def get_chat_response(messages: list[dict]) -> str:
 def is_python_related(title: str, content: str, content_type: str = "影片") -> bool:
     """Use Gemini to determine if the content is related to Python programming."""
     prompt = f"""
-請判斷以下{content_type}內容是否與「Python 程式設計」有關。
-這包括：Python 語法、開發環境、資料科學、自動化腳本、Web 開發 (Django/Flask) 或任何 Python 相關教學。
+你是一位嚴格的內容審核員。請判斷以下{content_type}是否專注於「Python 程式語言」的學習或應用。
+
+判定準則：
+1. 必須包含：Python 語法、套件使用 (如 pandas, numpy, flask, requests)、開發工具 (PyCharm, VSCode Python)、或 Python 在資料科學/自動化的應用。
+2. 拒絕 (INVALID)：
+   - 其他程式語言 (C++, Java, JavaScript, Go 等) 且未提及 Python。
+   - 純一般技術談話 (如「什麼是 AI」、「雲端運算」) 但沒講到 Python 實作。
+   - 與程式無關的內容 (音樂、生活、其他學科、純軟體操作教學如 Word/Excel)。
+   - 內容過於簡略，無法判斷是否為 Python 相關。
 
 {content_type}標題：{title}
-{content_type}內容摘要：{content[:1500]}
+{content_type}內容摘要：{content[:2000]}
 
 要求：
-1. 如果有關聯，請回傳：VALID
-2. 如果無關聯（例如是單純的音樂、生活 VLOG、非 Python 的語言教學），請回傳：INVALID
-3. 僅回傳以上兩個關鍵字之一，不要有其他文字。
+- 如果確診為 Python 相關，請回傳：VALID
+- 如果無關或無法確認為 Python 相關，請回傳：INVALID
+- 僅回傳關鍵字，不要有解釋。
 """
     try:
         response_text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
         decision = response_text.strip().upper()
+        # 移除可能的標點符號
+        decision = re.sub(r'[^A-Z]', '', decision)
         print(f"DEBUG: {content_type} validation AI response: '{decision}'")
         
         if "INVALID" in decision:
             return False
-        return "VALID" in decision
+        if "VALID" in decision:
+            return True
+        return False # 預設不通過
     except Exception as e:
         print(f"DEBUG: {content_type} validation AI failed: {e}")
-        return True
+        return True # 失敗時預設通過以避免阻礙正常使用者，但在生產環境應更保守
 
 
 def get_video_title(video_link: str) -> Optional[str]:

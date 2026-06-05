@@ -314,14 +314,15 @@ const Video = () => {
                   setReportingVideoId(v.id);
                   setIsReportModalOpen(true);
                 }} className="page-secondary-button">Report</button>
-                <button
-                  onClick={() => handleOpenQuiz(v.id, 'video')}
+                <button 
+                  onClick={() => handleOpenQuiz(v.id, 'video')} 
                   className="page-primary-button"
                   style={{ opacity: v.outline ? 1 : 0.5, cursor: v.outline ? 'pointer' : 'not-allowed' }}
                   title={v.outline ? "" : "請先點擊 Analyze 進行分析"}
                 >
                   Quiz
                 </button>
+                <button onClick={() => handleDeleteVideo(v.id)} className="page-danger-button">Delete</button>
               </div>
             </article>
           ))
@@ -337,7 +338,7 @@ const Video = () => {
                   {actionId === d.id ? "分析中..." : "Analyze"}
                 </button>
                 <button 
-                  onClick={() => handleOpenQuiz(d.id, 'pdf')}
+                  onClick={() => handleOpenQuiz(d.id, 'pdf')} 
                   className="page-primary-button"
                   style={{ opacity: d.outline ? 1 : 0.5, cursor: d.outline ? 'pointer' : 'not-allowed' }}
                   title={d.outline ? "" : "請先點擊 Analyze 進行分析"}
