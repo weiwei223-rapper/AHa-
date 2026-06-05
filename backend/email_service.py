@@ -14,6 +14,45 @@ SMTP_PORT = 587
 SENDER_EMAIL = os.getenv("EMAIL_USER", "aha.ai.service@gmail.com")
 SENDER_PASSWORD = os.getenv("EMAIL_PASSWORD") # This should be a Gmail App Password
 
+def send_otp_email(user_email: str, otp: str):
+    """
+    Sends a 6-digit OTP code to the user for password reset.
+    """
+    if not SENDER_PASSWORD:
+        print("DEBUG: EMAIL_PASSWORD not set, skipping OTP email.")
+        return False
+
+    subject = "【AHa AI 學習助理】驗證碼通知"
+    body = f"""
+    您好，
+
+    您的密碼重設驗證碼為：
+
+    {otp}
+
+    請在 10 分鐘內於系統中輸入此驗證碼。如果您沒有要求重設密碼，請忽略此郵件。
+
+    AHa AI 團隊 敬上
+    """
+
+    msg = MIMEMultipart()
+    msg['From'] = f"AHa AI Service <{SENDER_EMAIL}>"
+    msg['To'] = user_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        print(f"DEBUG: OTP email sent to {user_email}")
+        return True
+    except Exception as e:
+        print(f"DEBUG: Failed to send OTP email: {e}")
+        return False
+
 def send_refund_email(user_email: str, user_name: str, item_title: str, is_valid: bool, refund_points: int = 0, reason: str = ""):
     """
     Sends an email to the user regarding their error report status.

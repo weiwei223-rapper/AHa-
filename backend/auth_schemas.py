@@ -50,3 +50,18 @@ class RegisterRequest(BaseModel):
     @validator('name')
     def validate_name(cls, value: str) -> str:
         return validate_user_name(value)
+
+class OTPRequest(BaseModel):
+    email: str
+
+class OTPVerifyRequest(BaseModel):
+    otp_token: str
+    otp: str
+
+class OTPVerifyResponse(BaseModel):
+    reset_token: str
+    message: str
+
+class PasswordResetRequest(BaseModel):
+    reset_token: str
+    new_password: str
