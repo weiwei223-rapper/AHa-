@@ -92,10 +92,6 @@ export default function AuthPage() {
       setError('兩次輸入的密碼不一致。');
       return;
     }
-    if (!registerOTP) {
-      setError('請輸入驗證碼。');
-      return;
-    }
 
     setLoading(true);
 
@@ -237,7 +233,7 @@ export default function AuthPage() {
             <button type="submit" className="auth-button" disabled={loading}>
               {loading ? '驗證中...' : '進入工作台'}
             </button>
-            
+
           </form>
 
           <div className="auth-toggle">
@@ -319,7 +315,7 @@ export default function AuthPage() {
             <button type="submit" className="auth-button" disabled={loading}>
               {loading ? '註冊中...' : '註冊帳號'}
             </button>
-            
+
           </form>
 
           <div className="auth-toggle">
@@ -363,7 +359,7 @@ export default function AuthPage() {
                     <input type="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="請輸入 Email" style={{ width: '100%', padding: '12px', background: '#08111f', border: '1px solid rgba(43, 193, 241, 0.2)', borderRadius: '10px', color: 'white' }} required />
                   </div>
                   {forgotError && <div className="error-message">{forgotError}</div>}
-                  <button type="submit" className="auth-button" disabled={forgotLoading}>{forgotLoading ? '發送中...' : '發送驗證碼'}</button>
+                  <button type="submit" className="auth-button" disabled={forgotLoading}>{forgotLoading ? '發送 中...' : '發送驗證碼'}</button>
                 </form>
               )}
 
@@ -374,8 +370,8 @@ export default function AuthPage() {
                     <input type="text" maxLength={6} value={otpCode} onChange={(e) => setOtpCode(e.target.value)} placeholder="請輸入 6 位驗證碼" style={{ width: '100%', padding: '12px', background: '#08111f', border: '1px solid rgba(43, 193, 241, 0.2)', borderRadius: '10px', color: 'white', letterSpacing: '8px', textAlign: 'center', fontSize: '20px' }} required />
                   </div>
                   {forgotError && <div className="error-message">{forgotError}</div>}
-                  <button type="submit" className="auth-button" disabled={forgotLoading}>{forgotLoading ? '驗證中...' : '驗證代碼'}</button>
-                  <button type="button" onClick={() => setForgotStep('request')} style={{ background: 'none', border: 'none', color: '#94a3b8', width: '100%', marginTop: '10px', cursor: 'pointer', fontSize: '14px' }}>重新發送</button>
+                  <button type="submit" className="auth-button" disabled={forgotLoading}>{forgotLoading ? '驗證 中...' : '驗證代碼'}</button>
+                  <button type="button" onClick={() => setForgotStep('request')} style={{ background: 'none', border: 'none', color: '#94a3b8', width: '100%', marginTop: '10px', cursor: 'pointer', fontSize: '14px' }}>重新發 送</button>
                 </form>
               )}
 
@@ -390,14 +386,14 @@ export default function AuthPage() {
                     <input type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} placeholder="請再次輸入" style={{ width: '100%', padding: '12px', background: '#08111f', border: '1px solid rgba(43, 193, 241, 0.2)', borderRadius: '10px', color: 'white' }} required />
                   </div>
                   {forgotError && <div className="error-message">{forgotError}</div>}
-                  <button type="submit" className="auth-button" disabled={forgotLoading}>{forgotLoading ? '重設中...' : '確認重設'}</button>
+                  <button type="submit" className="auth-button" disabled={forgotLoading}>{forgotLoading ? '重設 中...' : '確認重設'}</button>
                 </form>
               )}
 
               {forgotStep === 'success' && (
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '48px', color: '#4ade80', marginBottom: '20px' }}>✓</div>
-                  <p style={{ color: 'white', marginBottom: '20px' }}>您的密碼已重設，請使用新密碼登入。</p>
+                  <p style={{ color: 'white', marginBottom: '20px' }}>您的密碼已重設，請使用新密碼登入。</p>    
                   <button onClick={() => setShowForgotModal(false)} className="auth-button">返回登入</button>
                 </div>
               )}
@@ -405,8 +401,8 @@ export default function AuthPage() {
 
             {forgotStep !== 'success' && (
               <div className="modal-footer" style={{ marginTop: '20px', textAlign: 'center' }}>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setShowForgotModal(false)}
                   style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}
                   disabled={forgotLoading}

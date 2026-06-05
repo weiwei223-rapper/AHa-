@@ -113,12 +113,10 @@ const Review = () => {
     const stats: Record<string, { total: number; passed: number }> = {};
     recentDetails.forEach((d: any) => {
       let concept = d.reference_concept || "基礎語法";
-      // Legacy or internal mapping
-      if (concept === "關鍵字熟練" || concept === "Python" || concept === "Python 基礎應用") concept = "基礎語法";
+      // Legacy mapping
+      if (concept === "關鍵字熟練") concept = "基礎語法";
       if (concept === "邏輯運算") concept = "條件判斷";
       if (concept === "函式架構") concept = "函式應用";
-      if (concept === "數學邏輯") concept = "基礎語法";
-      if (concept === "字串處理") concept = "資料處理";
 
       if (!stats[concept]) stats[concept] = { total: 0, passed: 0 };
       stats[concept].total += 1;
@@ -197,7 +195,7 @@ const Review = () => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: true, position: 'top' as const, labels: { color: "#94a3b8", font: { size: 12 } } },
+      legend: { display: true, position: 'top' as const, labels: { color: "#94a3b8", font: { size: 12 } } },    
       tooltip: { backgroundColor: '#0f172a', titleColor: '#fff', bodyColor: '#cbd5e1' }
     },
     scales: {
@@ -261,10 +259,10 @@ const Review = () => {
               <div className={`quiz-review-status ${detail.passed ? "correct" : "review"}`}>
                 {detail.passed ? "Logic Correct" : "Logic Failed"}
               </div>
-              
+
               <div style={{ marginTop: "16px" }}>
                 <p><strong>題目：</strong></p>
-                <h3 style={{ marginTop: "8px", fontSize: "1.05em", color: "#e2e8f0", lineHeight: "1.5" }}>
+                <h3 style={{ marginTop: "8px", fontSize: "1.05em", color: "#e2e8f0", lineHeight: "1.5" }}>      
                   {detail.question_text || "未記錄題目內容"}
                 </h3>
               </div>
@@ -330,7 +328,7 @@ const Review = () => {
             </div>
           </div>
           <div className="panel-card" style={{ height: '350px', padding: '20px' }}>
-            <h2 style={{ marginBottom: '15px', fontSize: '1.1em', color: '#fb7185' }}>答題正確率分析</h2>
+            <h2 style={{ marginBottom: '15px', fontSize: '1.1em', color: '#fb7185' }}>答題正確率分析</h2>       
             <div style={{ height: '250px' }}>
               <Bar data={ratioChartData} options={stackedOptions} />
             </div>
@@ -352,17 +350,17 @@ const Review = () => {
                 <div className="video-library-badge">Score: {res.score}%</div>
                 {editingId === res.id ? (
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }} onClick={e => e.stopPropagation()}>
-                    <input 
-                      className="page-input" 
-                      value={newTitle} 
-                      onChange={e => setNewTitle(e.target.value)} 
+                    <input
+                      className="page-input"
+                      value={newTitle}
+                      onChange={e => setNewTitle(e.target.value)}
                       autoFocus
                     />
                     <button className="page-primary-button" onClick={(e) => handleRename(e, res.id)}>儲存</button>
-                    <button className="page-secondary-button" onClick={() => setEditingId(null)}>取消</button>
+                    <button className="page-secondary-button" onClick={() => setEditingId(null)}>取消</button>  
                   </div>
                 ) : (
-                  <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>       
                     {res.title || "未命名測驗"}
                     <button style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: '0.8em' }} onClick={(e) => startEdit(e, res)}>✎ 修改</button>
                   </h3>
@@ -371,7 +369,7 @@ const Review = () => {
                   測驗時間: {new Date(res.completed_at).toLocaleString("zh-TW")}
                 </p>
                 <p className="video-library-description">
-                  答對題數: {Math.round((res.score / 100) * res.total_questions)} / {res.total_questions}
+                  答對題數: {Math.round((res.score / 100) * res.total_questions)} / {res.total_questions}       
                 </p>
               </div>
               <div className="video-library-actions" style={{ marginTop: '12px' }}>
@@ -405,7 +403,7 @@ const Review = () => {
           {renderDetails(selectedResult.details_json)}
         </section>
       )}
-      <ReportModal 
+      <ReportModal
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
         onSubmit={handleReportQuizError}

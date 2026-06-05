@@ -42,7 +42,7 @@ def init_gemini() -> str:
     return api_key
 
 
-def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> tuple[str, dict]:
+def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_MODEL) -> tuple[str, dict]:     
     api_key = init_gemini()
     model_name = model.replace("models/", "")
 
@@ -64,7 +64,7 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
     request_payload = {
         "contents": gemini_contents,
         "generationConfig": {
-            "temperature": 0.5, 
+            "temperature": 0.5,
             "maxOutputTokens": 8192,
             "topP": 0.95,
             "topK": 40
@@ -92,7 +92,7 @@ def generate_text_with_gemini(contents: list[dict], model: str = DEFAULT_GEMINI_
         text = "".join(part.get("text", "") for part in parts).strip()
         if not text:
             raise ValueError("Empty response text from Gemini")
-        
+
         usage_metadata = data.get("usageMetadata", {
             "promptTokenCount": 0,
             "candidatesTokenCount": 0,
@@ -124,7 +124,7 @@ def generate_text_with_ollama(messages: list[dict], model: str = DEFAULT_OLLAMA_
         )
         if not response.ok:
             raise ValueError(f"Ollama API error {response.status_code}: {response.text}")
-        
+
         data = response.json()
         message = data.get("message", {})
         return message.get("content", "").strip()
@@ -150,7 +150,7 @@ def get_chat_response(messages: list[dict]) -> str:
             gemini_history.append({"role": "assistant", "parts": [{"text": content}]})
         else:
             gemini_history.append({"role": "user", "parts": [{"text": content}]})
-    
+
     text, _ = generate_text_with_gemini(gemini_history)
     return text
 
@@ -158,39 +158,28 @@ def get_chat_response(messages: list[dict]) -> str:
 def is_python_related(title: str, content: str, content_type: str = "影片") -> bool:
     """Use Gemini to determine if the content is related to Python programming."""
     prompt = f"""
-你是一位嚴格的內容審核員。請判斷以下{content_type}是否專注於「Python 程式語言」的學習或應用。
-
-判定準則：
-1. 必須包含：Python 語法、套件使用 (如 pandas, numpy, flask, requests)、開發工具 (PyCharm, VSCode Python)、或 Python 在資料科學/自動化的應用。
-2. 拒絕 (INVALID)：
-   - 其他程式語言 (C++, Java, JavaScript, Go 等) 且未提及 Python。
-   - 純一般技術談話 (如「什麼是 AI」、「雲端運算」) 但沒講到 Python 實作。
-   - 與程式無關的內容 (音樂、生活、其他學科、純軟體操作教學如 Word/Excel)。
-   - 內容過於簡略，無法判斷是否為 Python 相關。
+請判斷以下{content_type}內容是否與「Python 程式設計」有關。
+這包括：Python 語法、開發環境、資料科學、自動化腳本、Web 開發 (Django/Flask) 或任何 Python 相關教學。
 
 {content_type}標題：{title}
-{content_type}內容摘要：{content[:2000]}
+{content_type}內容摘要：{content[:1500]}
 
 要求：
-- 如果確診為 Python 相關，請回傳：VALID
-- 如果無關或無法確認為 Python 相關，請回傳：INVALID
-- 僅回傳關鍵字，不要有解釋。
+1. 如果有關聯，請回傳：VALID
+2. 如果無關聯（例如是單純的音樂、生活 VLOG、非 Python 的語言教學），請回傳：INVALID
+3. 僅回傳以上兩個關鍵字之一，不要有其他文字。
 """
     try:
         response_text, _ = generate_text_with_gemini([{"role": "user", "parts": [{"text": prompt}]}])
         decision = response_text.strip().upper()
-        # 移除可能的標點符號
-        decision = re.sub(r'[^A-Z]', '', decision)
         print(f"DEBUG: {content_type} validation AI response: '{decision}'")
-        
+
         if "INVALID" in decision:
             return False
-        if "VALID" in decision:
-            return True
-        return False # 預設不通過
+        return "VALID" in decision
     except Exception as e:
         print(f"DEBUG: {content_type} validation AI failed: {e}")
-        return True # 失敗時預設通過以避免阻礙正常使用者，但在生產環境應更保守
+        return True
 
 
 def get_video_title(video_link: str) -> Optional[str]:
@@ -218,7 +207,7 @@ def get_video_title(video_link: str) -> Optional[str]:
                 return raw_title.replace(" - YouTube", "").strip()
     except:
         pass
-    
+
     return None
 
 
@@ -232,7 +221,7 @@ def fetch_video_transcript(video_link: str) -> str:
     try:
         api = YouTubeTranscriptApi()
         transcript_list = api.list(video_id)
-        
+
         try:
             transcript = transcript_list.find_transcript(['zh-TW', 'zh-Hant'])
         except:
@@ -270,7 +259,7 @@ def _extract_transcript_snippets(transcript: str, limit: int = 5) -> list[str]:
     raw_snippets = re.split(r"(?<=[.!?。！？])\s+|\n+", transcript)
     cleaned: list[str] = []
     seen: set[str] = set()
-    
+
     for snippet in raw_snippets:
         normalized = re.sub(r"\s+", " ", snippet).strip(" -\t\r\n")
         if len(normalized) < 30:
@@ -292,7 +281,7 @@ def _extract_transcript_snippets(transcript: str, limit: int = 5) -> list[str]:
 
 
 def _pick_answer_from_snippet(snippet: str) -> str:
-    tech_keywords = ["bool", "int", "float", "str", "list", "dict", "tuple", "set", 
+    tech_keywords = ["bool", "int", "float", "str", "list", "dict", "tuple", "set",
                      "while", "for", "if", "else", "elif", "return", "def", "class",
                      "True", "False", "None", "and", "or", "not", "is", "in"]
     for kw in tech_keywords:
@@ -316,7 +305,7 @@ def generate_fallback_questions(
     snippets = _extract_transcript_snippets(transcript, limit=max(8, count))
     if not snippets:
         snippets = [outline[:100]] if outline else [title]
-        
+
     questions = []
     used_answers = set()
 
@@ -325,9 +314,9 @@ def generate_fallback_questions(
         answer = _pick_answer_from_snippet(snippet)
         if answer.lower() in used_answers or len(answer) < 2: continue
         used_answers.add(answer.lower())
-        
+
         starter_code = f"result = ___\n# 根據影片描述，此處應填入 {answer}\nprint(result)"
-        
+
         questions.append(
             schema.QuizQuestion(
                 question=f"根據影片內容提到『{answer}』的應用。請補全程式碼使其能正確表示該概念。",
@@ -343,7 +332,7 @@ def generate_fallback_questions(
     return questions
 
 
-def validate_error_report(report_content: str, source_content: str, report_type: str) -> tuple[bool, str]:
+def validate_error_report(report_content: str, source_content: str, report_type: str) -> tuple[bool, str]:      
     """
     使用 AI 判斷錯誤回報是否屬實，並返回判定結果與理由。
     report_type: 'outline' (大綱/分析), 'quiz' (題目) 或 'feedback' (AI 聊天回覆)
@@ -363,9 +352,9 @@ def validate_error_report(report_content: str, source_content: str, report_type:
 {report_content}
 
 判斷標準：
-1. 如果使用者指出的錯誤確實存在（例如：題目答案錯誤、程式碼邏輯有誤、大綱與影片內容完全無關、翻譯嚴重錯誤等），判定為：VALID
+1. 如果使用者指出的錯誤確實存在（例如：題目答案錯誤、程式碼邏輯有誤、大綱與影片內容完全無關、翻譯嚴重錯誤等）， 判定為：VALID
 2. 如果使用者的回報不符合事實、純屬無理取鬧、或是回報內容過於簡短無意義，判定為：INVALID
-3. 注意：如果回報是關於「AI 聊天對話的回答不滿意」或是「測驗批改分數 (Grade) 不公」，這些不屬於退款範圍，判定為：INVALID。
+3. 注意：如果回報是關於「AI 聊天對話的回答不滿意」或是「測驗批改分數 (Grade) 不公」，這些不屬於退款範圍，判定為 ：INVALID。
 
 請以 JSON 格式回傳：
 {{
@@ -383,7 +372,7 @@ def validate_error_report(report_content: str, source_content: str, report_type:
             reason = data.get("reason", "經系統初步審核判定。")
             is_valid = "VALID" in decision and "INVALID" not in decision
             return is_valid, reason
-        
+
         # Fallback if JSON fails
         is_valid = "VALID" in response_text.upper() and "INVALID" not in response_text.upper()
         return is_valid, "經 AI 系統分析判定。"

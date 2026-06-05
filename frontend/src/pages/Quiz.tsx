@@ -18,7 +18,6 @@ type DocumentItem = {
   id: number;
   filename: string;
   title: string;
-  outline?: string | null;
 };
 
 type QuizQuestion = {
@@ -59,7 +58,7 @@ const Quiz = () => {
   const [loading, setLoading] = useState(false);
   const [grading, setGrading] = useState(false);
   const [error, setError] = useState("");
-  const [quizCounts, setQuizCounts] = useState<Record<string, number>>({}); 
+  const [quizCounts, setQuizCounts] = useState<Record<string, number>>({});
 
   const [codeOutput, setCodeOutput] = useState("");
   const [codeError, setCodeError] = useState("");
@@ -84,10 +83,10 @@ const Quiz = () => {
       const response = await quizAPI.getDrafts(userId);
       const drafts = response.data;
       if (drafts.length > 0) {
-        const latest = [...drafts].sort((a: any, b: any) => 
+        const latest = [...drafts].sort((a: any, b: any) =>
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         )[0];
-        
+
         const parsed = JSON.parse(latest.draft_json);
         if (parsed.quiz) {
           setQuiz(parsed.quiz);
@@ -105,7 +104,7 @@ const Quiz = () => {
     try {
       const response = await quizAPI.getDrafts(userId);
       const drafts = response.data;
-      const targetDraft = drafts.find((d: any) => type === 'video' ? d.video_id === id : d.document_id === id);
+      const targetDraft = drafts.find((d: any) => type === 'video' ? d.video_id === id : d.document_id === id); 
       if (targetDraft) {
         const parsed = JSON.parse(targetDraft.draft_json);
         if (parsed.quiz) {
@@ -156,7 +155,7 @@ const Quiz = () => {
 
     setLoading(true); setError("");
     try {
-      const response = type === 'video' 
+      const response = type === 'video'
         ? await videoAPI.generateQuiz(id, userId, specificCount)
         : await documentAPI.generateQuiz(id, userId, specificCount);
 
@@ -202,15 +201,15 @@ const Quiz = () => {
     setGrading(true);
     setLoading(true);
     try {
-      const gradeRes = await quizAPI.gradeQuiz(quiz.video_id || 0, { 
-        user_id: userId, 
+      const gradeRes = await quizAPI.gradeQuiz(quiz.video_id || 0, {
+        user_id: userId,
         answers: userAnswers,
-        document_id: quiz.document_id 
+        document_id: quiz.document_id
       });
       const { total_score, details } = gradeRes.data;
       setBackendScore(total_score);
       setGradeDetails(details);
-      
+
       await quizAPI.createResult({
         user_id: userId,
         video_id: quiz.video_id || undefined,
@@ -266,7 +265,7 @@ const Quiz = () => {
   const resetQuiz = async () => {
     if (!window.confirm("確定要放棄目前進度嗎？")) return;
     if (quiz) {
-       await quizAPI.deleteDraft(quiz.video_id || quiz.document_id || 0, userId).catch(e => console.error(e));
+       await quizAPI.deleteDraft(quiz.video_id || quiz.document_id || 0, userId).catch(e => console.error(e));  
     }
     setQuiz(null);
     setCurrentQuestionIndex(0);
@@ -299,7 +298,7 @@ const Quiz = () => {
            <div className="quiz-review-list">
              {quiz.questions.map((q, i) => (
                <article key={i} className="quiz-review-card">
-                  <div className={`quiz-review-status ${gradeDetails[i]?.passed ? 'correct' : 'failed'}`}>
+                  <div className={`quiz-review-status ${gradeDetails[i]?.passed ? 'correct' : 'failed'}`}>      
                     {gradeDetails[i]?.passed ? 'Logic Correct' : 'Logic Failed'}
                   </div>
                   <h3>{i+1}. {q.question}</h3>
@@ -349,14 +348,7 @@ const Quiz = () => {
                 </div>
               </div>
               <div className="video-library-actions">
-                <button 
-                  onClick={() => handleGenerateQuiz(v.id, 'video')} 
-                  className="page-primary-button"
-                  style={{ opacity: v.outline ? 1 : 0.5, cursor: v.outline ? 'pointer' : 'not-allowed' }}
-                  title={v.outline ? "" : "請先在教材庫點擊 Analyze 進行分析"}
-                >
-                  Generate
-                </button>
+                <button onClick={() => handleGenerateQuiz(v.id, 'video')} className="page-primary-button">Generate</button>
               </div>
             </article>
           );
@@ -376,14 +368,7 @@ const Quiz = () => {
                 </div>
               </div>
               <div className="video-library-actions">
-                <button 
-                  onClick={() => handleGenerateQuiz(d.id, 'doc')} 
-                  className="page-primary-button"
-                  style={{ opacity: d.outline ? 1 : 0.5, cursor: d.outline ? 'pointer' : 'not-allowed' }}
-                  title={d.outline ? "" : "請先在教材庫點擊 Analyze 進行分析"}
-                >
-                  Generate
-                </button>
+                <button onClick={() => handleGenerateQuiz(d.id, 'doc')} className="page-primary-button">Generate</button>
               </div>
             </article>
           );
@@ -395,7 +380,7 @@ const Quiz = () => {
            <div className="quiz-question-card">
              <div className="quiz-question-number" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '10px' }}>
                <span style={{ whiteSpace: 'nowrap' }}>Question {currentQuestionIndex+1}/{quiz.questions.length} | {currentQuestion.reference_concept}</span>
-               <button 
+               <button
                  onClick={() => {
                    setReportingContext(`第 ${currentQuestionIndex + 1} 題生成錯誤`);
                    setIsReportModalOpen(true);
@@ -423,7 +408,7 @@ const Quiz = () => {
              <button onClick={() => void resetQuiz()} className="page-secondary-button" style={{ marginRight: 'auto' }}>放棄測驗</button>
              <button onClick={() => void handleManualSave()} className="page-secondary-button" style={{ borderColor: "#facc15", color: "#facc15" }}>儲存進度</button>
              <button onClick={handlePrevious} disabled={currentQuestionIndex === 0} className="page-secondary-button">Previous</button>
-             <button onClick={() => void handleNext()} disabled={grading || loading} className="page-primary-button">{currentQuestionIndex === quiz.questions.length-1 ? (grading ? "Grading..." : "Finish") : "Next"}</button>
+             <button onClick={() => void handleNext()} disabled={grading || loading} className="page-primary-button">{currentQuestionIndex === quiz.questions.length-1 ? (grading ? "Grading..." : "Finish") : "Next"}</button> 
              <button onClick={() => void executeCode()} disabled={codeLoading} className="page-primary-button">{codeLoading ? "Testing..." : "Test"}</button>
            </div>
         </section>

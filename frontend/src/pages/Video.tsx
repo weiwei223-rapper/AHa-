@@ -61,7 +61,7 @@ const Video = () => {
   const [videoLink, setVideoLink] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
   const [videos, setVideos] = useState<VideoItem[]>([]);
-  
+
   // Document States
   const [docs, setDocs] = useState<DocumentItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -243,13 +243,13 @@ const Video = () => {
       </section>
 
       <div className="profile-tab-row" style={{ marginBottom: '20px' }}>
-        <button 
+        <button
           className={`profile-tab-btn ${activeTab === 'video' ? 'active' : ''}`}
           onClick={() => setActiveTab('video')}
         >
           YouTube 教材
         </button>
-        <button 
+        <button
           className={`profile-tab-btn ${activeTab === 'pdf' ? 'active' : ''}`}
           onClick={() => setActiveTab('pdf')}
         >
@@ -266,7 +266,7 @@ const Video = () => {
             </div>
           </div>
           <div className="video-upload-grid">
-            <input type="text" value={videoTitle} onChange={e => setVideoTitle(e.target.value)} placeholder="教材標題 (可選)" />
+            <input type="text" value={videoTitle} onChange={e => setVideoTitle(e.target.value)} placeholder="教 材標題 (可選)" />
             <input type="text" value={videoLink} onChange={e => setVideoLink(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
             <button onClick={handleVideoUpload} disabled={loading} className="page-primary-button">
               {loading ? "處理中..." : "Add Material"}
@@ -283,10 +283,10 @@ const Video = () => {
             </div>
           </div>
           <div className="video-upload-grid">
-            <input 
+            <input
               id="pdf-input"
-              type="file" 
-              accept=".pdf" 
+              type="file"
+              accept=".pdf"
               onChange={e => setSelectedFile(e.target.files?.[0] || null)}
               style={{ padding: '10px' }}
             />
@@ -314,15 +314,14 @@ const Video = () => {
                   setReportingVideoId(v.id);
                   setIsReportModalOpen(true);
                 }} className="page-secondary-button">Report</button>
-                <button 
-                  onClick={() => handleOpenQuiz(v.id, 'video')} 
+                <button
+                  onClick={() => handleOpenQuiz(v.id, 'video')}
                   className="page-primary-button"
-                  style={{ opacity: v.outline ? 1 : 0.5, cursor: v.outline ? 'pointer' : 'not-allowed' }}
+                  style={{ opacity: v.outline ? 1 : 0.5, cursor: v.outline ? 'pointer' : 'not-allowed' }}       
                   title={v.outline ? "" : "請先點擊 Analyze 進行分析"}
                 >
                   Quiz
                 </button>
-                <button onClick={() => handleDeleteVideo(v.id)} className="page-danger-button">Delete</button>
               </div>
             </article>
           ))
@@ -337,15 +336,15 @@ const Video = () => {
                 <button onClick={() => handleAnalyzeDoc(d.id)} disabled={actionId === d.id} className="page-secondary-button">
                   {actionId === d.id ? "分析中..." : "Analyze"}
                 </button>
-                <button 
-                  onClick={() => handleOpenQuiz(d.id, 'pdf')} 
+                <button
+                  onClick={() => handleOpenQuiz(d.id, 'pdf')}
                   className="page-primary-button"
-                  style={{ opacity: d.outline ? 1 : 0.5, cursor: d.outline ? 'pointer' : 'not-allowed' }}
+                  style={{ opacity: d.outline ? 1 : 0.5, cursor: d.outline ? 'pointer' : 'not-allowed' }}       
                   title={d.outline ? "" : "請先點擊 Analyze 進行分析"}
                 >
                   Quiz
                 </button>
-                <button onClick={() => handleDeleteDoc(d.id)} className="page-danger-button">Delete</button>
+                <button onClick={() => handleDeleteDoc(d.id)} className="page-danger-button">Delete</button>    
               </div>
             </article>
           ))
