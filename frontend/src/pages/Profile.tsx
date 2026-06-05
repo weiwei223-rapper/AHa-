@@ -68,74 +68,80 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  const refreshAchievements = useCallback((userData?: UserData) => {
-    const activeUser = userData || user;
-    if (!activeUser) return;
-
-    const currentLoginMeta = {
-      lastLoginDate: activeUser.last_login_date || '',
-      consecutiveLoginDays: activeUser.consecutive_login_days || 0,
-      totalLoginDays: activeUser.total_login_days || 0,
-    };
-    setLoginMeta(currentLoginMeta);
-
-    const allAchievements = buildAchievements({
-      videoCount,
-      questionCount,
-      loginStreakDays: currentLoginMeta.consecutiveLoginDays,
-      totalLoginDays: currentLoginMeta.totalLoginDays,
-    });
-
-    const totalUnlockedPoints = allAchievements
-      .filter((item) => item.unlocked)
-      .reduce((sum, item) => sum + item.points, 0);
-
-    const claimable = Math.max(0, totalUnlockedPoints - (activeUser.claimed_achievement_points || 0));
-    setAccumulatedPoints(claimable);
-    
-    setAchievements(allAchievements);
-  }, [videoCount, questionCount, user]);
-
-  const loadUser = async (id: number) => {
+  const loadData = useCallback(async (id: number) => {
     try {
       setLoading(true);
-      const userResp = await api.get(`/users/${id}`);
-      const data: UserData = userResp.data;
-      setUser(data);
-      setPoints(data.points);
-      setFormValues({
-        name: data.name,
-        password: "",
-        email: data.email,
-        uid: data.uid,
-      });
-      
-      const historyResp = await api.get(`/users/${id}/recharge-records`);
+      setMessage("");
+
+      // 並行執行所有 API 請求以提升效能
+      const [userResp, statsResp, historyResp, signinResp] = await Promise.all([
+        api.get(`/users/${id}`),
+        userAPI.getStats(id),
+        api.get(`/users/${id}/recharge-records`),
+        userAPI.getSigninStatus(id).catch(err => {
+          console.error('Failed to load signin status', err);
+          return { data: null };
+        })
+      ]);
+
+      const userData: UserData = userResp.data;
+      const stats = statsResp.data;
+
+      // 1. 先更新基礎數值狀態
+      setUser(userData);
+      if (setPoints) setPoints(userData.points);
+      setVideoCount(stats.analyzed_video_count);
+      setTotalVideoCount(stats.video_count);
+      setQuestionCount(stats.total_questions_count || 0);
       setHistory(historyResp.data);
-      // load sign-in status
-      try {
-        const resp = await userAPI.getSigninStatus(id);
-        setSigninStatus(resp.data);
-      } catch (err) {
-        console.error('Failed to load signin status', err);
-      }
-      refreshAchievements(data);
+      setSigninStatus(signinResp.data);
+      
+      setFormValues({
+        name: userData.name,
+        password: "",
+        email: userData.email,
+        uid: userData.uid,
+      });
+
+      // 2. 根據最新抓到的數值計算成就
+      const streak = userData.consecutive_login_days || 0;
+      const totalDays = userData.total_login_days || 0;
+
+      setLoginMeta({
+        lastLoginDate: userData.last_login_date || '',
+        consecutiveLoginDays: streak,
+        totalLoginDays: totalDays,
+      });
+
+      const allAchievements = buildAchievements({
+        videoCount: stats.analyzed_video_count,
+        questionCount: stats.total_questions_count || 0,
+        loginStreakDays: streak,
+        totalLoginDays: totalDays,
+      });
+
+      const totalUnlockedPoints = allAchievements
+        .filter((item) => item.unlocked)
+        .reduce((sum, item) => sum + item.points, 0);
+
+      const claimable = Math.max(0, totalUnlockedPoints - (userData.claimed_achievement_points || 0));
+      setAccumulatedPoints(claimable);
+      setAchievements(allAchievements);
+
     } catch (error) {
       console.error(error);
-      setMessage("無法讀取使用者資料，請稍後再試。");
+      setMessage("無法讀取個人資料，請檢查網路連線。");
     } finally {
       setLoading(false);
     }
-  };
+  }, [setPoints]);
 
-  const loadSigninStatus = async (id: number) => {
-    try {
-      const resp = await userAPI.getSigninStatus(id);
-      setSigninStatus(resp.data);
-    } catch (err) {
-      console.error(err);
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId");
+    if (storedUserId) {
+      void loadData(Number(storedUserId));
     }
-  };
+  }, [loadData]);
 
   const handleSignin = async () => {
     if (!user) return;
@@ -143,40 +149,15 @@ const Profile = () => {
       setSaving(true);
       const resp = await userAPI.signin(user.id);
       const data = resp.data;
-      // update user points and streak
-      const updatedUserResp = await api.get(`/users/${user.id}`);
-      const updatedData = updatedUserResp.data;
-      setUser(updatedData);
-      setPoints(updatedData.points);
-      await loadSigninStatus(user.id);
       setMessage(`已簽到 +${data.points_awarded} 點，連續第 ${data.consecutive_login_days} 天`);
-      refreshAchievements(updatedData);
+      // 簽到後重新載入所有資料以更新進度
+      await loadData(user.id);
     } catch (err: any) {
       setMessage(err.response?.data?.detail || '簽到失敗，請稍後再試。');
     } finally {
       setSaving(false);
     }
   };
-
-  useEffect(() => {
-    const storedUserId = localStorage.getItem("userId");
-    if (storedUserId) {
-      const userId = Number(storedUserId);
-      userAPI.getStats(userId)
-        .then((response) => {
-          const stats = response.data;
-          setVideoCount(stats.analyzed_video_count);
-          setTotalVideoCount(stats.video_count);
-          setQuestionCount(stats.total_questions_count || 0);
-        })
-        .catch((err) => console.error(err));
-      void loadUser(userId);
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshAchievements();
-  }, [videoCount, questionCount, refreshAchievements]);
 
   const handleClaimPoints = async () => {
     if (!user || accumulatedPoints <= 0) return;
@@ -188,7 +169,8 @@ const Profile = () => {
       setPoints(updated.points);
       setAccumulatedPoints(0);
       setMessage(`🎉 領取成功！已領取 ${accumulatedPoints} 點成就獎勵。`);
-      refreshAchievements(updated);
+      // 重新整理成就顯示
+      await loadData(user.id);
     } catch (err: any) {
       alert(err.response?.data?.detail || "領取失敗，請稍後再試。");
     } finally {

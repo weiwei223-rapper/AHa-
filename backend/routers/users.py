@@ -18,18 +18,24 @@ def get_cycle_day(consecutive_days: int) -> int:
     return ((consecutive_days - 1) % 7) + 1
 
 def calculate_total_achievement_points(user: models.User, db: Session) -> int:
-    video_count = db.query(models.Video).filter(models.Video.user_id == user.id, models.Video.outline != None).count()
+    v_ana = db.query(models.Video).filter(models.Video.user_id == user.id, models.Video.outline != None).count()
+    d_ana = db.query(models.Document).filter(models.Document.user_id == user.id, models.Document.outline != None).count()
+    video_count = v_ana + d_ana
+
     quiz_results = db.query(models.QuizResult).filter(models.QuizResult.user_id == user.id).all()
     question_count = sum(r.total_questions for r in quiz_results) if quiz_results else 0
     total = 0
+    # 教材分析成就 (200 點)
     for threshold in [1, 5, 10]:
         if video_count >= threshold: total += 200
+    # 測驗題目成就 (30 點)
     for threshold in [1, 5, 15, 30, 50, 100]:
         if question_count >= threshold: total += 30
+    # 登入成就
     for threshold, pts in {1: 20, 7: 30, 30: 100, 60: 200, 100: 300}.items():
         if threshold == 7:
-            if user.consecutive_login_days >= 7: total += pts
-        elif user.total_login_days >= threshold: total += pts
+            if (user.consecutive_login_days or 0) >= 7: total += pts
+        elif (user.total_login_days or 0) >= threshold: total += pts
     return total
 
 @router.post("/{user_id}/claim-achievement-points", response_model=schema.UserResponse)

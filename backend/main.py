@@ -64,6 +64,8 @@ def ensure_database_columns() -> None:
         "ALTER TABLE quiz_results ADD COLUMN IF NOT EXISTS error_report VARCHAR",
         "ALTER TABLE documents ADD COLUMN IF NOT EXISTS error_report VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_checkin_date VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS consecutive_login_days INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS total_login_days INTEGER DEFAULT 0",
     ]
     with database.engine.begin() as connection:
         for update in schema_updates:
