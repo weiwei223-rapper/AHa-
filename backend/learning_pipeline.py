@@ -160,11 +160,16 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
         token_usage=_to_token_usage_schema(total_usage)
     )
 
-def generate_quiz(video_id: int, title: str, video_link: str, count: int = 5) -> schema.QuizResponse:
+def generate_quiz(video_id: int, title: str, video_link: str, count: int = 5, existing_outline: str | None = None) -> schema.QuizResponse:
+    if existing_outline:
+        transcript = ai_analyzer.fetch_video_transcript(video_link)
+        return _generate_quiz_core(video_id, title, existing_outline, transcript[:1000] if transcript else "無法取得內容文字", count, is_video=True)
     analysis = analyze_video(video_id, title, video_link)
     return _generate_quiz_core(video_id, title, analysis.outline_markdown, analysis.transcript_excerpt, count, is_video=True)
 
-def generate_quiz_from_document(doc_id: int, title: str, content: str, count: int = 5) -> schema.QuizResponse:
+def generate_quiz_from_document(doc_id: int, title: str, content: str, count: int = 5, existing_outline: str | None = None) -> schema.QuizResponse:
+    if existing_outline:
+        return _generate_quiz_core(doc_id, title, existing_outline, content[:1000], count, is_video=False)
     outline, usage = generate_outline(content, title)
     return _generate_quiz_core(doc_id, title, outline, content[:1000], count, is_video=False)
 

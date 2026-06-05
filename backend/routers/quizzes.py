@@ -22,11 +22,14 @@ def generate_quiz_api(video_id: int, count: int = Query(5, ge=1, le=10), current
     if not video: raise HTTPException(status_code=404, detail="Video not found")
     if video.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
     
+    if not video.outline:
+        raise HTTPException(status_code=400, detail="請先執行教材分析（Analyze）再生成測驗")
+
     pts_needed = count * 50
     if current_user.points < pts_needed: raise HTTPException(status_code=400, detail="點數不足")
 
     try:
-        res = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link, count=count)
+        res = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link, count=count, existing_outline=video.outline)
         current_user.points -= len(res.questions) * 50
         for item in res.questions:
             q = models.QuizQuestion(user_id=current_user.id, video_id=video.id, question_content=item.question, reference_answer=item.correct_answer, starter_code=item.starter_code, test_cases_json=json.dumps(item.test_cases), explanation=item.explanation)
@@ -41,7 +44,9 @@ def generate_doc_quiz(doc_id: int, current_user: models.User = Depends(get_curre
     if not doc: raise HTTPException(status_code=404, detail="Document not found")
     if doc.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
     
-    res = learning_pipeline.generate_quiz_from_document(doc.id, doc.title, doc.content_text, count=5)
+    if not doc.outline:
+        raise HTTPException(status_code=400, detail="請先執行教材分析（Analyze）再生成測驗")
+    res = learning_pipeline.generate_quiz_from_document(doc.id, doc.title, doc.content_text, count=5, existing_outline=doc.outline)
     pts_needed = len(res.questions) * 50
     if current_user.points < pts_needed: raise HTTPException(status_code=400, detail="點數不足")
     
