@@ -153,23 +153,19 @@ const Home = ({ name }: UserStatusProps) => {
   const tutorialSteps = [
     {
       title: "1. 探索教材",
-      content: "在『Material』頁面貼上 YouTube 連結或上傳 PDF。我們支援 Python 相關的學習內容，系統會自動為您生成大綱與解析。",
-      icon: "📚"
+      content: "在『Material』頁面貼上 YouTube 連結或上傳 PDF。我們支援 Python 相關的學習內容，系統會自動為您生成大綱與解析。"
     },
     {
       title: "2. 生成測驗",
-      content: "前往『Quiz』頁面選擇已解析的教材，調整您想要練習的題目數量（1-10 題），點擊 Generate 即可開始。",
-      icon: "🎯"
+      content: "前往『Quiz』頁面選擇已解析的教材，調整您想要練習的題目數量（1-10 題），點擊 Generate 即可開始。"
     },
     {
       title: "3. 程式實戰",
-      content: "在瀏覽器編輯器中補全程式碼。您可以使用『Test』按鈕即時執行程式並查看輸出結果。",
-      icon: "💻"
+      content: "在瀏覽器編輯器中補全程式碼。您可以使用『Test』按鈕即時執行程式並查看輸出結果。"
     },
     {
       title: "4. AI 助教",
-      content: "測驗完成後，系統會給予邏輯診斷。遇到困難時，右下角的 Workspace Chat 隨時待命為您解答教材中的難點。",
-      icon: "🤖"
+      content: "測驗完成後，系統會給予邏輯診斷。遇到困難時，右下角的 Workspace Chat 隨時待命為您解答教材中的難點。"
     }
   ];
 

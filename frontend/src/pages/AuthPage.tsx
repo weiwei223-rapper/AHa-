@@ -14,6 +14,12 @@ export default function AuthPage() {
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerPasswordConfirm, setRegisterPasswordConfirm] = useState('');
 
+  // Register OTP State
+  const [registerStep, setRegisterStep] = useState<'input' | 'verify'>('input');
+  const [registerOtpCode, setRegisterOtpCode] = useState('');
+  const [registerOtpToken, setRegisterOtpToken] = useState('');
+  const [registerVerifyToken, setRegisterVerifyToken] = useState('');
+
   // OTP Forgot Password State
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotStep, setForgotStep] = useState<'request' | 'verify' | 'reset' | 'success'>('request');
@@ -93,13 +99,28 @@ export default function AuthPage() {
       return;
     }
 
-    setLoading(true);
+    if (registerStep === 'input') {
+      setLoading(true);
+      try {
+        const response = await authAPI.requestRegisterOTP(registerEmail);
+        setRegisterOtpToken(response.data.otp_token);
+        setRegisterStep('verify');
+      } catch (err: any) {
+        setError(err.response?.data?.detail || '發送驗證碼失敗，可能此 Email 已被註冊。');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
+    // Final registration call
+    setLoading(true);
     try {
       const response = await authAPI.register({
         name: registerName,
         email: registerEmail,
         password: registerPassword,
+        register_token: registerVerifyToken
       });
 
       const { user, access_token } = response.data;
@@ -108,7 +129,50 @@ export default function AuthPage() {
       localStorage.setItem('access_token', access_token);
       window.location.href = '/';
     } catch (err: any) {
-      setError(err.response?.data?.detail || '註冊失敗，請稍後再試。');
+      setError(err.response?.data?.detail || '註冊失敗，請確認驗證碼或稍後再試。');
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyRegisterOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (registerOtpCode.length !== 6) {
+      setError('請輸入 6 位數驗證碼。');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await authAPI.verifyRegisterOTP({
+        otp_token: registerOtpToken,
+        otp: registerOtpCode
+      });
+      setRegisterVerifyToken(response.data.register_token);
+      // Automatically trigger handleRegister to complete the process
+      // But we need the event or just call the logic
+      completeRegistration(response.data.register_token);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || '驗證碼錯誤或已過期。');
+      setLoading(false);
+    }
+  };
+
+  const completeRegistration = async (verifyToken: string) => {
+    try {
+      const response = await authAPI.register({
+        name: registerName,
+        email: registerEmail,
+        password: registerPassword,
+        register_token: verifyToken
+      });
+
+      const { user, access_token } = response.data;
+      localStorage.setItem('userId', user.id.toString());
+      localStorage.setItem('userData', JSON.stringify(user));
+      localStorage.setItem('access_token', access_token);
+      window.location.href = '/';
+    } catch (err: any) {
+      setError(err.response?.data?.detail || '註冊失敗，請確認驗證碼或稍後再試。');
       setLoading(false);
     }
   };
@@ -411,6 +475,28 @@ export default function AuthPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {registerStep === 'verify' && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ background: '#0d1725', border: '1px solid rgba(43, 193, 241, 0.3)', borderRadius: '20px', padding: '24px', maxWidth: '400px' }}>
+            <div className="modal-header" style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <h2 className="modal-title" style={{ color: '#2bc1f1', margin: 0 }}>註冊驗證</h2>
+              <p className="modal-subtitle" style={{ color: '#94a3b8', fontSize: '14px', marginTop: '4px' }}>驗證碼已發送至 {registerEmail}</p>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={handleVerifyRegisterOTP}>
+                <div className="form-group">
+                  <label style={{ color: '#94a3b8', fontSize: '14px' }}>驗證碼</label>
+                  <input type="text" maxLength={6} value={registerOtpCode} onChange={(e) => setRegisterOtpCode(e.target.value)} placeholder="請輸入 6 位驗證碼" style={{ width: '100%', padding: '12px', background: '#08111f', border: '1px solid rgba(43, 193, 241, 0.2)', borderRadius: '10px', color: 'white', letterSpacing: '8px', textAlign: 'center', fontSize: '20px' }} required />
+                </div>
+                {error && <div className="error-message">{error}</div>}
+                <button type="submit" className="auth-button" disabled={loading}>{loading ? '驗證 中...' : '驗證並註冊'}</button>
+                <button type="button" onClick={() => setRegisterStep('input')} style={{ background: 'none', border: 'none', color: '#94a3b8', width: '100%', marginTop: '10px', cursor: 'pointer', fontSize: '14px' }}>取消</button>
+              </form>
+            </div>
           </div>
         </div>
       )}

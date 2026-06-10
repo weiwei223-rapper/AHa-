@@ -131,7 +131,7 @@ button{
 
 button:hover{
     background-color: #2bc1f1;
-    color: #161f30;
+    color: white;
     transform: translateY(-2px);
 }
 
@@ -1179,11 +1179,13 @@ button:hover span:after {
 }
 
 .chat-video-picker {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-content: start;
   padding: 22px;
-  overflow: visible;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .chat-video-picker-head {
@@ -2947,18 +2949,21 @@ body {
 /* Custom Scrollbars */
 .chat-thread::-webkit-scrollbar,
 .chat-panel::-webkit-scrollbar,
-.chat-history-list::-webkit-scrollbar {
+.chat-history-list::-webkit-scrollbar,
+.chat-video-picker::-webkit-scrollbar {
   width: 5px;
 }
 
 .chat-thread::-webkit-scrollbar-thumb,
 .chat-panel::-webkit-scrollbar-thumb,
-.chat-history-list::-webkit-scrollbar-thumb {
+.chat-history-list::-webkit-scrollbar-thumb,
+.chat-video-picker::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15) !important;
   border-radius: 10px;
 }
 
 .chat-thread::-webkit-scrollbar-thumb:hover,
-.chat-panel::-webkit-scrollbar-thumb:hover {
+.chat-panel::-webkit-scrollbar-thumb:hover,
+.chat-video-picker::-webkit-scrollbar-thumb:hover {
   background: rgba(56, 189, 248, 0.4) !important;
 }

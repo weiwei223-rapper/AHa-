@@ -46,6 +46,7 @@ class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
+    register_token: str
 
     @validator('name')
     def validate_name(cls, value: str) -> str:

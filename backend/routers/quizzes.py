@@ -65,14 +65,46 @@ def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models
     questions.reverse()
     details = []; correct = 0
     for idx, q in enumerate(questions):
-        user_code = payload.answers[idx]; test_cases = json.loads(q.test_cases_json or "[]")
-        passed = True; q_res = []
-        for tc in test_cases:
-            ref_out, _ = code_compiler.execute_python_code(f"{q.starter_code.replace('___', q.reference_answer)}\n{tc}")
-            user_out, _ = code_compiler.execute_python_code(f"{user_code}\n{tc}")
-            match = ref_out.strip() == user_out.strip()
-            if not match: passed = False
-            q_res.append({"test_case": tc, "passed": match, "expected": ref_out.strip(), "actual": user_out.strip()})
+        user_code = payload.answers[idx]
+        
+        # Check for empty submission
+        if not user_code.strip():
+            passed = False
+            q_res = []
+        else:
+            test_cases = json.loads(q.test_cases_json or "[]")
+            passed = True
+            q_res = []
+            for tc in test_cases:
+                # The 'tc' stored in DB is actually the expected output string from LLM.
+                # We should execute the code as is (since it already contains print statements)
+                # and compare the output with 'tc'.
+                
+                # Execute reference code
+                ref_code = q.starter_code.replace('___', q.reference_answer)
+                ref_out, ref_err = code_compiler.execute_python_code(ref_code)
+                
+                # Execute user code
+                user_out, user_err = code_compiler.execute_python_code(user_code)
+                
+                # Clean up outputs for comparison
+                ref_out_clean = ref_out.strip()
+                user_out_clean = user_out.strip()
+                expected_out_clean = tc.strip()
+                
+                # Match logic: User output matches either the reference execution OR the stored expected output
+                # This adds robustness if the reference code fails locally but LLM's expected_output is valid.
+                match = (user_out_clean == expected_out_clean) or (user_out_clean == ref_out_clean)
+                
+                if not match: passed = False
+                q_res.append({
+                    "test_case": "Execution Output Match", 
+                    "passed": match, 
+                    "expected": expected_out_clean if expected_out_clean else ref_out_clean, 
+                    "actual": user_out_clean,
+                    "error": user_err if user_err else None
+                })
+        
         if passed: correct += 1
         details.append({
             "question_id": q.id,

@@ -227,14 +227,24 @@ const Quiz = () => {
   };
 
   const executeCode = async () => {
+    const userCode = userAnswers[currentQuestionIndex];
+    if (!userCode.trim()) {
+      setCodeError("沒有可執行的程式碼。");
+      return;
+    }
     setCodeLoading(true); setCodeOutput(""); setCodeError("");
     try {
-      const userCode = userAnswers[currentQuestionIndex];
-      const testBlock = quiz?.questions[currentQuestionIndex]?.test_cases?.join("\n") || "";
-      const script = `${userCode}\n\n${testBlock}`;
-      const response = await codeAPI.executeCode({ code: script });
+      // The test_cases in the DB for this project are actually expected output strings, not executable code.
+      // Since starter_code already contains the print verification line, we just execute the user's code.
+      const response = await codeAPI.executeCode({ code: userCode });
       setCodeOutput(response.data.output);
       setCodeError(response.data.error);
+      
+      // Optional: If we want to show a hint if it matches the expected output
+      const expectedOutput = quiz?.questions[currentQuestionIndex]?.test_cases?.[0] || "";
+      if (response.data.output.trim() === expectedOutput.trim() && !response.data.error) {
+        // You could add a "Matched!" message here if desired, but for now just showing output is fine.
+      }
     } catch (err: any) { setCodeError("執行失敗"); }
     finally { setCodeLoading(false); }
   };

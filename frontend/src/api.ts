@@ -36,7 +36,7 @@ api.interceptors.request.use((config) => {
 
 // Auth APIs
 export const authAPI = {
-  register: (data: { name: string; email: string; password: string }) =>
+  register: (data: { name: string; email: string; password: string; register_token: string }) =>
     api.post('/auth/register', data),
   login: (data: { email: string; password: string }) =>
     api.post('/auth/login', data),
@@ -47,6 +47,10 @@ export const authAPI = {
     api.post('/auth/forgot-password/verify', data),
   resetPasswordWithOTP: (data: { reset_token: string; new_password: string }) =>
     api.post('/auth/forgot-password/reset', data),
+  requestRegisterOTP: (email: string) =>
+    api.post('/auth/register/request-otp', { email }),
+  verifyRegisterOTP: (data: { otp_token: string; otp: string }) =>
+    api.post('/auth/register/verify-otp', data),
 };
 
 // User APIs
