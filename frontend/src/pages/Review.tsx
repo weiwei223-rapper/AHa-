@@ -106,35 +106,75 @@ const Review = () => {
 
   // 2. Radar Chart: 技能掌握分布
   const skillChartData = useMemo(() => {
-    const recentDetails = results.slice(0, 8).map(r => {
+    const labels = ["基礎語法", "條件判斷", "迴圈控制", "資料處理", "函式應用", "物件導向"];
+    const stats: Record<string, { total: number; passed: number }> = {};
+    labels.forEach(l => stats[l] = { total: 0, passed: 0 });
+
+    // 取得所有歷史測驗的題目詳情，確保與資料庫完整記錄保持一致
+    const allDetails = results.map(r => {
       try { return JSON.parse(r.details_json || "[]"); } catch { return []; }
     }).flat();
 
-    const stats: Record<string, { total: number; passed: number }> = {};
-    recentDetails.forEach((d: any) => {
-      let concept = d.reference_concept || "基礎語法";
-      // Legacy mapping
-      if (concept === "關鍵字熟練") concept = "基礎語法";
-      if (concept === "邏輯運算") concept = "條件判斷";
-      if (concept === "函式架構") concept = "函式應用";
+    allDetails.forEach((d: any, index: number) => {
+      // 智慧映射邏輯：
+      // 1. 優先使用題目詳情中的 reference_concept
+      // 2. 若無，則嘗試從該測驗的標題 (result.title) 提取關鍵字
+      let rawConcept = d.reference_concept || "";
+      
+      // 如果詳情裡沒存知識點，則從對應的測驗結果標題找
+      if (!rawConcept) {
+        // 找出這題屬於哪次測驗 (根據 details_json 的順序與 results 的索引對齊)
+        // 由於 allDetails 是 flat 過來的，我們需要一點技巧找到原屬標題
+        let currentIdx = 0;
+        for (const res of results) {
+          const details = JSON.parse(res.details_json || "[]");
+          if (index >= currentIdx && index < currentIdx + details.length) {
+            rawConcept = res.title || "基礎語法";
+            break;
+          }
+          currentIdx += details.length;
+        }
+      }
+      
+      let concept = ""; // 預設為空，避免未分類數據污染「基礎語法」
+      const c = rawConcept.toLowerCase();
 
-      if (!stats[concept]) stats[concept] = { total: 0, passed: 0 };
-      stats[concept].total += 1;
-      if (d.passed) stats[concept].passed += 1;
+      if (c.includes("迴圈") || c.includes("迭代") || c.includes("while") || c.includes("for") || c.includes("控制")) {
+        concept = "迴圈控制";
+      } else if (c.includes("判斷") || c.includes("邏輯") || c.includes("條件") || c.includes("if")) {
+        concept = "條件判斷";
+      } else if (c.includes("語法") || c.includes("變數") || c.includes("型態") || c.includes("基礎") || c.includes("格式")) {
+        concept = "基礎語法";
+      } else if (c.includes("資料") || c.includes("清單") || c.includes("字典") || c.includes("集合") || c.includes("處理") || c.includes("字串")) {
+        concept = "資料處理";
+      } else if (c.includes("函式") || c.includes("方法") || c.includes("參數") || c.includes("回傳") || c.includes("def")) {
+        concept = "函式應用";
+      } else if (c.includes("物件") || c.includes("類別") || c.includes("繼承") || c.includes("oop") || c.includes("class")) {
+        concept = "物件導向";
+      }
+
+      // 只有當確定屬於六大維度之一時，才計入統計
+      if (concept && stats[concept]) {
+        stats[concept].total += 1;
+        if (d.passed) stats[concept].passed += 1;
+      }
     });
-
-    const labels = ["基礎語法", "條件判斷", "迴圈控制", "資料處理", "函式應用", "物件導向"];
 
     return {
       labels,
       datasets: [
         {
-          label: "當前能力分布",
-          data: labels.map(l => stats[l] ? (stats[l].passed / stats[l].total) * 100 : 20),
-          backgroundColor: "rgba(129, 140, 248, 0.2)",
-          borderColor: "#818cf8",
+          label: "歷史掌握度 (%)",
+          data: labels.map(l => {
+            if (stats[l].total === 0) return 0;
+            // 計算該維度在資料庫中的正確率
+            return Math.round((stats[l].passed / stats[l].total) * 100);
+          }),
+          backgroundColor: "rgba(99, 102, 241, 0.2)",
+          borderColor: "#6366f1",
           borderWidth: 2,
-          pointBackgroundColor: "#818cf8",
+          pointBackgroundColor: "#6366f1",
+          pointRadius: 4,
         },
       ],
     };

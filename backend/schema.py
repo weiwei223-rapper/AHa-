@@ -150,6 +150,7 @@ class QuizQuestionResponse(BaseModel):
     answer_record: Optional[str] = None
     accuracy: int
     options: List[str] = []
+    reference_concept: Optional[str] = None  # 新增此欄位以保持一致
     created_at: datetime
 
     class Config:

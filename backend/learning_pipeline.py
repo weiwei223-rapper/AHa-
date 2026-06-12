@@ -58,17 +58,34 @@ def _extract_json_array(payload: str) -> list[dict[str, Any]]:
     raise ValueError(f"Could not extract JSON from AI response")
 
 def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
+    raw_concept = str(item.get("reference_concept") or "基礎語法")
+    
+    # 嚴格分類映射邏輯，確保與雷達圖 6 個維度完全一致
+    concept = "基礎語法"
+    c = raw_concept.lower()
+    
+    if any(k in c for k in ["迴圈", "迭代", "while", "for", "控制"]):
+        concept = "迴圈控制"
+    elif any(k in c for k in ["判斷", "邏輯", "條件", "if"]):
+        concept = "條件判斷"
+    elif any(k in c for k in ["語法", "變數", "型態", "基礎", "格式"]):
+        concept = "基礎語法"
+    elif any(k in c for k in ["資料", "清單", "字典", "集合", "處理", "字串"]):
+        concept = "資料處理"
+    elif any(k in c for k in ["函式", "方法", "參數", "回傳", "def"]):
+        concept = "函式應用"
+    elif any(k in c for k in ["物件", "類別", "繼承", "oop", "class"]):
+        concept = "物件導向"
+    
     return schema.QuizQuestion(
         question=str(item.get("question") or "請補全程式碼"),
         correct_answer=str(item.get("correct_answer") or ""),
         explanation=str(item.get("explanation") or ""),
-        reference_concept=str(item.get("reference_concept") or "Python"),
+        reference_concept=concept, # 使用修正後的嚴格分類
         question_type="fill-in-the-blank",
         source_time="unknown",
         source_excerpt=None,
         starter_code=str(item.get("starter_code") or ""),
-
-        # 將原本吃不到的 test_cases，改為接住 Prompt 產出的 expected_output
         test_cases=[str(item.get("expected_output") or "print('No output')")],
     )
 
@@ -198,7 +215,7 @@ JSON 格式要求：
 [
   {{
     "question": "題目情境說明（例如：請完成以下程式碼以計算 N 的階乘）",
-    "reference_concept": "迴圈控制 / 數學邏輯 / 條件判斷 / 字串處理",
+    "reference_concept": "必須且只能從這六項中選一：基礎語法、條件判斷、迴圈控制、資料處理、函式應用、物件導向",
     "correct_answer": "填空處的正確程式碼（即填入 ___ 的內容）",
     "expected_output": "填空完成後，完整執行該段程式碼會印出的標準輸出結果",
     "explanation": "針對此邏輯實作的原理、變數變化過程與易錯點解析",

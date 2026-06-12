@@ -32,7 +32,16 @@ def generate_quiz_api(video_id: int, count: int = Query(5, ge=1, le=10), current
         res = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link, count=count, existing_outline=video.outline)
         current_user.points -= len(res.questions) * 50
         for item in res.questions:
-            q = models.QuizQuestion(user_id=current_user.id, video_id=video.id, question_content=item.question, reference_answer=item.correct_answer, starter_code=item.starter_code, test_cases_json=json.dumps(item.test_cases), explanation=item.explanation)
+            q = models.QuizQuestion(
+                user_id=current_user.id, 
+                video_id=video.id, 
+                question_content=item.question, 
+                reference_answer=item.correct_answer, 
+                starter_code=item.starter_code, 
+                test_cases_json=json.dumps(item.test_cases), 
+                explanation=item.explanation,
+                reference_concept=item.reference_concept  # 確保保存知識點標籤
+            )
             db.add(q); db.flush()
             db.add(models.GenerationRecord(user_id=current_user.id, quiz_question_id=q.id, consumed_points=50)) 
         db.commit(); return res
@@ -52,7 +61,16 @@ def generate_doc_quiz(doc_id: int, current_user: models.User = Depends(get_curre
 
     current_user.points -= pts_needed
     for item in res.questions:
-        db.add(models.QuizQuestion(user_id=current_user.id, document_id=doc.id, question_content=item.question, reference_answer=item.correct_answer, starter_code=item.starter_code, test_cases_json=json.dumps(item.test_cases), explanation=item.explanation))
+        db.add(models.QuizQuestion(
+            user_id=current_user.id, 
+            document_id=doc.id, 
+            question_content=item.question, 
+            reference_answer=item.correct_answer, 
+            starter_code=item.starter_code, 
+            test_cases_json=json.dumps(item.test_cases), 
+            explanation=item.explanation,
+            reference_concept=item.reference_concept  # 確保保存知識點標籤
+        ))
     db.commit(); return res
 
 @router.post("/quizzes/{video_id}/grade", response_model=schema.GradeResponse)
@@ -112,7 +130,8 @@ def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models
             "user_answer": user_code,
             "reference_answer": q.reference_answer,
             "passed": passed,
-            "test_results": q_res
+            "test_results": q_res,
+            "reference_concept": q.reference_concept  # 將知識點帶入批改結果詳情
         })
     return schema.GradeResponse(total_score=round(correct/len(questions)*100) if questions else 0, details=details)
 
