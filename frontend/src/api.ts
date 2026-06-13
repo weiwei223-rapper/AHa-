@@ -78,8 +78,8 @@ export const videoAPI = {
     api.post('/api/videos', data),
   deleteVideo: (videoId: number) => api.delete(`/api/videos/${videoId}`),
   analyzeVideo: (videoId: number, userId: number) => api.get(`/api/videos/${videoId}/analysis`, { params: { user_id: userId } }),
-  generateQuiz: (videoId: number, userId: number, count?: number) =>
-    api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
+  generateQuiz: (videoId: number, userId: number, count?: number, difficulty?: string) =>
+    api.get(`/api/videos/${videoId}/quiz`, { params: { user_id: userId, count: count || 5, difficulty: difficulty || 'medium' } }),
   reportError: (videoId: number, errorReport: string) =>
     api.post(`/api/videos/${videoId}/report-error`, { error_report: errorReport }),
 };
@@ -95,8 +95,8 @@ export const documentAPI = {
   deleteDocument: (docId: number) => api.delete(`/api/documents/${docId}`),
   analyzeDocument: (docId: number, userId: number) =>
     api.get(`/api/documents/${docId}/analysis`, { params: { user_id: userId } }),
-  generateQuiz: (docId: number, userId: number, count?: number) =>
-    api.get(`/api/documents/${docId}/quiz`, { params: { user_id: userId, count: count || 5 } }),
+  generateQuiz: (docId: number, userId: number, count?: number, difficulty?: string) =>
+    api.get(`/api/documents/${docId}/quiz`, { params: { user_id: userId, count: count || 5, difficulty: difficulty || 'medium' } }),
   reportError: (docId: number, errorReport: string) =>
     api.post(`/api/documents/${docId}/report-error`, { error_report: errorReport }),
 };

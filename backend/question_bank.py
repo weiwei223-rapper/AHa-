@@ -9,9 +9,7 @@ from pathlib import Path
 
 
 LEETCODE_DATASET_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "external"
-    / "LeetCodeDataset"
+    Path(__file__).resolve().parent
     / "data"
     / "LeetCodeDataset-v0.3.1-train.jsonl.gz"
 )

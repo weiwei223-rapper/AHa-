@@ -77,6 +77,12 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
     elif any(k in c for k in ["物件", "類別", "繼承", "oop", "class"]):
         concept = "物件導向"
     
+    # 處理多個測試案例
+    test_cases = item.get("expected_outputs")
+    if not isinstance(test_cases, list):
+        # 相容舊格式或單一輸出
+        test_cases = [str(item.get("expected_output") or "print('No output')")]
+    
     return schema.QuizQuestion(
         question=str(item.get("question") or "請補全程式碼"),
         correct_answer=str(item.get("correct_answer") or ""),
@@ -86,7 +92,7 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
         source_time="unknown",
         source_excerpt=None,
         starter_code=str(item.get("starter_code") or ""),
-        test_cases=[str(item.get("expected_output") or "print('No output')")],
+        test_cases=[str(tc) for tc in test_cases[:3]],
     )
 
 def _parse_bullets(markdown: str) -> list[str]:
@@ -177,21 +183,35 @@ def analyze_video(video_id: int, title: str, video_link: str) -> schema.VideoAna
         token_usage=_to_token_usage_schema(total_usage)
     )
 
-def generate_quiz(video_id: int, title: str, video_link: str, count: int = 5, existing_outline: str | None = None) -> schema.QuizResponse:
+def generate_quiz(video_id: int, title: str, video_link: str, count: int = 5, existing_outline: str | None = None, difficulty: str = "medium") -> schema.QuizResponse:
     if existing_outline:
         transcript = ai_analyzer.fetch_video_transcript(video_link)
-        return _generate_quiz_core(video_id, title, existing_outline, transcript[:1000] if transcript else "無法取得內容文字", count, is_video=True)
+        topics = _parse_bullets(existing_outline)
+        return _generate_quiz_core(video_id, title, existing_outline, transcript[:1000] if transcript else "無法取得內容文字", count, is_video=True, difficulty=difficulty, topics=topics)
     analysis = analyze_video(video_id, title, video_link)
-    return _generate_quiz_core(video_id, title, analysis.outline_markdown, analysis.transcript_excerpt, count, is_video=True)
+    return _generate_quiz_core(video_id, title, analysis.outline_markdown, analysis.transcript_excerpt, count, is_video=True, difficulty=difficulty, topics=analysis.key_topics)
 
-def generate_quiz_from_document(doc_id: int, title: str, content: str, count: int = 5, existing_outline: str | None = None) -> schema.QuizResponse:
+def generate_quiz_from_document(doc_id: int, title: str, content: str, count: int = 5, existing_outline: str | None = None, difficulty: str = "medium") -> schema.QuizResponse:
     if existing_outline:
-        return _generate_quiz_core(doc_id, title, existing_outline, content[:1000], count, is_video=False)      
+        topics = _parse_bullets(existing_outline)
+        return _generate_quiz_core(doc_id, title, existing_outline, content[:1000], count, is_video=False, difficulty=difficulty, topics=topics)      
     outline, usage = generate_outline(content, title)
-    return _generate_quiz_core(doc_id, title, outline, content[:1000], count, is_video=False)
+    topics = _parse_bullets(outline)
+    return _generate_quiz_core(doc_id, title, outline, content[:1000], count, is_video=False, difficulty=difficulty, topics=topics)
 
-def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, count: int, is_video: bool) -> schema.QuizResponse:
+def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, count: int, is_video: bool, difficulty: str = "medium", topics: list[str] = []) -> schema.QuizResponse:
     total_usage = {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}
+
+    difficulty_map = {
+        "easy": "簡單（僅 2-3 個空格，補全基礎關鍵運算或變數賦值）",
+        "medium": "中等（中等程度空格，需要補全核心邏輯片段或完整的條件判斷）",
+        "hard": "困難（要求使用者幾乎完成程式碼的主要功能，僅保留必要的背景架構與輸入變數，核心邏輯處應有大量連貫的空格）"
+    }
+    difficulty_desc = difficulty_map.get(difficulty, difficulty_map["medium"])
+
+    # 檢索 LeetCode 相關模板作為參考
+    reference_templates = question_bank.retrieve_templates(title, topics, snippet, top_k=3)
+    template_context = question_bank.format_templates_for_prompt(reference_templates)
 
     prompt = f"""
 [SYSTEM: RETURN RAW JSON ARRAY ONLY. NO TEXT AROUND IT.]
@@ -200,16 +220,21 @@ def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, 
 標題：{title}
 重點摘要：{outline}
 部分內容：{snippet}
+難度要求：{difficulty_desc}
+
+【參考範例】
+以下是來自 LeetCode 或精選題庫的參考模式，請參考其邏輯深度與結構，但請務必結合上述「標題與摘要」的內容重新創作：
+{template_context}
 
 出題要求（邏輯訓練導向）：
 1. **測驗核心**：題目必須包含具體的運算邏輯，例如：數學級數計算（如階乘、加總）、迴圈邊界條件（for/while）、條件分支（if/elif/else）、字串或陣列的資料處理（如解析特定字元、尋找極值）。
-2. **填空設計**：填空處 `___` 不能只是單一語法關鍵字（如 with、open）。它必須是**「核心的邏輯運算式」**、**「完 整的條件判斷行」**或**「關鍵的變數更新」**。
-   - 好的例子：`if ___:`（考驗條件設計）、`sum = ___`（考驗公式實作）、`while ___:`（考驗迴圈終止條件）。       
+2. **填空設計**：填空處 `___` 必須根據上述「難度要求」進行設計。
+   - 好的例子（中等）：`if ___:`（考驗條件設計）、`sum = ___`（考驗公式實作）、`while ___:`（考驗迴圈終止條件）。       
 3. **鷹架引導註解（Scaffolding）**：
    - **必須**在關鍵邏輯步驟的上方，加上簡潔的「中文指引註解」（例如：`# 判斷是否為偶數以決定加減`、`# 計算目前數字的階乘並累加`），以鷹架方式引導學生完成邏輯實作。
 4. **變數與輸入**：為了讓產出的程式碼可獨立執行與驗證，請用「直接宣告變數賦值」來取代 `input()`。
 5. **架構限制**：嚴禁使用 'class Solution' 或複雜的物件導向架構。請保持為直觀的結構化程式設計，需要時可定義單一 函式（如 `def factorial(N):`）。
-6. **手寫輸出追蹤**：每題必須設計「預期輸出」，用以模擬「看 code 寫出輸出結果」的程式碼追蹤能力。
+6. **手寫輸出追蹤**：每題必須設計 3 個「預期輸出」，用以模擬「看 code 寫出輸出結果」的程式碼追蹤能力。
 
 JSON 格式要求：
 [
@@ -217,7 +242,7 @@ JSON 格式要求：
     "question": "題目情境說明（例如：請完成以下程式碼以計算 N 的階乘）",
     "reference_concept": "必須且只能從這六項中選一：基礎語法、條件判斷、迴圈控制、資料處理、函式應用、物件導向",
     "correct_answer": "填空處的正確程式碼（即填入 ___ 的內容）",
-    "expected_output": "填空完成後，完整執行該段程式碼會印出的標準輸出結果",
+    "expected_outputs": ["輸出結果1", "輸出結果2", "輸出結果3"],
     "explanation": "針對此邏輯實作的原理、變數變化過程與易錯點解析",
     "starter_code": "含有 ___ 的完整程式碼（必須包含適當的引導註解與最後的 print 驗證行）"
   }}

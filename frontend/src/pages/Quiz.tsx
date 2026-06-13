@@ -59,6 +59,13 @@ const Quiz = () => {
   const [grading, setGrading] = useState(false);
   const [error, setError] = useState("");
   const [quizCounts, setQuizCounts] = useState<Record<string, number>>({});
+  const [quizDifficulty, setQuizDifficulty] = useState<Record<string, string>>({});
+
+  const difficultyLevels = [
+    { label: "簡單", value: "easy" },
+    { label: "中等", value: "medium" },
+    { label: "困難", value: "hard" }
+  ];
 
   const [codeOutput, setCodeOutput] = useState("");
   const [codeError, setCodeError] = useState("");
@@ -147,6 +154,7 @@ const Quiz = () => {
   const handleGenerateQuiz = async (id: number, type: 'video' | 'doc') => {
     const key = `${type}-${id}`;
     const specificCount = quizCounts[key] || 5;
+    const specificDifficulty = quizDifficulty[key] || 'medium';
 
     if (availablePoints < specificCount) {
       setError(`點數不足，生成 ${specificCount} 題需要 ${specificCount} 點。`);
@@ -156,8 +164,8 @@ const Quiz = () => {
     setLoading(true); setError("");
     try {
       const response = type === 'video'
-        ? await videoAPI.generateQuiz(id, userId, specificCount)
-        : await documentAPI.generateQuiz(id, userId, specificCount);
+        ? await videoAPI.generateQuiz(id, userId, specificCount, specificDifficulty)
+        : await documentAPI.generateQuiz(id, userId, specificCount, specificDifficulty);
 
       const success = deductPoints(specificCount);
       if (!success) {
@@ -312,6 +320,23 @@ const Quiz = () => {
                     {gradeDetails[i]?.passed ? 'Logic Correct' : 'Logic Failed'}
                   </div>
                   <h3>{i+1}. {q.question}</h3>
+
+                  <div className="test-results-details" style={{ margin: '12px 0', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                    {gradeDetails[i]?.test_results?.map((tr: any, j: number) => (
+                      <div key={j} style={{ fontSize: '12px', marginBottom: '4px', color: tr.passed ? '#4ade80' : '#fb7185' }}>
+                        <span style={{ marginRight: '8px' }}>{tr.passed ? '✓' : '✗'} Test Case {j + 1}</span>
+                        {!tr.passed && (
+                          <span style={{ opacity: 0.8, marginLeft: '4px' }}>
+                            (Expected: "{tr.expected}", Actual: "{tr.actual}")
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {(!gradeDetails[i]?.test_results || gradeDetails[i].test_results.length === 0) && (
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>無詳細測試紀錄</div>
+                    )}
+                  </div>
+
                   <div className="code-comparison">
                      <p>你的解答：</p>
                      <pre className="code-snippet">{userAnswers[i]}</pre>
@@ -331,6 +356,41 @@ const Quiz = () => {
 
   return (
     <div className="page-shell">
+      <style>{`
+        .difficulty-slider {
+          -webkit-appearance: none;
+          width: 100%;
+          height: 5px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 5px;
+          outline: none;
+          margin: 10px 0 !important;
+        }
+        .difficulty-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          background: #2bc1f1;
+          cursor: pointer;
+          border-radius: 50%;
+          box-shadow: 0 0 8px rgba(43, 193, 241, 0.5);
+          transition: transform 0.1s ease-in-out;
+          border: 2px solid #ffffff;
+        }
+        .difficulty-slider::-webkit-slider-thumb:hover {
+          transform: scale(1.1);
+        }
+        .difficulty-slider::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          background: #2bc1f1;
+          cursor: pointer;
+          border-radius: 50%;
+          border: 2px solid #ffffff;
+          box-shadow: 0 0 8px rgba(43, 193, 241, 0.5);
+        }
+      `}</style>
       <section className="page-hero">
         <div>
           <div className="page-eyebrow">Interactive Learning</div>
@@ -357,6 +417,31 @@ const Quiz = () => {
                    <button className="quiz-stepper-btn" onClick={() => setQuizCounts(p=>({...p, [key]: Math.min(10, count+1)}))}>+</button>
                 </div>
               </div>
+              <div className="quiz-settings-container" style={{ marginTop: '8px', flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <label className="quiz-settings-label">難度</label>
+                   <span style={{ fontSize: '13px', color: '#2bc1f1', fontWeight: '600' }}>
+                     {difficultyLevels.find(d => d.value === (quizDifficulty[key] || 'medium'))?.label}
+                   </span>
+                </div>
+                <div style={{ width: '100%', padding: '0', margin: '0' }}>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="1"
+                    className="difficulty-slider"
+                    value={difficultyLevels.findIndex(d => d.value === (quizDifficulty[key] || 'medium'))}
+                    onChange={(e) => setQuizDifficulty(p => ({ ...p, [key]: difficultyLevels[parseInt(e.target.value)].value }))}
+                    style={{ width: '100%', cursor: 'pointer', accentColor: '#2bc1f1', margin: '0', padding: '0', display: 'block' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                    <span>簡單</span>
+                    <span>中等</span>
+                    <span>困難</span>
+                  </div>
+                </div>
+              </div>
               <div className="video-library-actions">
                 <button onClick={() => handleGenerateQuiz(v.id, 'video')} className="page-primary-button">Generate</button>
               </div>
@@ -375,6 +460,31 @@ const Quiz = () => {
                    <button className="quiz-stepper-btn" onClick={() => setQuizCounts(p=>({...p, [key]: Math.max(1, count-1)}))}>-</button>
                    <div className="quiz-stepper-value">{count}</div>
                    <button className="quiz-stepper-btn" onClick={() => setQuizCounts(p=>({...p, [key]: Math.min(10, count+1)}))}>+</button>
+                </div>
+              </div>
+              <div className="quiz-settings-container" style={{ marginTop: '8px', flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <label className="quiz-settings-label">難度</label>
+                   <span style={{ fontSize: '13px', color: '#2bc1f1', fontWeight: '600' }}>
+                     {difficultyLevels.find(d => d.value === (quizDifficulty[key] || 'medium'))?.label}
+                   </span>
+                </div>
+                <div style={{ width: '100%', padding: '0', margin: '0' }}>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="1"
+                    className="difficulty-slider"
+                    value={difficultyLevels.findIndex(d => d.value === (quizDifficulty[key] || 'medium'))}
+                    onChange={(e) => setQuizDifficulty(p => ({ ...p, [key]: difficultyLevels[parseInt(e.target.value)].value }))}
+                    style={{ width: '100%', cursor: 'pointer', accentColor: '#2bc1f1', margin: '0', padding: '0', display: 'block' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                    <span>簡單</span>
+                    <span>中等</span>
+                    <span>困難</span>
+                  </div>
                 </div>
               </div>
               <div className="video-library-actions">

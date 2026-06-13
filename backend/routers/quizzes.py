@@ -17,7 +17,7 @@ from auth_utils import get_current_user
 router = APIRouter(prefix="/api", tags=["quizzes"])
 
 @router.get("/videos/{video_id}/quiz", response_model=schema.QuizResponse)
-def generate_quiz_api(video_id: int, count: int = Query(5, ge=1, le=10), current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+def generate_quiz_api(video_id: int, count: int = Query(5, ge=1, le=10), difficulty: str = Query("medium"), current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if not video: raise HTTPException(status_code=404, detail="Video not found")
     if video.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
@@ -29,7 +29,7 @@ def generate_quiz_api(video_id: int, count: int = Query(5, ge=1, le=10), current
     if current_user.points < pts_needed: raise HTTPException(status_code=400, detail="點數不足")
 
     try:
-        res = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link, count=count, existing_outline=video.outline)
+        res = learning_pipeline.generate_quiz(video.id, video.title or "Video", video.video_link, count=count, existing_outline=video.outline, difficulty=difficulty)
         current_user.points -= len(res.questions) * 50
         for item in res.questions:
             q = models.QuizQuestion(
@@ -48,30 +48,33 @@ def generate_quiz_api(video_id: int, count: int = Query(5, ge=1, le=10), current
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents/{doc_id}/quiz", response_model=schema.QuizResponse)
-def generate_doc_quiz(doc_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
+def generate_doc_quiz(doc_id: int, count: int = Query(5, ge=1, le=10), difficulty: str = Query("medium"), current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
     doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
     if not doc: raise HTTPException(status_code=404, detail="Document not found")
     if doc.user_id != current_user.id: raise HTTPException(status_code=403, detail="Forbidden")
 
     if not doc.outline:
         raise HTTPException(status_code=400, detail="請先執行教材分析（Analyze）再生成測驗")
-    res = learning_pipeline.generate_quiz_from_document(doc.id, doc.title, doc.content_text, count=5, existing_outline=doc.outline)
-    pts_needed = len(res.questions) * 50
+    
+    pts_needed = count * 50
     if current_user.points < pts_needed: raise HTTPException(status_code=400, detail="點數不足")
 
-    current_user.points -= pts_needed
-    for item in res.questions:
-        db.add(models.QuizQuestion(
-            user_id=current_user.id, 
-            document_id=doc.id, 
-            question_content=item.question, 
-            reference_answer=item.correct_answer, 
-            starter_code=item.starter_code, 
-            test_cases_json=json.dumps(item.test_cases), 
-            explanation=item.explanation,
-            reference_concept=item.reference_concept  # 確保保存知識點標籤
-        ))
-    db.commit(); return res
+    try:
+        res = learning_pipeline.generate_quiz_from_document(doc.id, doc.title, doc.content_text, count=count, existing_outline=doc.outline, difficulty=difficulty)
+        current_user.points -= len(res.questions) * 50
+        for item in res.questions:
+            db.add(models.QuizQuestion(
+                user_id=current_user.id, 
+                document_id=doc.id, 
+                question_content=item.question, 
+                reference_answer=item.correct_answer, 
+                starter_code=item.starter_code, 
+                test_cases_json=json.dumps(item.test_cases), 
+                explanation=item.explanation,
+                reference_concept=item.reference_concept  # 確保保存知識點標籤
+            ))
+        db.commit(); return res
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/quizzes/{video_id}/grade", response_model=schema.GradeResponse)
 def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):
@@ -111,8 +114,12 @@ def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models
                 expected_out_clean = tc.strip()
                 
                 # Match logic: User output matches either the reference execution OR the stored expected output
-                # This adds robustness if the reference code fails locally but LLM's expected_output is valid.
-                match = (user_out_clean == expected_out_clean) or (user_out_clean == ref_out_clean)
+                # Robustness check: If user code has errors, it should not pass.
+                # If user output is empty but expected isn't, it should not pass.
+                if user_err or not user_out_clean:
+                    match = False
+                else:
+                    match = (user_out_clean == expected_out_clean) or (user_out_clean == ref_out_clean)
                 
                 if not match: passed = False
                 q_res.append({
@@ -120,7 +127,7 @@ def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models
                     "passed": match, 
                     "expected": expected_out_clean if expected_out_clean else ref_out_clean, 
                     "actual": user_out_clean,
-                    "error": user_err if user_err else None
+                    "error": user_err if user_err else (None if user_out_clean else "No output produced")
                 })
         
         if passed: correct += 1
