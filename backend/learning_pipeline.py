@@ -78,11 +78,20 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
         concept = "物件導向"
     
     # 處理多個測試案例
-    test_cases = item.get("expected_outputs")
+    test_cases = item.get("test_cases")
     if not isinstance(test_cases, list):
         # 相容舊格式或單一輸出
-        test_cases = [str(item.get("expected_output") or "print('No output')")]
+        old_outputs = item.get("expected_outputs") or [str(item.get("expected_output") or "")]
+        test_cases = [{"input": "", "expected": str(out)} for out in old_outputs if str(out)]
     
+    # 確保 test_cases 內的元素都是 JSON 字串，以便存入資料庫
+    formatted_test_cases = []
+    for tc in test_cases[:3]:
+        if isinstance(tc, dict):
+            formatted_test_cases.append(json.dumps(tc))
+        else:
+            formatted_test_cases.append(str(tc))
+
     return schema.QuizQuestion(
         question=str(item.get("question") or "請補全程式碼"),
         correct_answer=str(item.get("correct_answer") or ""),
@@ -92,7 +101,7 @@ def _normalize_question(item: dict[str, Any]) -> schema.QuizQuestion:
         source_time="unknown",
         source_excerpt=None,
         starter_code=str(item.get("starter_code") or ""),
-        test_cases=[str(tc) for tc in test_cases[:3]],
+        test_cases=formatted_test_cases,
     )
 
 def _parse_bullets(markdown: str) -> list[str]:
@@ -227,24 +236,29 @@ def _generate_quiz_core(source_id: int, title: str, outline: str, snippet: str, 
 {template_context}
 
 出題要求（邏輯訓練導向）：
-1. **測驗核心**：題目必須包含具體的運算邏輯，例如：數學級數計算（如階乘、加總）、迴圈邊界條件（for/while）、條件分支（if/elif/else）、字串或陣列的資料處理（如解析特定字元、尋找極值）。
-2. **填空設計**：填空處 `___` 必須根據上述「難度要求」進行設計。
-   - 好的例子（中等）：`if ___:`（考驗條件設計）、`sum = ___`（考驗公式實作）、`while ___:`（考驗迴圈終止條件）。       
-3. **鷹架引導註解（Scaffolding）**：
-   - **必須**在關鍵邏輯步驟的上方，加上簡潔的「中文指引註解」（例如：`# 判斷是否為偶數以決定加減`、`# 計算目前數字的階乘並累加`），以鷹架方式引導學生完成邏輯實作。
-4. **變數與輸入**：為了讓產出的程式碼可獨立執行與驗證，請用「直接宣告變數賦值」來取代 `input()`。
-5. **架構限制**：嚴禁使用 'class Solution' 或複雜的物件導向架構。請保持為直觀的結構化程式設計，需要時可定義單一 函式（如 `def factorial(N):`）。
-6. **手寫輸出追蹤**：每題必須設計 3 個「預期輸出」，用以模擬「看 code 寫出輸出結果」的程式碼追蹤能力。
+1. **測驗核心**：題目必須包含具體的運算邏輯（如：數學計算、迴圈、條件分支、資料處理）。
+2. **架構限制**：
+   - 必須使用一個名為 `solve` 的函式作為邏輯核心，例如 `def solve(n):`。
+   - 填空處 `___` 必須設在 `solve` 函式內部的關鍵邏輯處。
+   - 不要包含類別（class）或 `if __name__ == "__main__":`。
+3. **鷹架引導註解**：在關鍵步驟上方加上簡潔的「中文指引註解」。
+4. **測試案例設計**：
+   - 每題必須設計 3 個測試案例。
+   - 每個案例包含「呼叫參數 (input)」與「預期回傳值 (expected)」。
+   - 如果函式沒有參數，input 請設為空字串或空陣列。
 
 JSON 格式要求：
 [
   {{
-    "question": "題目情境說明（例如：請完成以下程式碼以計算 N 的階乘）",
-    "reference_concept": "必須且只能從這六項中選一：基礎語法、條件判斷、迴圈控制、資料處理、函式應用、物件導向",
-    "correct_answer": "填空處的正確程式碼（即填入 ___ 的內容）",
-    "expected_outputs": ["輸出結果1", "輸出結果2", "輸出結果3"],
-    "explanation": "針對此邏輯實作的原理、變數變化過程與易錯點解析",
-    "starter_code": "含有 ___ 的完整程式碼（必須包含適當的引導註解與最後的 print 驗證行）"
+    "question": "題目情境說明",
+    "reference_concept": "必須從這六項選一：基礎語法、條件判斷、迴圈控制、資料處理、函式應用、物件導向",
+    "correct_answer": "填空處的正確內容",
+    "starter_code": "含有 ___ 的完整 solve 函式定義",
+    "test_cases": [
+       {{ "input": [參數1, 參數2], "expected": "預期結果" }},
+       {{ "input": [參數3], "expected": "預期結果" }}
+    ],
+    "explanation": "邏輯原理與變數變化解析"
   }}
 ]"""
 

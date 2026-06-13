@@ -86,48 +86,67 @@ def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models
     questions.reverse()
     details = []; correct = 0
     for idx, q in enumerate(questions):
-        user_code = payload.answers[idx]
+        user_code = payload.answers[idx] if idx < len(payload.answers) else ""
         
         # Check for empty submission
         if not user_code.strip():
-            passed = False
-            q_res = []
-        else:
-            test_cases = json.loads(q.test_cases_json or "[]")
-            passed = True
-            q_res = []
-            for tc in test_cases:
-                # The 'tc' stored in DB is actually the expected output string from LLM.
-                # We should execute the code as is (since it already contains print statements)
-                # and compare the output with 'tc'.
+            details.append({
+                "question_id": q.id, "question_text": q.question_content, "user_answer": user_code,
+                "passed": False, "test_results": [], "reference_concept": q.reference_concept
+            })
+            continue
+
+        test_cases = json.loads(q.test_cases_json or "[]")
+        passed = True
+        q_res = []
+        
+        for tc_raw in test_cases:
+            # 判斷是新格式 {"input": [], "expected": ""} 還是舊格式 string
+            try:
+                tc = json.loads(tc_raw) if isinstance(tc_raw, str) and tc_raw.startswith("{") else tc_raw
+            except:
+                tc = tc_raw
+
+            if isinstance(tc, dict) and "expected" in tc:
+                # 新格式：函式測試
+                input_args = tc.get("input", [])
+                expected = str(tc.get("expected")).strip()
                 
-                # Execute reference code
+                # 建構測試腳本：將 solve(...) 的結果印出來
+                args_str = ", ".join([json.dumps(a) for a in input_args]) if isinstance(input_args, list) else json.dumps(input_args)
+                test_script = f"{user_code}\n\ntry:\n    print(str(solve({args_str})).strip())\nexcept Exception as e:\n    print(f'EXEC_ERROR:{{e}}')"
+                
+                actual_out, exec_err = code_compiler.execute_python_code(test_script)
+                actual_clean = actual_out.strip()
+                
+                match = (actual_clean == expected) and not exec_err and "EXEC_ERROR:" not in actual_clean
+                if not match: passed = False
+                
+                q_res.append({
+                    "test_case": f"solve({args_str})", 
+                    "passed": match, 
+                    "expected": expected, 
+                    "actual": actual_clean if "EXEC_ERROR:" not in actual_clean else "Error",
+                    "error": exec_err or (actual_clean if "EXEC_ERROR:" in actual_clean else None)
+                })
+            else:
+                # 舊格式：標準輸出比對 (Legacy Support)
+                expected = str(tc).strip()
+                # 執行參考解答
                 ref_code = q.starter_code.replace('___', q.reference_answer)
-                ref_out, ref_err = code_compiler.execute_python_code(ref_code)
-                
-                # Execute user code
+                ref_out, _ = code_compiler.execute_python_code(ref_code)
+                # 執行使用者解答
                 user_out, user_err = code_compiler.execute_python_code(user_code)
                 
-                # Clean up outputs for comparison
-                ref_out_clean = ref_out.strip()
                 user_out_clean = user_out.strip()
-                expected_out_clean = tc.strip()
-                
-                # Match logic: User output matches either the reference execution OR the stored expected output
-                # Robustness check: If user code has errors, it should not pass.
-                # If user output is empty but expected isn't, it should not pass.
-                if user_err or not user_out_clean:
-                    match = False
-                else:
-                    match = (user_out_clean == expected_out_clean) or (user_out_clean == ref_out_clean)
+                match = (user_out_clean == expected) or (user_out_clean == ref_out.strip())
+                if user_err or not user_out_clean: match = False
                 
                 if not match: passed = False
                 q_res.append({
-                    "test_case": "Execution Output Match", 
-                    "passed": match, 
-                    "expected": expected_out_clean if expected_out_clean else ref_out_clean, 
-                    "actual": user_out_clean,
-                    "error": user_err if user_err else (None if user_out_clean else "No output produced")
+                    "test_case": "Output Match", "passed": match, 
+                    "expected": expected or ref_out.strip(), "actual": user_out_clean,
+                    "error": user_err
                 })
         
         if passed: correct += 1
@@ -138,7 +157,7 @@ def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models
             "reference_answer": q.reference_answer,
             "passed": passed,
             "test_results": q_res,
-            "reference_concept": q.reference_concept  # 將知識點帶入批改結果詳情
+            "reference_concept": q.reference_concept
         })
     return schema.GradeResponse(total_score=round(correct/len(questions)*100) if questions else 0, details=details)
 
