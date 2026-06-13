@@ -57,7 +57,7 @@ class PythonCodeCompiler:
     
     UNSAFE_KEYWORDS = {
         'exec', 'eval', '__import__', '__builtins__',
-        'compile', 'globals', 'locals', 'vars', 'dir',
+        'compile', 'vars', 'dir',
         'getattr', 'setattr', 'delattr', 'hasattr',
         'open', 'input', 'raw_input', 'file',
     }

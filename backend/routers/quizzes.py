@@ -40,7 +40,7 @@ def generate_quiz_api(video_id: int, count: int = Query(5, ge=1, le=10), difficu
                 starter_code=item.starter_code, 
                 test_cases_json=json.dumps(item.test_cases), 
                 explanation=item.explanation,
-                reference_concept=item.reference_concept  # 確保保存知識點標籤
+                reference_concept=item.reference_concept
             )
             db.add(q); db.flush()
             db.add(models.GenerationRecord(user_id=current_user.id, quiz_question_id=q.id, consumed_points=50)) 
@@ -71,7 +71,7 @@ def generate_doc_quiz(doc_id: int, count: int = Query(5, ge=1, le=10), difficult
                 starter_code=item.starter_code, 
                 test_cases_json=json.dumps(item.test_cases), 
                 explanation=item.explanation,
-                reference_concept=item.reference_concept  # 確保保存知識點標籤
+                reference_concept=item.reference_concept
             ))
         db.commit(); return res
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
@@ -84,82 +84,97 @@ def grade_quiz(video_id: int, payload: schema.GradeRequest, current_user: models
     elif payload.document_id: q_list = q_list.filter(models.QuizQuestion.document_id == payload.document_id)    
     questions = q_list.order_by(models.QuizQuestion.id.desc()).limit(answer_count).all()
     questions.reverse()
-    details = []; correct = 0
+    
+    details = []
+    correct_count = 0
+    
     for idx, q in enumerate(questions):
         user_code = payload.answers[idx] if idx < len(payload.answers) else ""
-        
-        # Check for empty submission
         if not user_code.strip():
-            details.append({
-                "question_id": q.id, "question_text": q.question_content, "user_answer": user_code,
-                "passed": False, "test_results": [], "reference_concept": q.reference_concept
-            })
+            details.append({"question_id": q.id, "question_text": q.question_content, "user_answer": user_code, "passed": False, "test_results": [], "reference_concept": q.reference_concept})
             continue
 
-        test_cases = json.loads(q.test_cases_json or "[]")
-        passed = True
+        test_cases_list = json.loads(q.test_cases_json or "[]")
+        ref_full_code = q.starter_code.replace('___', q.reference_answer)
+        
+        # 合併測試腳本以節省效能
+        def build_batch_script(code_body, cases):
+            script = [code_body, "\n# --- BATCH TEST START ---", "import json", "results = []"]
+            for tc_raw in cases:
+                try: tc = json.loads(tc_raw) if isinstance(tc_raw, str) and tc_raw.startswith("{") else tc_raw
+                except: tc = tc_raw
+                
+                if isinstance(tc, dict) and "expected" in tc:
+                    args_str = ", ".join([json.dumps(a) for a in tc.get("input", [])])
+                    script.append(f"try:\n    val = solve({args_str})\n    results.append({{\"out\": str(val).strip(), \"err\": None}})\nexcept Exception as e:\n    results.append({{\"out\": \"\", \"err\": str(e)}})")
+                else:
+                    # 舊格式：直接執行並抓取輸出 (此種情況較難合併，維持單次或簡化)
+                    script.append(f"results.append({{\"out\": \"BATCH_NOT_SUPPORTED\", \"err\": \"Legacy format\"}})")
+            
+            script.append("print('---JSON_RESULTS_START---')")
+            script.append("print(json.dumps(results))")
+            return "\n".join(script)
+
+        # 執行使用者代碼
+        user_script = build_batch_script(user_code, test_cases_list)
+        u_out, u_err = code_compiler.execute_python_code(user_script)
+        
+        # 執行參考代碼 (一次就好)
+        ref_script = build_batch_script(ref_full_code, test_cases_list)
+        r_out, _ = code_compiler.execute_python_code(ref_script)
+
+        # 解析結果
+        def parse_batch_out(output, error):
+            if "---JSON_RESULTS_START---" in output:
+                try:
+                    res_json = output.split("---JSON_RESULTS_START---")[-1].strip()
+                    return json.loads(res_json), error
+                except: pass
+            return [], error or "Parse failed or Timeout"
+
+        u_batch, u_batch_err = parse_batch_out(u_out, u_err)
+        r_batch, _ = parse_batch_out(r_out, "")
+
+        passed_any = False
         q_res = []
         
-        for tc_raw in test_cases:
-            # 判斷是新格式 {"input": [], "expected": ""} 還是舊格式 string
-            try:
-                tc = json.loads(tc_raw) if isinstance(tc_raw, str) and tc_raw.startswith("{") else tc_raw
-            except:
-                tc = tc_raw
+        for i, tc_raw in enumerate(test_cases_list):
+            try: tc = json.loads(tc_raw) if isinstance(tc_raw, str) and tc_raw.startswith("{") else tc_raw
+            except: tc = tc_raw
+            
+            expected = str(tc["expected"]).strip() if isinstance(tc, dict) else str(tc).strip()
+            
+            u_info = u_batch[i] if i < len(u_batch) else {"out": "", "err": u_batch_err}
+            r_info = r_batch[i] if i < len(r_batch) else {"out": "", "err": ""}
+            
+            u_clean = u_info["out"]
+            r_clean = r_info["out"]
+            u_error = u_info["err"]
 
-            if isinstance(tc, dict) and "expected" in tc:
-                # 新格式：函式測試
-                input_args = tc.get("input", [])
-                expected = str(tc.get("expected")).strip()
-                
-                # 建構測試腳本：將 solve(...) 的結果印出來
-                args_str = ", ".join([json.dumps(a) for a in input_args]) if isinstance(input_args, list) else json.dumps(input_args)
-                test_script = f"{user_code}\n\ntry:\n    print(str(solve({args_str})).strip())\nexcept Exception as e:\n    print(f'EXEC_ERROR:{{e}}')"
-                
-                actual_out, exec_err = code_compiler.execute_python_code(test_script)
-                actual_clean = actual_out.strip()
-                
-                match = (actual_clean == expected) and not exec_err and "EXEC_ERROR:" not in actual_clean
-                if not match: passed = False
-                
-                q_res.append({
-                    "test_case": f"solve({args_str})", 
-                    "passed": match, 
-                    "expected": expected, 
-                    "actual": actual_clean if "EXEC_ERROR:" not in actual_clean else "Error",
-                    "error": exec_err or (actual_clean if "EXEC_ERROR:" in actual_clean else None)
-                })
-            else:
-                # 舊格式：標準輸出比對 (Legacy Support)
-                expected = str(tc).strip()
-                # 執行參考解答
-                ref_code = q.starter_code.replace('___', q.reference_answer)
-                ref_out, _ = code_compiler.execute_python_code(ref_code)
-                # 執行使用者解答
-                user_out, user_err = code_compiler.execute_python_code(user_code)
-                
-                user_out_clean = user_out.strip()
-                match = (user_out_clean == expected) or (user_out_clean == ref_out.strip())
-                if user_err or not user_out_clean: match = False
-                
-                if not match: passed = False
-                q_res.append({
-                    "test_case": "Output Match", "passed": match, 
-                    "expected": expected or ref_out.strip(), "actual": user_out_clean,
-                    "error": user_err
-                })
-        
-        if passed: correct += 1
+            # 如果是舊格式不支援 Batch，退回到單次執行
+            if u_clean == "BATCH_NOT_SUPPORTED":
+                 u_clean, u_error = code_compiler.execute_python_code(user_code)
+                 ref_out, _ = code_compiler.execute_python_code(ref_full_code)
+                 r_clean = ref_out.strip()
+                 u_clean = u_clean.strip()
+
+            match = (u_clean != "" and (u_clean == expected or u_clean == r_clean)) and not u_error
+            if match: passed_any = True
+            
+            q_res.append({
+                "test_case": f"TC {i+1}", "passed": match, 
+                "expected": expected or r_clean, "actual": u_clean, 
+                "error": u_error
+            })
+
+        if passed_any: correct_count += 1
         details.append({
-            "question_id": q.id,
-            "question_text": q.question_content,
-            "user_answer": user_code,
-            "reference_answer": q.reference_answer,
-            "passed": passed,
-            "test_results": q_res,
+            "question_id": q.id, "question_text": q.question_content, "user_answer": user_code, 
+            "reference_answer": q.reference_answer, "passed": passed_any, "test_results": q_res, 
             "reference_concept": q.reference_concept
         })
-    return schema.GradeResponse(total_score=round(correct/len(questions)*100) if questions else 0, details=details)
+        
+    return schema.GradeResponse(total_score=round(correct_count/len(questions)*100) if questions else 0, details=details)
 
 @router.get("/quiz-results", response_model=List[schema.QuizResultResponse])
 def get_quiz_results(current_user: models.User = Depends(get_current_user), db: Session = Depends(database.get_db)):

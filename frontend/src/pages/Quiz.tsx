@@ -242,18 +242,27 @@ const Quiz = () => {
     }
     setCodeLoading(true); setCodeOutput(""); setCodeError("");
     try {
-      // The test_cases in the DB for this project are actually expected output strings, not executable code.
-      // Since starter_code already contains the print verification line, we just execute the user's code.
-      const response = await codeAPI.executeCode({ code: userCode });
-      setCodeOutput(response.data.output);
-      setCodeError(response.data.error);
+      // 嘗試構建測試包裝腳本
+      let codeToRun = userCode;
+      const tcRaw = quiz?.questions[currentQuestionIndex]?.test_cases?.[0];
       
-      // Optional: If we want to show a hint if it matches the expected output
-      const expectedOutput = quiz?.questions[currentQuestionIndex]?.test_cases?.[0] || "";
-      if (response.data.output.trim() === expectedOutput.trim() && !response.data.error) {
-        // You could add a "Matched!" message here if desired, but for now just showing output is fine.
+      if (tcRaw) {
+        try {
+          const tc = JSON.parse(tcRaw);
+          if (tc.input !== undefined) {
+            const argsStr = Array.isArray(tc.input) ? tc.input.map((a: any) => JSON.stringify(a)).join(", ") : JSON.stringify(tc.input);
+            codeToRun = `${userCode}\n\ntry:\n    print(str(solve(${argsStr})).strip())\nexcept NameError:\n    pass\nexcept Exception as e:\n    print(f"Error: {e}")`;
+          }
+        } catch (e) {
+          // 不是 JSON 格式，直接執行原代碼
+        }
       }
-    } catch (err: any) { setCodeError("執行失敗"); }
+
+      const response = await codeAPI.executeCode({ code: codeToRun });
+      setCodeOutput(response.data.output || "");
+      setCodeError(response.data.error || "");
+      
+    } catch (err: any) { setCodeError("網路連線失敗，請稍後再試。"); }
     finally { setCodeLoading(false); }
   };
 
@@ -323,12 +332,16 @@ const Quiz = () => {
 
                   <div className="test-results-details" style={{ margin: '12px 0', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
                     {gradeDetails[i]?.test_results?.map((tr: any, j: number) => (
-                      <div key={j} style={{ fontSize: '12px', marginBottom: '4px', color: tr.passed ? '#4ade80' : '#fb7185' }}>
-                        <span style={{ marginRight: '8px' }}>{tr.passed ? '✓' : '✗'} Test Case {j + 1}</span>
-                        {!tr.passed && (
-                          <span style={{ opacity: 0.8, marginLeft: '4px' }}>
-                            (Expected: "{tr.expected}", Actual: "{tr.actual}")
-                          </span>
+                      <div key={j} style={{ fontSize: '12px', marginBottom: '8px', color: tr.passed ? '#4ade80' : '#fb7185' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>{tr.passed ? '✓' : '✗'} Test Case {j + 1}</span>
+                          {!tr.passed && tr.actual && <span style={{ opacity: 0.8 }}>(Expected: "{tr.expected}", Actual: "{tr.actual}")</span>}
+                          {!tr.passed && !tr.actual && <span style={{ opacity: 0.8 }}>(No Output)</span>}
+                        </div>
+                        {tr.error && (
+                          <div style={{ marginTop: '4px', padding: '4px 8px', background: 'rgba(251, 113, 133, 0.1)', borderRadius: '4px', fontFamily: 'monospace', fontSize: '11px', borderLeft: '2px solid #fb7185' }}>
+                            Error: {tr.error}
+                          </div>
                         )}
                       </div>
                     ))}
@@ -517,10 +530,14 @@ const Quiz = () => {
               <div style={{ height: "400px", border: "1px solid rgba(43, 193, 241, 0.3)", borderRadius: "12px", overflow: "hidden", marginBottom: "12px" }}>
                 <Editor height="100%" language="python" value={userAnswers[currentQuestionIndex]} onChange={v => handleAnswerChange(v||"")} theme="vs-dark" options={{ automaticLayout: true, fontSize: 14 }} />
               </div>
-              {(codeOutput || codeError) && (
+              {(codeOutput || codeError || codeLoading) && (
                 <div style={{marginTop:'15px', padding:'12px', background:'#08111f', borderRadius:'10px', border:'1px solid #ffffff11'}}>
                    <p className="page-eyebrow" style={{ marginBottom: "8px" }}>Test Result:</p>
-                  <pre style={{color:codeError?'#fb7185':'#4ade80', whiteSpace: 'pre-wrap'}}>{codeError || codeOutput}</pre>
+                   {codeLoading ? (
+                     <div style={{color:'#2bc1f1', fontSize:'14px'}}>Running code against test cases...</div>
+                   ) : (
+                     <pre style={{color:codeError?'#fb7185':'#4ade80', whiteSpace: 'pre-wrap', fontSize:'14px'}}>{codeError || codeOutput || "✓ Execution successful (No output)"}</pre>
+                   )}
                 </div>
               )}
            </div>
